@@ -3,3 +3,4 @@ frontend/.next/
 /.vscode
 /dist
 /.env
+frontend/.DS_Store
