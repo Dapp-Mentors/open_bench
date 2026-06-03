@@ -2,12 +2,11 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Activity, Send, Play, LayoutDashboard } from "lucide-react";
+import { Activity, FolderOpen, Plus } from "lucide-react";
 
 const NAV_ITEMS = [
-  { href: "/dashboard",    label: "Dashboard",    icon: LayoutDashboard },
-  { href: "/tasks/submit", label: "Submit Task",  icon: Send },
-  { href: "/run/new",      label: "Run Benchmark",icon: Play },
+  { href: "/dashboard", label: "Projects", icon: FolderOpen },
+  { href: "/projects/new", label: "New Project", icon: Plus },
 ];
 
 export function NavBar() {
@@ -24,25 +23,19 @@ export function NavBar() {
     >
       <div className="max-w-6xl mx-auto px-6 h-14 flex items-center justify-between">
         {/* Logo */}
-        <Link href="/" className="flex items-center gap-2.5 group">
+        <Link href="/" className="flex items-center gap-2.5">
           <div
             className="w-7 h-7 flex items-center justify-center rounded"
-            style={{
-              background: "var(--green)",
-              boxShadow: "0 0 12px rgba(0,230,118,0.4)",
-            }}
+            style={{ background: "var(--green)", boxShadow: "0 0 12px rgba(0,230,118,0.4)" }}
           >
             <Activity className="w-4 h-4" style={{ color: "#0a0b0d" }} />
           </div>
-          <span
-            className="font-display font-bold text-sm tracking-tight"
-            style={{ color: "var(--text)" }}
-          >
+          <span className="font-display font-bold text-sm tracking-tight" style={{ color: "var(--text)" }}>
             OPEN<span style={{ color: "var(--green)" }}>BENCH</span>
           </span>
         </Link>
 
-        {/* Nav links */}
+        {/* Nav */}
         <div className="flex items-center gap-1">
           {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
             const active = pathname === href || pathname.startsWith(href + "/");
@@ -50,7 +43,7 @@ export function NavBar() {
               <Link
                 key={href}
                 href={href}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-mono transition-all duration-150"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-mono transition-all"
                 style={{
                   color: active ? "var(--green)" : "var(--subtle)",
                   background: active ? "rgba(0,230,118,0.08)" : "transparent",
@@ -64,12 +57,9 @@ export function NavBar() {
           })}
         </div>
 
-        {/* Status indicator */}
+        {/* Status */}
         <div className="flex items-center gap-2 text-xs font-mono" style={{ color: "var(--subtle)" }}>
-          <span
-            className="w-1.5 h-1.5 rounded-full animate-pulse"
-            style={{ background: "var(--green)" }}
-          />
+          <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: "var(--green)" }} />
           <span>LOCAL</span>
         </div>
       </div>

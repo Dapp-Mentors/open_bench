@@ -1,0 +1,58 @@
+// prisma/schema.prisma
+// Starter schema for OpenBench — extend with your actual models
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────
+// Core models inferred from the codebase
+// ─────────────────────────────────────────
+
+model Model {
+  id        String   @id @default(cuid())
+  name      String
+  provider  String   // e.g. "ollama", "mistral", "llama3"
+  config    Json?    // arbitrary provider config
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  runs      Run[]
+}
+
+model Task {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  prompt      String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  runs        Run[]
+}
+
+model Run {
+  id        String    @id @default(cuid())
+  status    RunStatus @default(PENDING)
+  modelId   String
+  taskId    String
+  score     Float?
+  logs      Json?     // captured from LogTerminal
+  startedAt DateTime?
+  endedAt   DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  model Model @relation(fields: [modelId], references: [id])
+  task  Task  @relation(fields: [taskId], references: [id])
+}
+
+enum RunStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+}

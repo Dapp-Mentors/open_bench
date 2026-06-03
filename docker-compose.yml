@@ -1,0 +1,105 @@
+version: "3.9"
+
+services:
+  # ─────────────────────────────────────────
+  # PostgreSQL — primary database (Prisma)
+  # ─────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: openbench_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-openbench}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-openbench_secret}
+      POSTGRES_DB: ${POSTGRES_DB:-openbench}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-openbench}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─────────────────────────────────────────
+  # Inngest Dev Server — background jobs
+  # ─────────────────────────────────────────
+  inngest:
+    image: inngest/inngest:latest
+    container_name: openbench_inngest
+    restart: unless-stopped
+    command: inngest dev --host 0.0.0.0 --port 8288 --no-discovery
+    ports:
+      - "8288:8288"   # Inngest Dev UI
+    environment:
+      - INNGEST_DEV=1
+
+  # ─────────────────────────────────────────
+  # FastAPI backend — benchmark runner
+  # ─────────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: openbench_backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8000:8000"       # API  →  http://localhost:8000
+      - "8001:8001"       # reserved for future worker / websocket
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-openbench}:${POSTGRES_PASSWORD:-openbench_secret}@postgres:5432/${POSTGRES_DB:-openbench}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
+      CORS_ORIGINS: '["http://localhost:3000"]'
+    volumes:
+      - ./backend:/app    # hot-reload in dev
+    extra_hosts:
+      - "host.docker.internal:host-gateway"   # reach Ollama on the host
+
+  # ─────────────────────────────────────────
+  # Frontend / Next.js app
+  # ─────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        NODE_VERSION: "24.10.0"
+    container_name: openbench_frontend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      inngest:
+        condition: service_started
+      backend:
+        condition: service_started
+    ports:
+      - "3000:3000"
+    environment:
+      # Database
+      DATABASE_URL: postgresql://${POSTGRES_USER:-openbench}:${POSTGRES_PASSWORD:-openbench_secret}@postgres:5432/${POSTGRES_DB:-openbench}
+      # Inngest
+      INNGEST_EVENT_KEY: ${INNGEST_EVENT_KEY:-local}
+      INNGEST_SIGNING_KEY: ${INNGEST_SIGNING_KEY:-local}
+      INNGEST_BASE_URL: http://inngest:8288
+      # Backend API
+      BACKEND_URL: http://backend:8000
+      NEXT_PUBLIC_BACKEND_URL: http://localhost:8000
+      # App
+      NODE_ENV: development
+      NEXT_TELEMETRY_DISABLED: 1
+    volumes:
+      # Mount source for hot-reload in dev; remove for production
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/.next
+    command: sh -c "npx prisma migrate deploy && npm run dev"
+
+volumes:
+  postgres_data:
