@@ -12,8 +12,9 @@ import { prisma } from '@/lib/prisma'
 
 export async function POST(
   _: Request,
-  { params }: { params: { id: string; taskId: string } },
+  { params }: { params: Promise<{ id: string; taskId: string }> },
 ) {
+  const { id, taskId } = await params
   // ── TODO: admin gate ────────────────────────────────────────────────────────
   // const session = await getServerSession(authOptions);
   // if (!session || session.user.role !== "admin") {
@@ -22,7 +23,7 @@ export async function POST(
   // ────────────────────────────────────────────────────────────────────────────
 
   const task = await prisma.task.findUnique({
-    where: { id: params.taskId, projectId: params.id },
+    where: { id: taskId, projectId: id },
   })
 
   if (!task) {
@@ -40,7 +41,7 @@ export async function POST(
   }
 
   const updated = await prisma.task.update({
-    where: { id: params.taskId },
+    where: { id: taskId },
     data: { status: 'approved', approvedAt: new Date() },
   })
 

@@ -44,6 +44,12 @@ COPY --from=deps /app/node_modules ./node_modules
 # Copy the rest of the source code
 COPY . .
 
+# Regenerate Prisma client with the correct binary target for this platform
+RUN npx prisma generate --schema=src/lib/prisma/schema.prisma
+
+# Pre-create the SQLite database with all tables so the runner doesn't need prisma CLI
+RUN DATABASE_URL="file:/app/dev.db" npx prisma db push --schema=src/lib/prisma/schema.prisma --skip-generate --accept-data-loss
+
 # Next.js will emit a standalone build under .next/standalone/
 RUN npm run build
 
@@ -56,6 +62,9 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
+
+# Install openssl — required by Prisma's query engine on Alpine
+RUN apk add --no-cache openssl
 
 # Create a non-root user for security
 RUN addgroup --system --gid 1001 nodejs
@@ -70,6 +79,18 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 # Copy the static assets (CSS, JS bundles, etc.)
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
+# Copy the Prisma generated client (with the correct Linux binary target) into
+# the standalone node_modules so Prisma can find its query engine at runtime.
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/.prisma ./node_modules/.prisma
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/@prisma ./node_modules/@prisma
+
+# Copy the pre-created SQLite database with all tables
+COPY --from=builder /app/dev.db ./dev.db
+
+# Fix ownership so the non-root user can read & write the database
+# (SQLite also needs write permission on the directory for WAL/journal files)
+RUN chown -R nextjs:nodejs /app && chmod 664 /app/dev.db
+
 # Switch to the non-root user
 USER nextjs
 
@@ -77,6 +98,7 @@ USER nextjs
 EXPOSE 3000
 
 ENV PORT=3000
+ENV DATABASE_URL="file:/app/dev.db"
 
 # Start the standalone Next.js server
 CMD ["node", "server.js"]

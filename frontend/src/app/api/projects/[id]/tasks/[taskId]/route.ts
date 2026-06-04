@@ -8,12 +8,13 @@ import { prisma } from '@/lib/prisma'
 
 export async function GET(
   _: Request,
-  { params }: { params: { id: string; taskId: string } },
+  { params }: { params: Promise<{ id: string; taskId: string }> },
 ) {
+  const { id, taskId } = await params
   const task = await prisma.task.findUnique({
     where: {
-      id: params.taskId,
-      projectId: params.id, // scoped — can't access tasks across projects
+      id: taskId,
+      projectId: id, // scoped — can't access tasks across projects
     },
     include: {
       pipelineLogs: { orderBy: { ts: 'asc' } },

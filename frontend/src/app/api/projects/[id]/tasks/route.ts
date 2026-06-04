@@ -7,9 +7,13 @@ import { writeFile, mkdir } from 'fs/promises'
 import { join } from 'path'
 import { randomUUID } from 'crypto'
 
-export async function GET(_: Request, { params }: { params: { id: string } }) {
+export async function GET(
+  _: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const { id } = await params
   const tasks = await prisma.task.findMany({
-    where: { projectId: params.id },
+    where: { projectId: id },
     orderBy: { createdAt: 'desc' },
     include: {
       pipelineLogs: { orderBy: { ts: 'asc' } },
@@ -22,10 +26,11 @@ export async function GET(_: Request, { params }: { params: { id: string } }) {
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: { id: string } },
+  { params }: { params: Promise<{ id: string }> },
 ) {
+  const { id } = await params
   // 1. Verify project exists
-  const project = await prisma.project.findUnique({ where: { id: params.id } })
+  const project = await prisma.project.findUnique({ where: { id } })
   if (!project) {
     return NextResponse.json({ error: 'Project not found' }, { status: 404 })
   }
@@ -52,7 +57,7 @@ export async function POST(
 
   // 3. Persist the zip to local storage
   //    In production swap this for S3/R2 upload and store the remote URL.
-  const uploadDir = join(process.cwd(), 'uploads', params.id)
+  const uploadDir = join(process.cwd(), 'uploads', id)
   await mkdir(uploadDir, { recursive: true })
   const fileName = `${randomUUID()}-${file.name}`
   const filePath = join(uploadDir, fileName)
@@ -64,7 +69,7 @@ export async function POST(
   // 4. Create task record — status starts as "pending"
   const task = await prisma.task.create({
     data: {
-      projectId: params.id,
+      projectId: id,
       title,
       description: '', // pipeline will populate from instruction.md
       domain: domain.trim(),
@@ -79,7 +84,7 @@ export async function POST(
   // 5. Fire the Inngest pipeline event
   await inngest.send({
     name: 'pipeline/task.submitted',
-    data: { taskId: task.id, projectId: params.id, storagePath: filePath },
+    data: { taskId: task.id, projectId: id, storagePath: filePath },
   })
 
   return NextResponse.json({ id: task.id, title }, { status: 201 })

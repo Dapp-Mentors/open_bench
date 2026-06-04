@@ -6,10 +6,11 @@ import { inngest } from '@/lib/inngest/client'
 
 export async function GET(
   _: Request,
-  { params }: { params: { id: string; taskId: string } },
+  { params }: { params: Promise<{ id: string; taskId: string }> },
 ) {
+  const { taskId } = await params
   const runs = await prisma.benchmarkRun.findMany({
-    where: { taskId: params.taskId },
+    where: { taskId },
     orderBy: { createdAt: 'desc' },
     include: {
       logs: { orderBy: { ts: 'asc' }, take: 500 },
@@ -21,8 +22,9 @@ export async function GET(
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: { id: string; taskId: string } },
+  { params }: { params: Promise<{ id: string; taskId: string }> },
 ) {
+  const { id, taskId } = await params
   const body = await req.json().catch(() => ({}))
   const { agentConfig } = body
 
@@ -35,7 +37,7 @@ export async function POST(
 
   // Task must be approved before it can be run
   const task = await prisma.task.findUnique({
-    where: { id: params.taskId, projectId: params.id },
+    where: { id: taskId, projectId: id },
   })
 
   if (!task) {
@@ -55,8 +57,8 @@ export async function POST(
   // Create the run record
   const run = await prisma.benchmarkRun.create({
     data: {
-      taskId: params.taskId,
-      projectId: params.id,
+      taskId,
+      projectId: id,
       provider: agentConfig.provider,
       modelId: agentConfig.modelId,
       status: 'running',
@@ -68,8 +70,8 @@ export async function POST(
     name: 'benchmark/run.started',
     data: {
       runId: run.id,
-      taskId: params.taskId,
-      projectId: params.id,
+      taskId,
+      projectId: id,
       storagePath: task.storagePath,
       agentConfig,
     },
