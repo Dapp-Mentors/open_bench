@@ -1,0 +1,127 @@
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL") // e.g. file:./dev.db
+}
+
+// ─── Project ──────────────────────────────────────────────────────────────────
+
+model Project {
+  id          String   @id @default(cuid())
+  name        String
+  description String
+  domain      String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  tasks       Task[]
+}
+
+// ─── Task ─────────────────────────────────────────────────────────────────────
+
+// Status lifecycle:
+//   pending → pipeline_running → pipeline_passed → approved
+//                              ↘ rejected
+//
+// pipeline_passed = all automated stages cleared, waiting for human approval
+// approved        = admin signed off, benchmark runs are now allowed
+
+model Task {
+  id              String      @id @default(cuid())
+  projectId       String
+  project         Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  title           String
+  description     String      @default("")
+  domain          String
+  language        String
+  storagePath     String      // path/URL to the uploaded .zip
+
+  // Runtime config (read from task.toml during pipeline)
+  dockerImage     String      @default("")
+  timeoutMs       Int         @default(120000)
+  scoringType     String      @default("passfail") // passfail | diff | regex
+  expectedOutput  String?
+  expectedPattern String?
+
+  // Pipeline result fields
+  status          String      @default("pending")
+  similarityScore Float?
+  isDuplicate     Boolean?
+  ciPassed        Boolean?
+  qualityScore    Float?
+  qualityDetails  String?     // JSON blob of per-criterion scores
+  easinessResult  String?     // too_easy | appropriate | too_hard
+  agentQualityNote String?
+
+  // Sia storage
+  siaHash         String?
+  indexdKey       String?
+  embeddingJson   String?     // stored for similarity search
+
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  approvedAt      DateTime?   // set when admin approves
+
+  pipelineLogs    PipelineLog[]
+  runs            BenchmarkRun[]
+}
+
+// ─── PipelineLog ──────────────────────────────────────────────────────────────
+
+model PipelineLog {
+  id      String   @id @default(cuid())
+  taskId  String
+  task    Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  stage   String   // similarity | ci | quality | preflight | oracle_nop | easiness | difficulty | agent_quality
+  passed  Boolean?
+  message String   @default("")
+  ts      DateTime @default(now())
+
+  @@index([taskId])
+}
+
+// ─── BenchmarkRun ─────────────────────────────────────────────────────────────
+
+model BenchmarkRun {
+  id         String   @id @default(cuid())
+  taskId     String
+  task       Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  projectId  String   // denormalised for cheaper dashboard queries
+
+  provider   String   // ollama | anthropic | deepseek
+  modelId    String
+
+  status     String   @default("running") // running | completed | failed
+  score      Float?
+  runtimeMs  Int?
+  tokenUsage Int?
+
+  siaHash    String?
+  indexdKey  String?
+
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  logs       RunLog[]
+
+  @@index([taskId])
+  @@index([projectId])
+}
+
+// ─── RunLog ───────────────────────────────────────────────────────────────────
+
+model RunLog {
+  id     String   @id @default(cuid())
+  runId  String
+  run    BenchmarkRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  stream String   // stdout | stderr
+  line   String
+  ts     DateTime @default(now())
+
+  @@index([runId])
+}

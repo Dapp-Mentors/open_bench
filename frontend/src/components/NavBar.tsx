@@ -5,8 +5,8 @@ import { usePathname } from "next/navigation";
 import { Activity, FolderOpen, Plus } from "lucide-react";
 
 const NAV_ITEMS = [
-  { href: "/dashboard", label: "Projects", icon: FolderOpen },
-  { href: "/projects/new", label: "New Project", icon: Plus },
+  { href: "/dashboard",   label: "Projects",       icon: FolderOpen },
+  { href: "/projects/new",label: "New Project",    icon: Plus       },
 ];
 
 export function NavBar() {
@@ -45,9 +45,9 @@ export function NavBar() {
                 href={href}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-mono transition-all"
                 style={{
-                  color: active ? "var(--green)" : "var(--subtle)",
-                  background: active ? "rgba(0,230,118,0.08)" : "transparent",
-                  border: active ? "1px solid rgba(0,230,118,0.2)" : "1px solid transparent",
+                  color:      active ? "var(--green)"               : "var(--subtle)",
+                  background: active ? "rgba(0,230,118,0.08)"       : "transparent",
+                  border:     active ? "1px solid rgba(0,230,118,0.2)" : "1px solid transparent",
                 }}
               >
                 <Icon className="w-3.5 h-3.5" />

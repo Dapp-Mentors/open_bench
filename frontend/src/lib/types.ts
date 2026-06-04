@@ -1,14 +1,31 @@
 export type ModelProvider  = "ollama" | "anthropic" | "deepseek";
-export type TaskStatus     = "pending" | "pipeline_running" | "approved" | "rejected";
 export type ScoringType    = "passfail" | "diff" | "regex";
 export type EasinessResult = "too_easy" | "appropriate" | "too_hard";
+
+// Task status lifecycle:
+//   pending → pipeline_running → pipeline_passed → approved
+//                             ↘ rejected
+//
+// "pipeline_passed" is the new intermediate state — all automated checks
+// cleared, but a human reviewer hasn't signed off yet.
+// Admins POST /api/projects/[id]/tasks/[taskId]/approve to flip to "approved".
+// "approved" is the only state that allows benchmark runs.
+export type TaskStatus =
+  | "pending"
+  | "pipeline_running"
+  | "pipeline_passed"   // NEW — automated pipeline done, awaiting human review
+  | "approved"          // human-reviewed and accepted — runs allowed
+  | "rejected";
 
 export interface AgentConfig { provider: ModelProvider; modelId: string; }
 
 export interface TaskDef {
   id: string;
+  projectId: string;          // NEW — every task belongs to a project
   title: string;
   description: string;
+  domain: string;
+  language: string;
   dockerImage: string;
   timeoutMs: number;
   scoringType: ScoringType;
@@ -39,6 +56,7 @@ export interface Task extends TaskDef {
   embeddingJson?: string | null;
   createdAt: string;
   updatedAt: string;
+  approvedAt?: string | null;   // set when an admin approves
   pipelineLogs?: PipelineLog[];
   runs?: BenchmarkRun[];
   _count?: { runs: number };
@@ -55,6 +73,7 @@ export interface RunLog {
 export interface BenchmarkRun {
   id: string;
   taskId: string;
+  projectId: string;            // denormalised for easier querying
   modelId: string;
   provider: string;
   status: string;
@@ -73,4 +92,30 @@ export interface ModelOption {
   modelId: string;
   label: string;
   requiresKey: boolean;
+}
+
+// Project — top-level container
+export interface Project {
+  id: string;
+  name: string;
+  description: string;
+  domain: string;
+  createdAt: string;
+  updatedAt: string;
+  tasks: Task[];
+}
+
+// Leaner version used on the dashboard list
+export interface ProjectSummary {
+  id: string;
+  name: string;
+  description: string;
+  domain: string;
+  createdAt: string;
+  _count: {
+    tasks: number;
+    approvedTasks: number;
+    pendingTasks: number;
+    rejectedTasks: number;
+  };
 }
