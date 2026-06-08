@@ -1,10 +1,9 @@
-// Stub — wire up real functions once inngest/client and pipeline packages are ready
-export async function GET() {
-  return new Response("Inngest endpoint", { status: 200 });
-}
-export async function POST() {
-  return new Response("Inngest endpoint", { status: 200 });
-}
-export async function PUT() {
-  return new Response("Inngest endpoint", { status: 200 });
-}
+// src/app/api/inngest/route.ts
+import { serve } from "inngest/next";
+import { inngest } from "@/lib/inngest/client";
+import { runPipeline, runBenchmark } from "@/lib/inngest/pipeline-inngest";
+
+export const { GET, POST, PUT } = serve({
+  client: inngest,
+  functions: [runPipeline, runBenchmark],
+});
