@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, use } from "react";
 import Link from "next/link";
 import {
   ArrowLeft, Plus, ChevronDown, ChevronRight,
   CheckCircle, XCircle, Loader2, Clock,
-  Play, Upload, Database, ExternalLink, Zap,
+  Play, Upload, Database, Zap,
 } from "lucide-react";
 import type { Task, PipelineLog, BenchmarkRun, ModelOption } from "@/lib/types";
 
@@ -48,28 +48,28 @@ interface ProjectTask extends Task {
 // ─── Constants ───────────────────────────────────────────────────────────────
 
 const PIPELINE_DEF = [
-  { key: "similarity",    label: "Similarity & Diversity",         desc: "Cosine similarity vs approved tasks" },
-  { key: "ci",            label: "CI Checks",                      desc: "Container smoke test — exits 0?" },
-  { key: "quality",       label: "Quality Check (11 criteria)",    desc: "LLM score ≥ 0.6 across 11 criteria" },
-  { key: "preflight",     label: "Validation pre-flight",          desc: "pytest --collect-only passes" },
-  { key: "oracle_nop",    label: "Oracle / NOP Validation",        desc: "Tests fail before, pass after solve.sh" },
-  { key: "easiness",      label: "Easiness Prefilter",             desc: "Sonnet 4.6 must not solve it (pass@5 = 1/5)" },
-  { key: "difficulty",    label: "Opus 4.8 Difficulty Probe",      desc: "Must land 1–3/5 passes" },
-  { key: "agent_quality", label: "Agent Quality Check",            desc: "Benchmark designer verdict" },
+  { key: "similarity", label: "Similarity & Diversity", desc: "Cosine similarity vs approved tasks" },
+  { key: "ci", label: "CI Checks", desc: "Container smoke test — exits 0?" },
+  { key: "quality", label: "Quality Check (11 criteria)", desc: "LLM score ≥ 0.6 across 11 criteria" },
+  { key: "preflight", label: "Validation pre-flight", desc: "pytest --collect-only passes" },
+  { key: "oracle_nop", label: "Oracle / NOP Validation", desc: "Tests fail before, pass after solve.sh" },
+  { key: "easiness", label: "Easiness Prefilter", desc: "Sonnet 4.6 must not solve it (pass@5 = 1/5)" },
+  { key: "difficulty", label: "Opus 4.8 Difficulty Probe", desc: "Must land 1–3/5 passes" },
+  { key: "agent_quality", label: "Agent Quality Check", desc: "Benchmark designer verdict" },
 ] as const;
 
 const PROVIDER_COLOR: Record<string, string> = {
-  ollama:    "var(--green)",
+  ollama: "var(--green)",
   anthropic: "var(--amber)",
-  deepseek:  "var(--blue)",
+  deepseek: "var(--blue)",
 };
 
 // ─── Sub-components ──────────────────────────────────────────────────────────
 
 function StageIcon({ passed, running }: { passed: boolean | null; running: boolean }) {
-  if (running)      return <Loader2  className="w-4 h-4 animate-spin flex-shrink-0" style={{ color: "var(--blue)"   }} />;
-  if (passed === true)  return <CheckCircle className="w-4 h-4 flex-shrink-0"       style={{ color: "var(--green)"  }} />;
-  if (passed === false) return <XCircle     className="w-4 h-4 flex-shrink-0"       style={{ color: "var(--red)"    }} />;
+  if (running) return <Loader2 className="w-4 h-4 animate-spin flex-shrink-0" style={{ color: "var(--blue)" }} />;
+  if (passed === true) return <CheckCircle className="w-4 h-4 flex-shrink-0" style={{ color: "var(--green)" }} />;
+  if (passed === false) return <XCircle className="w-4 h-4 flex-shrink-0" style={{ color: "var(--red)" }} />;
   return <Clock className="w-4 h-4 flex-shrink-0" style={{ color: "var(--muted)" }} />;
 }
 
@@ -102,8 +102,8 @@ function EpisodePill({ ep }: { ep: EpisodeRun }) {
 function PipelineStageRow({ stage }: { stage: PipelineStageDetail }) {
   const [open, setOpen] = useState(false);
   const hasEpisodes = stage.episodes && stage.episodes.length > 0;
-  const passCount   = stage.episodes?.filter((e) => e.passed).length ?? 0;
-  const totalEps    = stage.episodes?.length ?? 0;
+  const passCount = stage.episodes?.filter((e) => e.passed).length ?? 0;
+  const totalEps = stage.episodes?.length ?? 0;
 
   return (
     <div
@@ -114,10 +114,10 @@ function PipelineStageRow({ stage }: { stage: PipelineStageDetail }) {
         className="flex items-center gap-3 px-5 py-3 cursor-pointer select-none"
         style={{
           background:
-            stage.running       ? "rgba(77,166,255,0.03)" :
-            stage.passed === true  ? "transparent" :
-            stage.passed === false ? "rgba(255,68,68,0.02)" :
-            "transparent",
+            stage.running ? "rgba(77,166,255,0.03)" :
+              stage.passed === true ? "transparent" :
+                stage.passed === false ? "rgba(255,68,68,0.02)" :
+                  "transparent",
         }}
         onClick={() => hasEpisodes && setOpen((o) => !o)}
       >
@@ -129,10 +129,10 @@ function PipelineStageRow({ stage }: { stage: PipelineStageDetail }) {
               className="text-sm"
               style={{
                 color:
-                  stage.running        ? "var(--blue)"  :
-                  stage.passed === true  ? "var(--text)"  :
-                  stage.passed === false ? "var(--red)"   :
-                  "var(--subtle)",
+                  stage.running ? "var(--blue)" :
+                    stage.passed === true ? "var(--text)" :
+                      stage.passed === false ? "var(--red)" :
+                        "var(--subtle)",
                 fontWeight: stage.passed !== null || stage.running ? 500 : 400,
               }}
             >
@@ -143,7 +143,7 @@ function PipelineStageRow({ stage }: { stage: PipelineStageDetail }) {
                 className="font-mono text-xs px-1.5 py-0.5 rounded"
                 style={{
                   background: stage.passed ? "rgba(0,230,118,0.1)" : "rgba(255,68,68,0.1)",
-                  color:      stage.passed ? "var(--green)"         : "var(--red)",
+                  color: stage.passed ? "var(--green)" : "var(--red)",
                 }}
               >
                 pass@5: {passCount} / {totalEps}
@@ -199,10 +199,10 @@ function ModelPicker({
   taskId: string;
   onClose: () => void;
 }) {
-  const [models,   setModels]   = useState<ModelOption[]>([]);
+  const [models, setModels] = useState<ModelOption[]>([]);
   const [selected, setSelected] = useState<ModelOption | null>(null);
-  const [loading,  setLoading]  = useState(false);
-  const [error,    setError]    = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/models").then((r) => r.json()).then((m) => {
@@ -214,9 +214,9 @@ function ModelPicker({
   }, []);
 
   const grouped = {
-    ollama:    models.filter((m) => m.provider === "ollama"),
+    ollama: models.filter((m) => m.provider === "ollama"),
     anthropic: models.filter((m) => m.provider === "anthropic"),
-    deepseek:  models.filter((m) => m.provider === "deepseek"),
+    deepseek: models.filter((m) => m.provider === "deepseek"),
   };
 
   async function handleStart() {
@@ -266,8 +266,8 @@ function ModelPicker({
                       onClick={() => setSelected(m)}
                       className="text-left px-3 py-2 rounded border transition-all"
                       style={{
-                        background:   isSel ? `${color}10` : "var(--surface)",
-                        borderColor:  isSel ? `${color}40` : "var(--border)",
+                        background: isSel ? `${color}10` : "var(--surface)",
+                        borderColor: isSel ? `${color}40` : "var(--border)",
                       }}
                     >
                       <div className="flex items-center gap-1.5">
@@ -311,14 +311,14 @@ function ModelPicker({
 // ─── Task accordion row ───────────────────────────────────────────────────────
 
 function TaskRow({ task }: { task: ProjectTask }) {
-  const [open,       setOpen]       = useState(false);
+  const [open, setOpen] = useState(false);
   const [showPicker, setShowPicker] = useState(false);
 
   const stages = buildStages(task.pipelineLogs ?? [], task.status, task.stageDetails);
   const passedStages = stages.filter((s) => s.passed === true).length;
-  const isRunning    = task.status === "pipeline_running";
-  const isApproved   = task.status === "approved";
-  const isRejected   = task.status === "rejected";
+  const isRunning = task.status === "pipeline_running";
+  const isApproved = task.status === "approved";
+  const isRejected = task.status === "rejected";
 
   return (
     <div
@@ -334,7 +334,7 @@ function TaskRow({ task }: { task: ProjectTask }) {
         {/* Expand arrow */}
         <div style={{ color: "var(--muted)" }}>
           {open
-            ? <ChevronDown  className="w-4 h-4" />
+            ? <ChevronDown className="w-4 h-4" />
             : <ChevronRight className="w-4 h-4" />
           }
         </div>
@@ -394,10 +394,10 @@ function TaskRow({ task }: { task: ProjectTask }) {
                   {isApproved
                     ? `Completed all ${PIPELINE_DEF.length} steps`
                     : isRejected
-                    ? "Pipeline rejected"
-                    : isRunning
-                    ? `Running — ${passedStages} of ${PIPELINE_DEF.length} complete`
-                    : "Pending"}
+                      ? "Pipeline rejected"
+                      : isRunning
+                        ? `Running — ${passedStages} of ${PIPELINE_DEF.length} complete`
+                        : "Pending"}
                 </p>
               </div>
               {/* Progress bar */}
@@ -513,13 +513,13 @@ function TaskRow({ task }: { task: ProjectTask }) {
 // Small inline status chip (no separate component file needed here)
 function StatusChip({ status }: { status: string }) {
   const cfg: Record<string, { bg: string; color: string; label: string }> = {
-    pending:          { bg: "rgba(90,96,114,0.15)",  color: "var(--subtle)",  label: "pending"          },
-    pipeline_running: { bg: "rgba(77,166,255,0.12)", color: "var(--blue)",    label: "running"          },
-    approved:         { bg: "rgba(0,230,118,0.12)",  color: "var(--green)",   label: "Ready for Review" },
-    rejected:         { bg: "rgba(255,68,68,0.12)",  color: "var(--red)",     label: "rejected"         },
-    running:          { bg: "rgba(77,166,255,0.12)", color: "var(--blue)",    label: "running"          },
-    completed:        { bg: "rgba(0,230,118,0.12)",  color: "var(--green)",   label: "completed"        },
-    failed:           { bg: "rgba(255,68,68,0.12)",  color: "var(--red)",     label: "failed"           },
+    pending: { bg: "rgba(90,96,114,0.15)", color: "var(--subtle)", label: "pending" },
+    pipeline_running: { bg: "rgba(77,166,255,0.12)", color: "var(--blue)", label: "running" },
+    approved: { bg: "rgba(0,230,118,0.12)", color: "var(--green)", label: "Ready for Review" },
+    rejected: { bg: "rgba(255,68,68,0.12)", color: "var(--red)", label: "rejected" },
+    running: { bg: "rgba(77,166,255,0.12)", color: "var(--blue)", label: "running" },
+    completed: { bg: "rgba(0,230,118,0.12)", color: "var(--green)", label: "completed" },
+    failed: { bg: "rgba(255,68,68,0.12)", color: "var(--red)", label: "failed" },
   };
   const c = cfg[status] ?? cfg.pending;
   const pulse = status === "pipeline_running" || status === "running";
@@ -545,17 +545,17 @@ function buildStages(
     const override = overrides?.find((o) => o.key === def.key);
     if (override) return override;
 
-    const log      = logs.find((l) => l.stage === def.key);
-    const lastLog  = logs[logs.length - 1];
-    const lastIdx  = PIPELINE_DEF.findIndex((d) => d.key === lastLog?.stage);
-    const isNext   = taskStatus === "pipeline_running" && idx === lastIdx + 1;
-    const isFirst  = taskStatus === "pipeline_running" && logs.length === 0 && idx === 0;
+    const log = logs.find((l) => l.stage === def.key);
+    const lastLog = logs[logs.length - 1];
+    const lastIdx = PIPELINE_DEF.findIndex((d) => d.key === lastLog?.stage);
+    const isNext = taskStatus === "pipeline_running" && idx === lastIdx + 1;
+    const isFirst = taskStatus === "pipeline_running" && logs.length === 0 && idx === 0;
 
     return {
-      key:     def.key,
-      label:   def.label,
-      desc:    def.desc,
-      passed:  log ? (log.passed ?? null) : null,
+      key: def.key,
+      label: def.label,
+      desc: def.desc,
+      passed: log ? (log.passed ?? null) : null,
       running: isFirst || isNext,
       message: log?.message,
     };
@@ -564,17 +564,18 @@ function buildStages(
 
 // ─── Main page ────────────────────────────────────────────────────────────────
 
-export default function ProjectDetail({ params }: { params: { id: string } }) {
+export default function ProjectDetail({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params);
   const [project, setProject] = useState<Project | null>(null);
   const [loading, setLoading] = useState(true);
 
   const fetchProject = useCallback(async () => {
-    const res = await fetch(`/api/projects/${params.id}`);
+    const res = await fetch(`/api/projects/${id}`);
     if (res.ok) {
       setProject(await res.json());
     }
     setLoading(false);
-  }, [params.id]);
+  }, [id]);
 
   useEffect(() => { fetchProject(); }, [fetchProject]);
 
@@ -590,7 +591,7 @@ export default function ProjectDetail({ params }: { params: { id: string } }) {
   }, [project, fetchProject]);
 
   const approvedCount = project?.tasks.filter((t) => t.status === "approved").length ?? 0;
-  const pendingCount  = project?.tasks.filter(
+  const pendingCount = project?.tasks.filter(
     (t) => t.status === "pending" || t.status === "pipeline_running"
   ).length ?? 0;
   const rejectedCount = project?.tasks.filter((t) => t.status === "rejected").length ?? 0;
@@ -658,10 +659,10 @@ export default function ProjectDetail({ params }: { params: { id: string } }) {
       {/* Stats */}
       <div className="grid grid-cols-4 gap-3 mb-8">
         {[
-          { label: "Total Tasks", value: project.tasks.length, color: "var(--text)"  },
-          { label: "Approved",    value: approvedCount,         color: "var(--green)" },
-          { label: "In Pipeline", value: pendingCount,          color: "var(--blue)"  },
-          { label: "Rejected",    value: rejectedCount,         color: "var(--red)"   },
+          { label: "Total Tasks", value: project.tasks.length, color: "var(--text)" },
+          { label: "Approved", value: approvedCount, color: "var(--green)" },
+          { label: "In Pipeline", value: pendingCount, color: "var(--blue)" },
+          { label: "Rejected", value: rejectedCount, color: "var(--red)" },
         ].map(({ label, value, color }) => (
           <div key={label} className="bench-card rounded-lg px-4 py-3">
             <div className="section-label mb-1">{label}</div>

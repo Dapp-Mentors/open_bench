@@ -29,6 +29,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params
+
   // 1. Verify project exists
   const project = await prisma.project.findUnique({ where: { id } })
   if (!project) {
@@ -56,7 +57,6 @@ export async function POST(
   }
 
   // 3. Persist the zip to local storage
-  //    In production swap this for S3/R2 upload and store the remote URL.
   const uploadDir = join(process.cwd(), 'uploads', id)
   await mkdir(uploadDir, { recursive: true })
   const fileName = `${randomUUID()}-${file.name}`
@@ -71,7 +71,7 @@ export async function POST(
     data: {
       projectId: id,
       title,
-      description: '', // pipeline will populate from instruction.md
+      description: '',
       domain: domain.trim(),
       language: language.trim(),
       storagePath: filePath,
@@ -81,11 +81,18 @@ export async function POST(
     },
   })
 
-  // 5. Fire the Inngest pipeline event
-  await inngest.send({
-    name: 'pipeline/task.submitted',
-    data: { taskId: task.id, projectId: id, storagePath: filePath },
-  })
+  // 5. Fire the Inngest pipeline event.
+  //    If Inngest isn't reachable (e.g. running next dev outside Docker) we
+  //    log the failure but still return 201 — the task record was created and
+  //    can be manually re-queued or picked up once Inngest is running.
+  try {
+    await inngest.send({
+      name: 'pipeline/task.submitted',
+      data: { taskId: task.id, projectId: id, storagePath: filePath },
+    })
+  } catch (err) {
+    console.error('[inngest] Failed to send pipeline/task.submitted:', err)
+  }
 
   return NextResponse.json({ id: task.id, title }, { status: 201 })
 }
