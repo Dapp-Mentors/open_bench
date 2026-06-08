@@ -18,6 +18,9 @@
     "@paralleldrive/cuid2": "^2.2.2",
     "lucide-react": "^0.540.0"
   },
+  "prisma": {
+    "schema": "src/lib/prisma/schema.prisma"
+  },
   "devDependencies": {
     "@types/node": "^24.0.0",
     "@types/react": "^19.1.0",

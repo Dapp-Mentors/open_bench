@@ -3,8 +3,8 @@ from typing import List
 
 
 class Settings(BaseSettings):
-    # Database
-    DATABASE_URL: str = "sqlite+aiosqlite:///./dev.db"
+    # Database — no default, will raise at startup if not set
+    DATABASE_URL: str
 
     # CORS — frontend origin
     CORS_ORIGINS: List[str] = ["http://localhost:3000"]

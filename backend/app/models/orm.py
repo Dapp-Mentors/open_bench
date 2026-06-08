@@ -1,62 +1,98 @@
-import enum
-from datetime import datetime
-
-from sqlalchemy import (
-    Column, String, Float, DateTime, Enum, ForeignKey, JSON, Text
-)
+# app/models/orm.py
+from sqlalchemy import Column, String, Float, Integer, Boolean, DateTime, Text
 from sqlalchemy.orm import relationship
-from sqlalchemy.sql import func
-
 from app.core.database import Base
 
 
-class RunStatus(str, enum.Enum):
-    PENDING   = "PENDING"
-    RUNNING   = "RUNNING"
-    COMPLETED = "COMPLETED"
-    FAILED    = "FAILED"
-
-
-class Model(Base):
-    __tablename__ = "models"
-
-    id         = Column(String, primary_key=True)
-    name       = Column(String, nullable=False)
-    provider   = Column(String, nullable=False)   # ollama | mistral | llama3 | phi2 …
-    config     = Column(JSON, nullable=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
-
-    runs = relationship("Run", back_populates="model")
-
-
-class Task(Base):
-    __tablename__ = "tasks"
+class Project(Base):
+    __tablename__ = "Project"
 
     id          = Column(String, primary_key=True)
     name        = Column(String, nullable=False)
-    description = Column(Text, nullable=True)
-    prompt      = Column(Text, nullable=False)
-    created_at  = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at  = Column(DateTime(timezone=True), onupdate=func.now())
+    description = Column(String, nullable=False)
+    domain      = Column(String, nullable=False)
+    createdAt   = Column(DateTime(timezone=True))
+    updatedAt   = Column(DateTime(timezone=True))
 
-    runs = relationship("Run", back_populates="task")
+    tasks = relationship("Task", back_populates="project")
 
 
-class Run(Base):
-    __tablename__ = "runs"
+class Task(Base):
+    __tablename__ = "Task"
+
+    id               = Column(String, primary_key=True)
+    projectId        = Column(String, nullable=False)
+    title            = Column(String, nullable=False)
+    description      = Column(String, default="")
+    domain           = Column(String, nullable=False)
+    language         = Column(String, nullable=False)
+    storagePath      = Column(String, nullable=False)
+    dockerImage      = Column(String, default="")
+    timeoutMs        = Column(Integer, default=120000)
+    scoringType      = Column(String, default="passfail")
+    expectedOutput   = Column(String, nullable=True)
+    expectedPattern  = Column(String, nullable=True)
+    status           = Column(String, default="pending")
+    similarityScore  = Column(Float, nullable=True)
+    isDuplicate      = Column(Boolean, nullable=True)
+    ciPassed         = Column(Boolean, nullable=True)
+    qualityScore     = Column(Float, nullable=True)
+    qualityDetails   = Column(Text, nullable=True)
+    easinessResult   = Column(String, nullable=True)
+    agentQualityNote = Column(String, nullable=True)
+    siaHash          = Column(String, nullable=True)
+    indexdKey        = Column(String, nullable=True)
+    embeddingJson    = Column(Text, nullable=True)
+    createdAt        = Column(DateTime(timezone=True))
+    updatedAt        = Column(DateTime(timezone=True))
+    approvedAt       = Column(DateTime(timezone=True), nullable=True)
+
+    project      = relationship("Project", back_populates="tasks")
+    pipelineLogs = relationship("PipelineLog", back_populates="task")
+    runs         = relationship("BenchmarkRun", back_populates="task")
+
+
+class PipelineLog(Base):
+    __tablename__ = "PipelineLog"
+
+    id      = Column(String, primary_key=True)
+    taskId  = Column(String, nullable=False)
+    stage   = Column(String, nullable=False)
+    passed  = Column(Boolean, nullable=True)
+    message = Column(String, default="")
+    ts      = Column(DateTime(timezone=True))
+
+    task = relationship("Task", back_populates="pipelineLogs")
+
+
+class BenchmarkRun(Base):
+    __tablename__ = "BenchmarkRun"
 
     id         = Column(String, primary_key=True)
-    status     = Column(Enum(RunStatus), default=RunStatus.PENDING, nullable=False)
-    model_id   = Column(String, ForeignKey("models.id"), nullable=False)
-    task_id    = Column(String, ForeignKey("tasks.id"), nullable=False)
+    taskId     = Column(String, nullable=False)
+    projectId  = Column(String, nullable=False)
+    provider   = Column(String, nullable=False)
+    modelId    = Column(String, nullable=False)
+    status     = Column(String, default="running")
     score      = Column(Float, nullable=True)
-    logs       = Column(JSON, nullable=True)       # streamed log lines
-    output     = Column(Text, nullable=True)       # raw model response
-    started_at = Column(DateTime(timezone=True), nullable=True)
-    ended_at   = Column(DateTime(timezone=True), nullable=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    runtimeMs  = Column(Integer, nullable=True)
+    tokenUsage = Column(Integer, nullable=True)
+    siaHash    = Column(String, nullable=True)
+    indexdKey  = Column(String, nullable=True)
+    createdAt  = Column(DateTime(timezone=True))
+    updatedAt  = Column(DateTime(timezone=True))
 
-    model = relationship("Model", back_populates="runs")
-    task  = relationship("Task",  back_populates="runs")
+    task = relationship("Task", back_populates="runs")
+    logs = relationship("RunLog", back_populates="run")
+
+
+class RunLog(Base):
+    __tablename__ = "RunLog"
+
+    id     = Column(String, primary_key=True)
+    runId  = Column(String, nullable=False)
+    stream = Column(String, nullable=False)
+    line   = Column(String, nullable=False)
+    ts     = Column(DateTime(timezone=True))
+
+    run = relationship("BenchmarkRun", back_populates="logs")
