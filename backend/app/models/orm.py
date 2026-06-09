@@ -4,7 +4,7 @@
 # DO NOT add columns, rename tables, or run DDL from here.
 # If the Prisma schema changes, update these classes to match.
 
-from sqlalchemy import Column, String, Float, Integer, Boolean, DateTime, Text
+from sqlalchemy import Column, String, Float, Integer, Boolean, DateTime, Text, ForeignKey
 from sqlalchemy.orm import relationship
 from app.core.database import Base
 
@@ -26,7 +26,7 @@ class Task(Base):
     __tablename__ = "Task"
 
     id               = Column(String, primary_key=True)
-    projectId        = Column(String, nullable=False)
+    projectId        = Column(String, ForeignKey("Project.id", ondelete="CASCADE"), nullable=False)
     title            = Column(String, nullable=False)
     description      = Column(String, default="")
     domain           = Column(String, nullable=False)
@@ -61,7 +61,7 @@ class PipelineLog(Base):
     __tablename__ = "PipelineLog"
 
     id      = Column(String, primary_key=True)
-    taskId  = Column(String, nullable=False)
+    taskId  = Column(String, ForeignKey("Task.id", ondelete="CASCADE"), nullable=False)
     stage   = Column(String, nullable=False)
     passed  = Column(Boolean, nullable=True)
     message = Column(String, default="")
@@ -74,7 +74,7 @@ class BenchmarkRun(Base):
     __tablename__ = "BenchmarkRun"
 
     id         = Column(String, primary_key=True)
-    taskId     = Column(String, nullable=False)
+    taskId     = Column(String, ForeignKey("Task.id", ondelete="CASCADE"), nullable=False)
     projectId  = Column(String, nullable=False)
     provider   = Column(String, nullable=False)
     modelId    = Column(String, nullable=False)
@@ -95,7 +95,7 @@ class RunLog(Base):
     __tablename__ = "RunLog"
 
     id     = Column(String, primary_key=True)
-    runId  = Column(String, nullable=False)
+    runId  = Column(String, ForeignKey("BenchmarkRun.id", ondelete="CASCADE"), nullable=False)
     stream = Column(String, nullable=False)
     line   = Column(String, nullable=False)
     ts     = Column(DateTime(timezone=True))

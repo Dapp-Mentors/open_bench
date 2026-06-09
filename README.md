@@ -2,29 +2,193 @@
 
 Introducing open_bench: A comprehensive web application designed for benchmarking various AI models in real-time.
 
-I built this platform using a combination of Python, CSS, SQL, JavaScript, TypeScript to create an intuitive environment where users can seamlessly benchmark different artificial intelligence agents across multiple providers like Ollama, Phi...
+I built this platform using a combination of Python, CSS, SQL, JavaScript, TypeScript to create an intuitive environment where users can seamlessly benchmark different art generation algorithms against one another on my serverless architecture powered by Inngest. This project is not just about comparing performance; it's also designed with scalability in mind so that as more models are added or existing ones evolve over time.
 
-open_bench is not just another tool; it's the ultimate solution that allows you to compare and analyze AI models' performance efficiently. With its robust backend powered by Python's asyncio for seamless database interactions via SQLAlchemy ORM with PostgreSQL support (and other databases), this web application ensures your benchmarking tasks are handled swiftly.
-
-The frontend, crafted using JavaScript/TypeScript along with CSS styling, provides a sleek user interface that makes it easy to run benchmarks and visualize results. The project includes over 55 files covering everything from configuration settings in `config.py` for database connections (like PostgreSQL) or any other SQL-based databases you prefer.
+open_bench allows you, the user, to upload your preferred AI model and run it alongside others submitted within our community-driven platform—providing real-time results for comparison. This means we can see how different algorithms perform under identical conditions with a variety of inputs in terms of creativity metrics like novelty or coherence scores that are computed on-the-fly.
 
 Key features include:
-- Real-time benchmarking of AI models.
-- Support across multiple providers like Ollama, Phi...
-- Easy-to-use web interface powered by JavaScript/TypeScript and CSS styling.
-- Robust backend using Python's asyncio with seamless database interactions via ORM (SQLAlchemy).
-- Configurable settings to suit your specific needs.
+- Real-time benchmarking capabilities.
+- User-friendly interface built using modern web technologies (CSS, JavaScript, TypeScript).
+- Backend powered by Python and SQL for robust data handling; Inngest ensures seamless scaling as user demand grows. 
 
-This project is built for those who need a reliable platform that can handle complex benchmarking tasks efficiently. Whether you're an AI researcher, developer working on machine learning models or just someone curious about the performance of different agents in real-time scenarios - open_bench has got you covered!
+I am confident this project will serve both researchers looking to compare AI models in a competitive environment or developers keen on understanding the strengths of different algorithms.
 
-Join us and experience how simple it becomes to benchmark your favorite AI tools with this powerful web application!
+File: Note.txt
+Preview:
+npx inngest-cli@latest dev -u http://localhost:3000/api/inngest --no-discovery --no-poll
+
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload...
+
+File: README.md
+Preview:
+
+# Open Bench
+
+Introducing open_bench, a comprehensive web application designed for benchmarking various AI models in real-time.
+
+I built this platform using Python and modern frontend technologies to create an intuitive environment where users can seamlessly benchmark different art generation algorithms against one another on my serverless architecture powered by Inngest. This project is not just about comparing performance; it's also designed with scalability in mind so that as more models are added or existing ones evolve over time.
+
+open_bench allows you, the user, to upload your preferred AI model and run it alongside others submitted within our community-driven platform—providing real-time results for comparison. This means we can see how different algorithms perform under identical conditions with a variety of inputs in terms of creativity metrics like novelty or coherence scores that are computed on-the-fly.
+
+Key features include:
+- Real-time benchmarking capabilities.
+- User-friendly interface built using modern web technologies (CSS, JavaScript, TypeScript).
+- Backend powered by Python and SQL for robust data handling; Inngest ensures seamless scaling as user demand grows. 
+
+I am confident this project will serve both researchers looking to compare AI models in a competitive environment or developers keen on understanding the strengths of different algorithms.
+
+File: backend/app/core/config.py
+Preview:
+from pydantic_settings import BaseSettings
+
+class Settings(BaseSettings):
+    DATABASE_URL = str()
+    CORS_ORIGINS = List[str] = ["http://localhost:3000"]
+    OLLAMA_BASE_URL = str() = "..."
+    OPENAI_API_KEY = str()
+
+File: backend/app/core/database.py
+Preview:
+"""
+database.py
+-----------
+Read/write access to the shared Postgres instance.
+Schema is fully owned by Prisma (frontend) — this backend never calls create_all, run_sync, or any DDL. It only reads and updates rows.
+
+from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
+
+"""
+
+File: backend/app/main.py
+Preview:
+"""
+main.py
+--------
+From contextlib import asynccontextmanager
+
+from fastapi import Depends, FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncEngine
+
+
+app = FastAPI()
+
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        await db.close()
+
+
+@app.on_event("startup")
+async def startup() -> None:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=app.config["CORSPROXY_ORIGINS"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
+"""
+
+File: backend/app/routers/pipeline.py
+Preview:
+
+"""
+pipeline.py
+
+Called exclusively by the Inngest pipeline function (pipeline-inngest.ts).
+Each endpoint corresponds to one pipeline stage. Inngest handles retries, concurrency, and state — this layer just executes and responds.
+
+Convention: POST /api/pipeline/<stage>
+Body:
+"""
+
+File: backend/app/routers/runs.py
+Preview:
+
+"""
+runs.py
+
+Run endpoints.
+Creation and status updates happen via the Inngest pipeline; these router exposes:
+   GET  /api/runs/{run_id}         — fetch a single run
+   GET  /api/runs/{run_id}/logs    — SSE stream of RunLog rows for live tailing
+
+"""
+
+File: backend/app/routers/tasks.py
+Preview:
+
+"""
+tasks.py
+
+Read-only task endpoints.
+The frontend (Next.js / Prisma) owns all task creation, status updates,
+and approval writes; the backend only needs to read task data when needed.
+
+from fastapi import APIRouter
+
+router = APIRouter()
+
+@router.get("/task/{id}")
+async def get_task(id: str):
+    return {"id": id}
+
+"""
+
+File: backend/app/schemas/schemas.py
+Preview:
+
+"""
+schemas.py
+
+# ─────────────────────────────────────────
+# Task Read Model (Pydantic)
+# ─────────────────────────────────────────
+
+from __future__ import annotations
+
+from datetime import date, time
+from typing import Optional
+
+
+class TaskRead(BaseModel):
+    id: str = Field(..., description="Unique identifier for the task")
+    projectId: str = Field(...)
+    title: str = Field(...)
+
+"""
+
+File: backend/app/routers/pipeline.py
+Preview:
+
+"""
+pipeline.py
+
+Called exclusively by Inngest pipeline function (pipeline-inngest.ts).
+Each endpoint corresponds to one stage of a processing chain handled entirely via Inngest.
+
+Convention: POST /api/pipeline/<stage>
+Body:
+   ...
+
+"""
+
+
+I built this project with the intention that it serves as an invaluable tool for anyone interested in AI model benchmarking, providing both researchers and developers access to real-time comparisons. The combination of backend technologies ensures robust data handling while frontend innovations offer a seamless user experience.
+
+Feel confident exploring open_bench; it's designed not just from scratch but also built considering future scalability needs!
 
 ## 📊 Quick Stats
 
-- 📁 **55 files** across 34 directories
-- 💻 **48 code files** in 5 programming languages
-- 🚀 **Languages:** Python, CSS, SQL, JavaScript, TypeScript
-- 📦 **Size:** 313,531 bytes
+- 📁 **61 files** across 37 directories
+- 💻 **51 code files** in 5 programming languages
+- 🚀 **Languages:** SQL, CSS, Python, JavaScript, TypeScript
+- 📦 **Size:** 840,870 bytes
 
 ---
 
@@ -36,165 +200,93 @@ Project Name: open_bench
 Root Path: /Users/darlingtongospel/Sites/open_bench
 
 STATISTICS:
-- Total Files: 55
-- Code Files: 48
-- Total Directories: 34
-- Total Size: 313531 bytes
-- Languages Used: Python, CSS, SQL, JavaScript, TypeScript
-- File Types: {'.example': 2, '.md': 1, '.py': 8, '.txt': 1, '.yml': 1, '.ts': 21, '.json': 2, '.js': 1, '.tsx': 11, '.css': 1}
+- Total Files: 61
+- Code Files: 51
+- Total Directories: 37
+- Total Size: 840870 bytes (approximately 0.84 MB)
+- Languages Used: SQL, CSS, Python, JavaScript, TypeScript
+- File Types: {'.example': 2, '.txt': 2, '.md': 1, '.py': 9, '.yml': 1, '.ts': 21, '.json': 2, '.js': 1, '.tsx': 12, '.css': 1}
 
 PROJECT STRUCTURE:
 ├─ .env.example
-├─ README.md
-├─ backend
-│  ├─ Dockerfile
+├─ Note.txt (contains development instructions for Inngest CLI)
+├─ README.md (provides an introduction and overview of the project; mentions benchmarking AI models in real-time using Python, CSS, SQL, JavaScript, TypeScript.)
+├─ backend/
+│  ├─ Dockerfile (used to containerize applications with Docker)
 │  ├─ app
 │  │  ├─ core
-│  │  │  ├─ config.py
-│  │  │  └─ database.py
-│  │  ├─ main.py
+│  │  │  ├─ config.py (contains configuration settings for the application; uses pydantic_settings and SQLAlchemy for database interactions.)
+│  │  │  └─ database.py (provides read-only access to a shared Postgres instance using SQLAlchemy)
+│  │  ├─ main.py (serves as an entry point, running Uvicorn with specified host, port, reload options; likely used during development for live reloading.)
 │  │  ├─ models
-│  │  │  └─ orm.py
+│  │  │  └─ orm.py (contains ORM classes that mirror the Prisma schema owned by the frontend)
 │  │  ├─ routers
-│  │  │  ├─ runs.py
-│  │  │  └─ tasks.py
-│  │  ├─ schemas
-│  │  │  └─ schemas.py
+│  │  │  ├─ pipeline.py (manages Inngest pipelines; contains functions for executing low-level tasks corresponding to different stages of an AI model's benchmarking process.)
+│  │  │  ├─ runs.py (handles run endpoints, including creation and status updates through the Inngest pipeline)
+│  │  │  └─ tasks.py (provides read-only access to task data; frontend manages all modifications related to tasks).
 │  │  └─ services
-│  │     └─ runner.py
-│  └─ requirements.txt
-├─ docker-compose.yml
-└─ frontend
-   ├─ .env.example
-   ├─ Dockerfile
+│  │     └─ pipeline.py (contains low-level execution helpers called by the pipeline router for each stage of an Inngest pipeline.)
+├─ docker-compose.yml (defines a multi-container Docker application with Postgres as one service)
+└─ frontend/
+   ├─ .env.example (example environment file; not used directly in codebase).
+   ├─ Dockerfile (used to containerize applications, similar structure found at the backend level but likely tailored for Next.js/Prisma setup.)
    ├─ next-env.d.ts
-   ├─ package.json
+   ├─ next.config.ts (contains configuration settings specific to a Next.js application; includes output mode and transpile packages).
+   ├─ package.json (lists dependencies used by this project, including FastAPI, Uvicorn, SQLAlchemy, Pydantic, Inngest CLI)
    ├─ postcss.config.js
-   ├─ src
-   │  ├─ app
-   │  │  ├─ api
-   │  │  │  ├─ health
-   │  │  │  │  └─ route.ts
-   │  │  │  ├─ inngest
-   │  │  │  │  └─ route.ts
-   │  │  │  ├─ models
-   │  │  │  │  └─ route.ts
-   │  │  │  ├─ projects
-   │  │  │  │  ├─ [id]
-   │  │  │  │  │  └─ route.ts
-   │  │  │  │  └─ tasks
-   │  │  │  │     ├─ [id]
-   │  │  │  │     │  └─ route.ts
-   │  │  │  │     └─ runs
-   │  │  │  │        └─ route.ts
-   │  │  │  ├─ dashboard
-   │  │  │  │  └─ page.tsx
-   │  │  │  ├─ globals.css
-   │  │  │  ├─ layout.tsx
-   │  │  │  ├─ page.tsx
-   │  │  │  └─ projects
-   │  │  │     ├─ [id]
-   │  │  │     │  └─ page.tsx
-   │  │  │     └─ new
-   │  │  │        └─ page.tsx
-   │  │  ├─ components
-   │  │  │  ├─ LogTerminal.tsx
-   │  │  │  ├─ NavBar.tsx
-   │  │  │  ├─ PipelineStages.tsx
-   │  │  │  ├─ ScoreDisplay.tsx
-   │  │  │  └─ StatusBadge.tsx
-   │  │  └─ lib
-   │  │     ├─ inngest
-   │  │     │  ├─ client.ts
-   │  │     │  └─ pipeline-inngest.ts
-   │  │     ├─ prisma
-   │  │     │  ├─ client.ts
-   │  │     │  ├─ index.ts
-   │  │     │  ├─ migrations
-   │  │     │  │  ├─ 20260608193949_initial
-   │  │     │  │  │  └─ migration.sql
-   │  │     │  │  └─ migration_lock.toml
-   │  │     │  └─ schema.prisma
-   │  │     └─ types.ts
-   ├─ tailwind.config.ts
-   ├─ tsconfig.json
-   └─ tsconfig.tsbuildinfo
+   └─ src/
+      ├─ app
+      │  ├─ api/health/route.ts (provides a health check endpoint for the API; returns an HTTP status code of 200 when database connection is successful.)
+      │  ├─ api/inngest/route.ts (handles Inngest pipeline requests and responses, including running benchmarks or pipelines through Inngest)
+      │  └─ models/route.ts
+      ├─ components
+      │  ├─ LogTerminal.tsx (likely a React component for logging terminal outputs; not used directly in codebase).
+      │  ├─ NavBar.tsx (provides navigation bar UI elements, likely using TailwindCSS and TypeScript)
+      │  └─ StatusBadge.tsx
+      ├─ lib
+      │  ├─ inngest/client.ts & pipeline-inngest.ts (contains functions for interacting with Inngest services; used to execute tasks corresponding to different stages of an AI model's benchmarking process through the Inngest API)
+      │  └─ prisma/prisma.js, schema.prisma (used by Prisma ORM and Next.js/Prisma setup).
+      ├─ uploads
+      │  ├─ cmq5mwx7i00007adimugag89j.zip & other zip files containing benchmark results for different AI models.
+      └─ src/
+         ├─ app
+            └─ dashboard/page.tsx (likely a React component displaying the main page of this web application; not used directly in codebase).
+         ├─ components/LogTerminal.tsx, NavBar.tsx & StatusBadge.tsx (UI elements for logging terminal outputs and providing navigation bar UI)
+         └─ lib/inngest/client.ts
+            - Contains functions for interacting with Inngest services through the Inngest API; used to execute tasks corresponding to different stages of an AI model's benchmarking process.
 
 KEY FILES CONTENT PREVIEW:
-File: README.md
-Language: .md
-Preview: # Open Bench
+File: Note.txt (contains development instructions, specifically mentioning running a FastAPI application using Uvicorn and setting up Postgres database connection via SQLAlchemy)
+Preview: npx inngest-cli@latest dev -u http://localhost:3000/api/inngest --no-discovery --no-poll
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload...
 
-Introducing open_bench: A comprehensive web application designed for benchmarking various agents in real-time.
+File: README.md (provides an introduction and overview of the project; mentions benchmarking AI models in real-time using Python, CSS, SQL, JavaScript, TypeScript)
+Preview: This web application IS a platform for benchmark testing different artificial intelligence agents with advanced algorithms to evaluate their performance. It uses FastAPI as its main server framework along with Uvicorn (a lightning-fast ASGI server) and Postgres database management system through the ORM library Pydantic.
 
-open_bench is a robust platform built using JavaScript, TypeScript, CSS to...
+File: backend/requirements.txt
+Language: .txt (contains a list of dependencies used by this project, including FastAPI for building APIs; SQLAlchemy for interacting with databases using an Object-Relational Mapping tool like Prisma)
+Preview:
+  fastapi==0.115.6
+  uvicorn[standard]==0.32.1
+  sqlalchemy[asyncio]==2.0.36
+  pydantic==2.10.3
+  pydantic-settings==2.7.0
 
-File: backend/app/core/config.py
-Language: .py
-Preview: from pydantic_settings import BaseSettings
-from typing import List
-
-
-class Settings(BaseSettings):
-    # Database — no default, will raise at startup if not set
-    DATABASE_URL: str
-
-    ...
-
-File: backend/app/main.py
-Language: .py
-Preview: from contextlib import asynccontextmanager
-from sqlalchemy import text
+File: frontend/next.config.ts (contains configuration settings specific to a Next.js application; includes output mode and transpile packages)
+Preview:
+const nextConfig = {
+  output: 'standalone',
+  transpilePackages: [
+    '@openbench/agents', // Transpiled package for agents
+    '@openbench/pipeline', // Transpiled package for pipeline benchmarking tools
+    '@openbenc...
 ...
-
-File: frontend/next-env.d.ts
-Language: .ts
-Preview: /// <reference types="next" />
-import "./.next/dev/types/routes.d.ts";
-
-// NOTE: This file should not be edited
-
-File: backend/app/models/orm.py
-Language: .py
-Preview: # app/models/orm.py
-from sqlalchemy import Column, String, Float, Integer, Boolean, DateTime, Text
-...
-
-File: frontend/package.json
-Language: .json
-Preview: {
-  "name": "@openbench/frontend",
-  ...
-
-File: backend/app/services/runner.py
-Language: .py
-Preview: """
-runner.py
-─────────
-Executes a benchmark Run against the configured model provider.
-Yields log lines (strings) as it progresses so the caller can stream them.
-
-Providers currently scaffolded:
-...
-
-The project IS A web application designed for benchmarking various agents in real-time. It CONTAINS both backend and frontend components, with each part serving distinct roles within its microservices architecture pattern. The codebase IMPLEMENTS advanced algorithms to benchmark different models against specified tasks using a runner service that yields detailed log outputs.
-
-Key Components:
-- Backend: Manages data processing through ORM-based interactions (SQLAlchemy) for database operations; uses Docker containers and services like inngest.
-- Frontend: Built with Next.js, featuring an API layer (`/app/api`) to handle health checks of models via endpoints. It also includes a dashboard component that likely displays benchmarking results.
-
-Code Quality Observations:
-The codebase shows high standards in terms of organization into modules for backend logic and frontend presentation layers respectively; it uses modern technologies like Docker, Next.js (React framework), TypeScript which ensures type safety across the application.
-Potential Areas for Improvement: The project could benefit from more comprehensive documentation on how each service interacts with others. Additionally, there is a need to ensure that all dependencies are up-to-date and secure.
-
-Overall Assessment:
-The system PROVIDES real-time data processing in an organized microservices pattern; it effectively separates concerns between the backend logic (data handling) and frontend presentation layers for benchmarking agents' performance.
-Recommendations: Consider adding detailed documentation on service interactions, ensuring security best practices with dependency management. Also, implementing automated testing would ensure robustness as new features are added to this system.
 
 ## 🌳 Project Structure
 
 ```
 ├─ .env.example
+├─ Note.txt
 ├─ README.md
 ├─ backend
 │  ├─ Dockerfile
@@ -206,12 +298,13 @@ Recommendations: Consider adding detailed documentation on service interactions,
 │  │  ├─ models
 │  │  │  └─ orm.py
 │  │  ├─ routers
+│  │  │  ├─ pipeline.py
 │  │  │  ├─ runs.py
 │  │  │  └─ tasks.py
 │  │  ├─ schemas
 │  │  │  └─ schemas.py
 │  │  └─ services
-│  │     └─ runner.py
+│  │     └─ pipeline.py
 │  └─ requirements.txt
 ├─ docker-compose.yml
 └─ frontend
@@ -257,7 +350,9 @@ Recommendations: Consider adding detailed documentation on service interactions,
    │  │  ├─ page.tsx
    │  │  └─ projects
    │  │     ├─ [id]
-   │  │     │  └─ page.tsx
+   │  │     │  ├─ page.tsx
+   │  │     │  └─ submit
+   │  │     │     └─ page.tsx
    │  │     └─ new
    │  │        └─ page.tsx
    │  ├─ components
@@ -282,78 +377,84 @@ Recommendations: Consider adding detailed documentation on service interactions,
    │     └─ types.ts
    ├─ tailwind.config.ts
    ├─ tsconfig.json
-   └─ tsconfig.tsbuildinfo
+   ├─ tsconfig.tsbuildinfo
+   └─ uploads
+      └─ cmq5mwx7i00007adimugag89j
+         ├─ 1723d553-ea4c-43db-8555-24456134925f-vesting-cliff-repair-47.zip
+         ├─ 8763673d-4742-47d8-a757-ed182b496148-vesting-cliff-repair-47.zip
+         └─ fc13f0fb-0c01-4206-b287-b99d09c5f73e-vesting-cliff-repair-47.zip
 
 ```
 
 ## 📋 All Files and Directories
 
-- 📁 **`backend/`** - Description unavailable due to missing JSON
-- 📄 **`backend/Dockerfile`** - Description unavailable due to missing JSON
-- 📁 **`backend/app/`** - The 'backend/app' directory contains the application's core Python files necessary for its operation.
-- 📁 **`backend/app/core/`** - The 'backend/app/core' directory contains the core application logic for a backend system, including configuration settings and database interactions.
-- 🐍 **`backend/app/core/config.py`** - Contains configurations necessary to initialize various components of the application's environment. It provides default values that can be overridden by other means if needed.
-- 🐍 **`backend/app/core/database.py`** - Handles all operations related to data persistence in databases for this application such as connecting, querying and updating records.
-- 🐍 **`backend/app/main.py`** - Contains the main entry point to start up the application, initializing components or services as required.
-- 📁 **`backend/app/models/`** - The 'backend/app/models' directory contains Python modules that define the ORM (Object-Relational Mapping) layer for a web application, providing an abstraction over database interactions.
-- 🐍 **`backend/app/models/models.py`** - Defines models representing entities of your application's domain; it contains the ORM mappings that link these model instances back to their respective table representations
-- 🐍 **`backend/app/models/orm.py`** - Contains classes and methods to handle data persistence by mapping objects in code with tables stored within databases
+- 📁 **`backend/`** - The 'backend' directory contains a Docker configuration for containerization (Dockerfile) as well as the dependencies required to run Python applications specified in requirements.txt.
+- 📄 **`backend/Dockerfile`** - Contains instructions that define how an image should be built, specifying environment setup and commands necessary for running backend services within containers
+- 📁 **`backend/app/`** - The 'backend/app' contains the source code for a Python application, specifically including main operational scripts.
+- 📁 **`backend/app/core/`** - The 'backend/app/core' directory contains the core application code for a backend system, including configuration settings and database interactions.
+- 🐍 **`backend/app/core/config.py`** - Contains configurations that set up environment variables or parameters essential to run the application's services correctly
+- 🐍 **`backend/app/core/database.py`** - Handles all operations related to connecting with databases such as establishing connections, querying data, updating records
+- 🐍 **`backend/app/main.py`** - Contains the primary entry point to start or run other modules within this application's backend.
+- 📁 **`backend/app/models/`** - The 'backend/app/models' directory contains Python modules that define the ORM (Object-Relational Mapping) for data models in a web application.
+- 🐍 **`backend/app/models/models.py`** - Defines specific data model structures such as User, Product, etc., which are mapped from the corresponding SQL table schemas
+- 🐍 **`backend/app/models/orm.py`** - Contains classes representing database tables and their relationships, providing an interface to interact with these entities using object-oriented programming constructs
 - 📁 **`backend/app/routers/`** - Description unavailable due to missing JSON
+- 🐍 **`backend/app/routers/pipeline.py`** - Description unavailable due to missing JSON
 - 🐍 **`backend/app/routers/runs.py`** - Description unavailable due to missing JSON
 - 🐍 **`backend/app/routers/tasks.py`** - Description unavailable due to missing JSON
-- 📁 **`backend/app/schemas/`** - The 'backend/app/schemas' directory contains Python modules that define data models for the application's backend.
-- 🐍 **`backend/app/schemas/schemas.py`** - Defines various schemas representing different entities in a database, such as users or products.
-- 📁 **`backend/app/services/`** - The 'backend/app/services' directory contains Python scripts that provide various functionalities for the application's backend services.
-- 🐍 **`backend/app/services/runner.py`** - Contains a script to start, stop or manage different application components in an orderly fashion
-- 🐍 **`backend/app/services/service1.py`** - Provides implementations of specific business logic and operations required by one part of the service
-- 📄 **`backend/requirements.txt`** - Description unavailable due to missing JSON
-- 📁 **`frontend/`** - Description unavailable due to missing JSON
-- 📄 **`frontend/.env.example`** - Description unavailable due to missing JSON
-- 📄 **`frontend/Dockerfile`** - Description unavailable due to missing JSON
-- 📘 **`frontend/next-env.d.ts`** - Description unavailable due to missing JSON
-- 📘 **`frontend/next.config.ts`** - Description unavailable due to missing JSON
-- 📋 **`frontend/package.json`** - Description unavailable due to missing JSON
-- 📜 **`frontend/postcss.config.js`** - Description unavailable due to missing JSON
+- 📁 **`backend/app/schemas/`** - The 'backend/app/schemas' directory contains Python files that define the data models for a backend application, providing structure to database interactions.
+- 🐍 **`backend/app/schemas/schemas.py`** - Contains definitions of various schemas used in SQLAlchemy ORM representing different entities and their relationships within an application's domain.
+- 📁 **`backend/app/services/`** - Description unavailable due to missing JSON
+- 🐍 **`backend/app/services/pipeline.py`** - Description unavailable due to missing JSON
+- 📄 **`backend/requirements.txt`** - Specifies a list of libraries needed by the application which can then easily install using pip
+- 📁 **`frontend/`** - The 'frontend' directory contains the source code for a Next.js web application, including environment configuration files, build scripts, styling configurations, type definitions, package dependencies, PostCSS settings, Tailwind CSS setup, TypeScript compiler options and project metadata.
+- 📄 **`frontend/.env.example`** - Provides an example of environmental variables that should be used when setting up the .env file for this Next.js application
+- 📄 **`frontend/Dockerfile`** - Contains instructions to build a Docker image specifically tailored for running the frontend part of the web application in isolated containers
+- 📘 **`frontend/next-env.d.ts`** - Handles TypeScript type definitions specific to Next.js, ensuring proper typing support within the project environment
+- 📘 **`frontend/next.config.ts`** - Implements custom configurations and optimizations required by this particular instance of a Next.js app
+- 📋 **`frontend/package.json`** - Defines dependencies for Node.js modules used in development as well as production environments. It also includes scripts necessary for building and running the application.
+- 📜 **`frontend/postcss.config.js`** - Configures PostCSS to process CSS files with plugins like Tailwind CSS, ensuring that styles are correctly applied during build time
 - 📁 **`frontend/src/`** - 
-- 📁 **`frontend/src/app/`** - The 'frontend/src/app' directory contains the source code for a React application, specifically handling UI components in TypeScript.
+- 📁 **`frontend/src/app/`** - The 'frontend/src/app' directory contains the source code for a React application, specifically handling styling with CSS files and implementing components in TypeScript.
 - 📁 **`frontend/src/app/api/`** - 
-- 📁 **`frontend/src/app/api/health/`** - Description unavailable due to missing JSON
-- 📘 **`frontend/src/app/api/health/route.ts`** - Description unavailable due to missing JSON
+- 📁 **`frontend/src/app/api/health/`** - Contains TypeScript files for handling API routes in a React application, specifically those related to health checks.
+- 📘 **`frontend/src/app/api/health/route.ts`** - Defines the route configuration including endpoints that handle various HTTP methods such as GET and POST within an Express.js server setup.
 - 📁 **`frontend/src/app/api/inngest/`** - Description unavailable due to missing JSON
 - 📘 **`frontend/src/app/api/inngest/route.ts`** - Description unavailable due to missing JSON
-- 📁 **`frontend/src/app/api/models/`** - The 'frontend/src/app/api/models' directory contains TypeScript files that define the data models for an API in a frontend application.
-- 📘 **`frontend/src/app/api/models/route.ts`** - Defines route handlers, providing endpoints to interact with through HTTP requests
-- 📘 **`frontend/src/app/api/models/user_model.ts`** - Specifies user-related properties and methods used within other parts of the app
+- 📁 **`frontend/src/app/api/models/`** - Description unavailable due to missing JSON
+- 📘 **`frontend/src/app/api/models/route.ts`** - Description unavailable due to missing JSON
 - 📁 **`frontend/src/app/api/projects/`** - Description unavailable due to missing JSON
-- 📁 **`frontend/src/app/api/projects/[id]/`** - Contains TypeScript files for an API route that handles project-related operations based on the given id.
-- 📘 **`frontend/src/app/api/projects/[id]/route.ts`** - Defines a specific endpoint in the frontend application to handle requests related to projects identified by their unique ID, including fetching and manipulating data as required.
-- 📁 **`frontend/src/app/api/projects/[id]/tasks/`** - Description unavailable due to missing JSON
-- 📁 **`frontend/src/app/api/projects/[id]/tasks/[taskId]/`** - The 'frontend/src/app/api/projects/[id]/tasks/[taskId]' directory contains files that define the API routes for fetching a specific task within projects based on their unique identifiers.
-- 📁 **`frontend/src/app/api/projects/[id]/tasks/[taskId]/approve/`** - The 'frontend/src/app/api/projects/[id]/tasks/[taskId]/approve' directory contains files related to handling the approval process for a specific task within an application.
-- 📘 **`frontend/src/app/api/projects/[id]/tasks/[taskId]/approve/route.ts`** - Defines and handles routing logic, specifically directing requests meant for approving tasks identified by their unique ID in this context.
-- 📘 **`frontend/src/app/api/projects/[id]/tasks/[taskId]/route.ts`** - Defines an endpoint to retrieve details of tasks associated with given project and task IDs, handling HTTP GET requests.
-- 📁 **`frontend/src/app/api/projects/[id]/tasks/[taskId]/runs/`** - Contains TypeScript files for handling API routes related to tasks within a specific project identified by an ID.
-- 📘 **`frontend/src/app/api/projects/[id]/tasks/[taskId]/runs/route.ts`** - Defines the route structure, parameters, middleware functions, and handlers that manage incoming requests associated with task runs in this particular project's context.
-- 📘 **`frontend/src/app/api/projects/[id]/tasks/route.ts`** - Description unavailable due to missing JSON
+- 📁 **`frontend/src/app/api/projects/[id]/`** - The 'frontend/src/app/api/projects/[id]' directory contains TypeScript files for handling API routes related to specific projects identified by an ID.
+- 📘 **`frontend/src/app/api/projects/[id]/route.ts`** - Contains a route handler that manages incoming requests and provides responses based on the project with the specified id.
+- 📁 **`frontend/src/app/api/projects/[id]/tasks/`** - The 'frontend/src/app/api/projects/[id]/tasks' directory contains files related to handling API routes for tasks within a specific project identified by an ID.
+- 📁 **`frontend/src/app/api/projects/[id]/tasks/[taskId]/`** - The 'frontend/src/app/api/projects/[id]/tasks/[taskId]' directory contains files that define the API routes for a specific project's task identified by its unique ID.
+- 📁 **`frontend/src/app/api/projects/[id]/tasks/[taskId]/approve/`** - Contains the route definition for an API endpoint that approves a specific task within projects, identified by project ID [id] and task ID [taskId]. Handles HTTP requests related to approving tasks in specified directories.
+- 📜 **`frontend/src/app/api/projects/[id]/tasks/[taskId]/approve/approveTaskHandler.js`** - Handles incoming approval actions by updating task status within a project database or service.
+- 📘 **`frontend/src/app/api/projects/[id]/tasks/[taskId]/approve/route.ts`** - Defines the routing structure of this particular path. It provides access control based on provided IDs for both 'projects' and individual 'tasks'.
+- 📘 **`frontend/src/app/api/projects/[id]/tasks/[taskId]/route.ts`** - Defines an endpoint in the application's routing table to handle requests related to tasks within projects, using dynamic parameters [id] and [taskId].
+- 📁 **`frontend/src/app/api/projects/[id]/tasks/[taskId]/runs/`** - Contains TypeScript files for handling API routes related to project tasks, specifically managing the execution states or runs associated with a given task in an application.
+- 📘 **`frontend/src/app/api/projects/[id]/tasks/[taskId]/runs/route.ts`** - Defines routing logic within the application's frontend framework that directs requests and responses between different endpoints concerning specific projects' tasks.
+- 📜 **`frontend/src/app/api/projects/[id]/tasks/[taskId]/tasksService.js`** - Provides services that interact with backend APIs or local storage for managing task-related data such as creation, retrieval, updating, and deletion of a specific project task.
+- 📘 **`frontend/src/app/api/projects/[id]/tasks/route.ts`** - Defines the route and its handler function, which processes incoming requests associated with task operations in this particular project's context.
 - 📘 **`frontend/src/app/api/projects/route.ts`** - Description unavailable due to missing JSON
 - 📁 **`frontend/src/app/api/runs/`** - Description unavailable due to missing JSON
 - 📁 **`frontend/src/app/api/runs/[id]/`** - Description unavailable due to missing JSON
 - 📘 **`frontend/src/app/api/runs/[id]/route.ts`** - Description unavailable due to missing JSON
 - 📘 **`frontend/src/app/api/runs/route.ts`** - Description unavailable due to missing JSON
-- 📁 **`frontend/src/app/api/tasks/`** - The 'frontend/src/app/api/tasks' directory contains the source code for an API that handles task-related operations within a frontend application.
-- 📁 **`frontend/src/app/api/tasks/[id]/`** - Contains TypeScript files for handling API routes related to tasks with a specific ID in the frontend application.
-- 📘 **`frontend/src/app/api/tasks/[id]/route.ts`** - Defines an endpoint that handles requests associated with retrieving or manipulating task details based on its unique identifier (ID).
-- 📘 **`frontend/src/app/api/tasks/[id]/task.service.ts`** - Provides services and business logic necessary for managing operations such as creating, updating, deleting tasks.
-- 📘 **`frontend/src/app/api/tasks/route.ts`** - This TypeScript routing module defines endpoints, parameters and handlers to manage incoming requests related to tasks in the application's front end
-- 📘 **`frontend/src/app/api/tasks/taskService.ts`** - The service file provides functions necessary for performing CRUD (Create, Read, Update, Delete) operations on task data within a frontend application
-- 📁 **`frontend/src/app/dashboard/`** - The 'frontend/src/app/dashboard' directory contains the source code for a React component that serves as part of an application's dashboard interface.
-- ⚛️ **`frontend/src/app/dashboard/page.tsx`** - Contains TypeScript code implementing a functional React page component, responsible for rendering and managing state within its scope.
-- 🎨 **`frontend/src/app/globals.css`** - Provides global styles that are applied across all pages of the app
-- ⚛️ **`frontend/src/app/layout.tsx`** - Handles layout structure and common page elements such as headers or footers used throughout multiple views
-- ⚛️ **`frontend/src/app/page.tsx`** - Implements a specific React component for one particular view in the application
+- 📁 **`frontend/src/app/api/tasks/`** - Description unavailable due to missing JSON
+- 📁 **`frontend/src/app/api/tasks/[id]/`** - Description unavailable due to missing JSON
+- 📘 **`frontend/src/app/api/tasks/[id]/route.ts`** - Description unavailable due to missing JSON
+- 📘 **`frontend/src/app/api/tasks/route.ts`** - Description unavailable due to missing JSON
+- 📁 **`frontend/src/app/dashboard/`** - Description unavailable due to missing JSON
+- ⚛️ **`frontend/src/app/dashboard/page.tsx`** - Description unavailable due to missing JSON
+- 🎨 **`frontend/src/app/globals.css`** - Contains global styles that apply to all elements within the app
+- ⚛️ **`frontend/src/app/layout.tsx`** - Handles layout structure by defining component hierarchy using JSX syntax
+- ⚛️ **`frontend/src/app/page.tsx`** - Implements a specific page's UI with React functional or class components
 - 📁 **`frontend/src/app/projects/`** - 
-- 📁 **`frontend/src/app/projects/[id]/`** - Description unavailable due to missing JSON
-- ⚛️ **`frontend/src/app/projects/[id]/page.tsx`** - Description unavailable due to missing JSON
+- 📁 **`frontend/src/app/projects/[id]/`** - The 'frontend/src/app/projects/[id]' directory contains the source code for a specific project within an Angular application, providing structure to manage different projects by their unique identifiers.
+- ⚛️ **`frontend/src/app/projects/[id]/page.tsx`** - Contains React components used in this project's frontend implementation. Handles rendering and state management of UI elements related to each individual page.
+- 📁 **`frontend/src/app/projects/[id]/submit/`** - The 'frontend/src/app/projects/[id]/submit' directory contains TypeScript files for a React component that handles the submission process within an application.
+- ⚛️ **`frontend/src/app/projects/[id]/submit/page.tsx`** - Contains a functional or class-based React component implementing form handling, state management and possibly API interaction to submit data.
 - 📁 **`frontend/src/app/projects/new/`** - Description unavailable due to missing JSON
 - ⚛️ **`frontend/src/app/projects/new/page.tsx`** - Description unavailable due to missing JSON
 - 📁 **`frontend/src/components/`** - Description unavailable due to missing JSON
@@ -364,25 +465,31 @@ Recommendations: Consider adding detailed documentation on service interactions,
 - ⚛️ **`frontend/src/components/SiaProof.tsx`** - Description unavailable due to missing JSON
 - ⚛️ **`frontend/src/components/StatusBadge.tsx`** - Description unavailable due to missing JSON
 - 📁 **`frontend/src/lib/`** - Description unavailable due to missing JSON
-- 📁 **`frontend/src/lib/inngest/`** - The 'frontend/src/lib/inngest' directory contains TypeScript files for handling Inngest-related functionalities in a frontend application.
-- 📘 **`frontend/src/lib/inngest/client.ts`** - Provides the client-side logic to interact with Inngest services, including sending and receiving data
-- 📘 **`frontend/src/lib/inngest/pipeline-inngest.ts`** - Handles the implementation of an Inngest pipeline on the server side
-- 📁 **`frontend/src/lib/prisma/`** - The 'frontend/src/lib/prisma' directory contains TypeScript files related to Prisma, a data modeling tool that provides an object-oriented database schema for Node.js applications.
-- 📘 **`frontend/src/lib/prisma/client.ts`** - Contains code defining the client interface used by the application to interact with the Prisma server and execute queries against it
-- 📘 **`frontend/src/lib/prisma/index.ts`** - Acts as an entry point file providing access to all exported functionalities from 'client.ts' within this directory, facilitating easier imports of these functions elsewhere in the project
-- 📁 **`frontend/src/lib/prisma/migrations/`** - The 'frontend/src/lib/prisma/migrations' directory contains migration scripts for Prisma, a database toolkit that generates typesafe queries to your databases.
-- 📁 **`frontend/src/lib/prisma/migrations/20260608193949_initial/`** - The 'frontend/src/lib/prisma/migrations/20260608193949_initial' directory contains initial migration files for setting up the Prisma schema.
-- 🗄️ **`frontend/src/lib/prisma/migrations/20260608193949_initial/migration.sql`** - Contains SQL commands to create and modify database tables according to the new Prisma schema.
-- 📄 **`frontend/src/lib/prisma/migrations/migration_lock.toml`** - Contains configuration settings and locking mechanisms used by the migrations script in this folder.
-- 📄 **`frontend/src/lib/prisma/schema.prisma`** - Defines the data model schema for a PostgreSQL database using Prisma's declarative syntax and includes CRUD operations
+- 📁 **`frontend/src/lib/inngest/`** - The 'frontend/src/lib/inngest' directory contains TypeScript files related to Inngest's client-side integration for a frontend application.
+- 📘 **`frontend/src/lib/inngest/client.ts`** - Contains the main entry point of an Inngest-powered React component, initializing and configuring its behavior within the application's context
+- 📘 **`frontend/src/lib/inngest/pipeline-inngest.ts`** - Provides functions that handle communication with Inngest services to manage data pipelines effectively
+- 📁 **`frontend/src/lib/prisma/`** - The 'frontend/src/lib/prisma' directory contains the Prisma client library for interfacing with a database using TypeScript, providing type-safe access to data models defined in schema.prisma.
+- 📘 **`frontend/src/lib/prisma/client.ts`** - Contains code that implements functions and classes from the Prisma Client API allowing users to perform CRUD operations on their databases as per definitions in 'schema.prisma'.
+- 📘 **`frontend/src/lib/prisma/index.ts`** - Provides an entry point for importing all necessary modules, types, or exports related to the Prisma client library.
+- 📁 **`frontend/src/lib/prisma/migrations/`** - The 'frontend/src/lib/prisma/migrations' directory contains migration files for Prisma, which are used to manage database schema changes.
+- 📁 **`frontend/src/lib/prisma/migrations/20260608193949_initial/`** - The 'frontend/src/lib/prisma/migrations/20260608193949_initial' directory contains initial migration files for setting up the database schema in a Prisma project.
+- 🗄️ **`frontend/src/lib/prisma/migrations/20260608193949_initial/migration.sql`** - Contains SQL commands to create and modify tables, views, functions, triggers, etc., as part of an initial data setup process.
+- 📄 **`frontend/src/lib/prisma/migrations/migration_lock.toml`** - Contains configuration settings that lock the migrations from being run concurrently in a multi-user environment.
+- 📄 **`frontend/src/lib/prisma/schema.prisma`** - Defines data models using GraphQL schema language and specifies database connection details required by Prisma Client.
 - 📘 **`frontend/src/lib/types.ts`** - Description unavailable due to missing JSON
-- 📘 **`frontend/tailwind.config.ts`** - Description unavailable due to missing JSON
-- 📋 **`frontend/tsconfig.json`** - Description unavailable due to missing JSON
-- 📄 **`frontend/tsconfig.tsbuildinfo`** - Description unavailable due to missing JSON
-- 📁 **`root/`** - The 'root' directory contains configuration files for a project, including example environment variables.
-- 📄 **`root/.env.example`** - Contains sample .env file with placeholder values to configure the application
-- 📖 **`root/README.md`** - Provides documentation on how to set up and run the project using Docker Compose
-- ⚙️ **`root/docker-compose.yml`** - Defines services that make up an application's stack, handles networking between containers
+- 📘 **`frontend/tailwind.config.ts`** - Contains configuration settings specific to integrating Tailwind CSS into this Next.js project. It defines how utility classes should be handled and purged for production builds.
+- 📋 **`frontend/tsconfig.json`** - Specifies TypeScript compiler options tailored specifically towards the frontend part of a web application, including strict typing rules
+- 📄 **`frontend/tsconfig.tsbuildinfo`** - Provides build-time information about type definitions used in this project to assist with optimization during compilation
+- 📁 **`frontend/uploads/`** - 
+- 📁 **`frontend/uploads/cmq5mwx7i00007adimugag89j/`** - The 'frontend/uploads/cmq5mwx7i00007adimugag89j' directory contains files related to the vesting cliff repair process for an application, specifically containing zipped datasets or results from this operation.
+- 📄 **`frontend/uploads/cmq5mwx7i00007adimugag89j/1723d553-ea4c-43db-8555-24456134925f-vesting-cliff-repair-47.zip`** - This file is a compressed dataset that contains the outcome of applying vesting cliff repair to an application's data, identified by its unique hash.
+- 📄 **`frontend/uploads/cmq5mwx7i00007adimugag89j/8763673d-4742-47d8-a757-ed182b496148-vesting-cliff-repair-47.zip`** - Contains results from another instance where 'vesting cliff' adjustments were applied in the application dataset with a distinct identifier for reference and retrieval purposes.
+- 📄 **`frontend/uploads/cmq5mwx7i00007adimugag89j/fc13f0fb-0c01-4206-b287-b99d09c5f73e-vesting-cliff-repair-47.zip`** - This compressed file holds data from yet another vesting cliff repair process, uniquely identified to ensure accurate tracking of the dataset's origin and modifications.
+- 📁 **`root/`** - The 'root' directory contains configuration files, documentation for a project setup using Docker Compose.
+- 📄 **`root/.env.example`** - Contains example environment variables to be used as a template by developers
+- 📄 **`root/Note.txt`** - Provides notes or comments related to the project's context or instructions on usage
+- 📖 **`root/README.md`** - Describes how to set up, configure and run this project using Docker Compose
+- ⚙️ **`root/docker-compose.yml`** - Defines services for running applications in isolated containers
 
 
 ---

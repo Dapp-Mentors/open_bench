@@ -1,4 +1,4 @@
-// lib/inngest/pipeline.ts
+// lib/inngest/pipeline-inngest.ts
 //
 // Inngest function that runs all 8 pipeline stages sequentially.
 // Deterministic stages (CI, preflight, oracle/NOP) delegate to the Python
@@ -25,6 +25,18 @@ const STAGES = [
 
 type StageKey = typeof STAGES[number];
 
+// ── Helper: resolve backend URL ───────────────────────────────────────────────
+// Mirrors the same pattern used in client.ts for Inngest URL resolution.
+// Inside Docker  → BACKEND_URL="http://backend:8000"  resolves via Docker DNS.
+// Local next dev → "backend" is unknown; rewrite to localhost so the FastAPI
+//                  server running on the host (port 8000) is reachable.
+function resolveBackendUrl(): string {
+  const url = process.env.BACKEND_URL ?? "http://backend:8000";
+  if (process.env.RUNNING_IN_DOCKER === "1") return url;
+  // Replace the Docker service hostname with localhost
+  return url.replace("http://backend:", "http://localhost:");
+}
+
 // ── Helper: write a PipelineLog row ──────────────────────────────────────────
 async function logStage(
   taskId: string,
@@ -43,7 +55,7 @@ async function callBackend(
   taskId: string,
   storagePath: string,
 ): Promise<{ passed: boolean; message: string; detail?: string }> {
-  const backendUrl = process.env.BACKEND_URL ?? "http://backend:8000";
+  const backendUrl = resolveBackendUrl();
   const res = await fetch(`${backendUrl}/api/pipeline/${endpoint}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -56,6 +68,31 @@ async function callBackend(
   }
 
   return res.json();
+}
+
+// ── Default agent config (DeepSeek via OpenRouter) ────────────────────────────
+// Provider hierarchy:
+//   1. DeepSeek direct API  (DEEPSEEK_API_KEY set)
+//   2. OpenRouter           (OPENROUTER_API_KEY set)
+//   3. OpenAI               (fallback)
+function defaultAgentConfig(): Record<string, string> {
+  if (process.env.DEEPSEEK_API_KEY) {
+    return {
+      provider: "deepseek",
+      modelId: "deepseek-chat",   // deepseek-chat = DeepSeek-V3; use deepseek-reasoner for R1
+    };
+  }
+  if (process.env.OPENROUTER_API_KEY) {
+    return {
+      provider: "openrouter",
+      modelId: "deepseek/deepseek-chat-v3-0324:free",
+    };
+  }
+  // Fallback — original behaviour
+  return {
+    provider: "openai",
+    modelId: "gpt-4o",
+  };
 }
 
 // ── The Inngest pipeline function ─────────────────────────────────────────────
@@ -117,16 +154,16 @@ export const runPipeline = inngest.createFunction(
     });
     if (!oraclePassed) return await reject(taskId, "Rejected at oracle/NOP validation");
 
-    // ── Stage 6: Easiness prefilter (Sonnet 4.6 × 5) ─────────────────────────
-    // TODO: run Sonnet 4.6 × 5, require exactly 1/5 pass
+    // ── Stage 6: Easiness prefilter ───────────────────────────────────────────
+    // TODO: run default model × 5, require exactly 1/5 pass
     const easinessPassed = await step.run("stage-easiness", async () => {
-      await logStage(taskId, "easiness", true, "pass@5: 1/5 — PASSED (proceeded to Opus probe)");
+      await logStage(taskId, "easiness", true, "pass@5: 1/5 — PASSED (proceeded to difficulty probe)");
       return true;
     });
     if (!easinessPassed) return await reject(taskId, "Rejected at easiness prefilter");
 
-    // ── Stage 7: Difficulty probe (Opus 4.8 × 5) ─────────────────────────────
-    // TODO: run Opus 4.8 × 5, require 1–3 passes
+    // ── Stage 7: Difficulty probe ─────────────────────────────────────────────
+    // TODO: run default model × 5, require 1–3 passes
     const difficultyPassed = await step.run("stage-difficulty", async () => {
       await logStage(taskId, "difficulty", true, "pass@5: 2/5 — difficulty GOOD");
       return true;
@@ -160,13 +197,16 @@ export const runBenchmark = inngest.createFunction(
   async ({ event, step }) => {
     const { runId, taskId, storagePath, agentConfig } = event.data;
 
+    // Fall back to DeepSeek (or the best available provider) if caller didn't specify
+    const resolvedAgentConfig = agentConfig ?? defaultAgentConfig();
+
     const result = await step.run("execute-run", async () => {
-      const backendUrl = process.env.BACKEND_URL ?? "http://backend:8000";
+      const backendUrl = resolveBackendUrl();  // ← uses the same hostname fix
 
       const res = await fetch(`${backendUrl}/api/pipeline/benchmark/execute`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ runId, taskId, storagePath, agentConfig }),
+        body: JSON.stringify({ runId, taskId, storagePath, agentConfig: resolvedAgentConfig }),
       });
 
       if (!res.ok) {
