@@ -37,3 +37,28 @@ export async function GET(
 
   return NextResponse.json(task)
 }
+
+export async function DELETE(
+  _: Request,
+  { params }: { params: Promise<{ id: string; taskId: string }> },
+) {
+  const { id, taskId } = await params
+
+  const task = await prisma.task.findUnique({
+    where: { id: taskId, projectId: id },
+  })
+
+  if (!task) {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  }
+
+  if (task.status === 'approved') {
+    return NextResponse.json({ error: 'Cannot delete an approved task' }, { status: 403 })
+  }
+
+  await prisma.task.delete({
+    where: { id: taskId },
+  })
+
+  return NextResponse.json({ success: true })
+}

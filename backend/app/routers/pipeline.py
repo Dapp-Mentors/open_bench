@@ -1,13 +1,8 @@
 # app/routers/pipeline.py
-#
-# Called exclusively by the Inngest pipeline function (pipeline-inngest.ts).
-# Each endpoint corresponds to one pipeline stage. Inngest handles retries,
-# concurrency, and state — this layer just executes and responds.
-#
-# Convention: POST /api/pipeline/<stage>
-# Body:   PipelineStageRequest  { taskId, storagePath }
-# Return: PipelineStageResponse { passed, message, detail? }
 
+import os
+import sys
+import zipfile
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -26,6 +21,11 @@ from app.services import pipeline as svc
 _cuid = Cuid()
 
 router = APIRouter()
+
+
+def _diag(msg: str) -> None:
+    """Always-visible diagnostic — bypasses log level config."""
+    print(f"[CI-DIAG] {msg}", file=sys.stderr, flush=True)
 
 
 # ── Shared helper ─────────────────────────────────────────────────────────────
@@ -62,9 +62,40 @@ async def _get_task_or_404(db: AsyncSession, task_id: str) -> Task:
 async def stage_ci(body: PipelineStageRequest, db: AsyncSession = Depends(get_db)):
     task = await _get_task_or_404(db, body.taskId)
 
+    # ── DIAGNOSTIC ────────────────────────────────────────────────────────────
+    sp = body.storagePath
+    _diag("=" * 60)
+    _diag(f"taskId      = {body.taskId}")
+    _diag(f"storagePath = {sp}")
+    _diag(f"exists={os.path.exists(sp)}  is_file={os.path.isfile(sp)}  is_dir={os.path.isdir(sp)}")
+
+    if os.path.isfile(sp) and sp.lower().endswith(".zip"):
+        _diag("storagePath is a ZIP file — inspecting contents:")
+        try:
+            with zipfile.ZipFile(sp) as zf:
+                names = sorted(zf.namelist())
+            _diag(f"  {len(names)} entries inside ZIP:")
+            for n in names:
+                _diag(f"    {n}")
+        except Exception as e:
+            _diag(f"  ERROR reading ZIP: {e}")
+
+    elif os.path.isdir(sp):
+        _diag("storagePath is a directory — walking tree:")
+        for root, dirs, files in os.walk(sp):
+            # Sort for consistent output; skip __pycache__ noise
+            dirs[:] = sorted(d for d in dirs if d != "__pycache__")
+            rel = os.path.relpath(root, sp)
+            for f in sorted(files):
+                _diag(f"    {os.path.join(rel, f)}")
+    else:
+        _diag("WARNING: storagePath does not exist or is not a ZIP/directory!")
+
+    _diag("=" * 60)
+    # ── END DIAGNOSTIC ────────────────────────────────────────────────────────
+
     passed, message = await svc.run_ci_checks(body.taskId, body.storagePath)
 
-    # Persist the result on the Task row so the frontend can surface it
     task.ciPassed = passed
     task.updatedAt = datetime.now(timezone.utc)
     await db.commit()
@@ -98,14 +129,12 @@ async def stage_oracle_nop(body: PipelineStageRequest, db: AsyncSession = Depend
 
 
 # ── Benchmark execution ───────────────────────────────────────────────────────
-# Called by the Inngest benchmark runner (runBenchmark function).
 
 @router.post("/benchmark/execute", response_model=PipelineStageResponse)
 async def execute_benchmark(
     body: BenchmarkExecuteRequest,
     db: AsyncSession = Depends(get_db),
 ):
-    # Verify the run exists
     run = await db.get(BenchmarkRun, body.runId)
     if not run:
         raise HTTPException(status_code=404, detail=f"BenchmarkRun {body.runId} not found")
@@ -121,15 +150,12 @@ async def execute_benchmark(
 
     end_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
 
-    # Update the run row — Inngest also updates this, but we do it here too
-    # so the result is written even if Inngest's DB update step is still pending
     run.status    = "completed" if error is None else "failed"
     run.score     = float(score)
     run.runtimeMs = end_ms - start_ms
     run.updatedAt = datetime.now(timezone.utc)
     await db.commit()
 
-    # Write a log entry for the run result
     log = RunLog(
         id=_cuid.generate(),
         runId=body.runId,

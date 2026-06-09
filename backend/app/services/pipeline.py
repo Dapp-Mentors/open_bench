@@ -6,7 +6,7 @@ Each function corresponds to one pipeline stage and returns (passed, message).
 
 Container strategy
 ──────────────────
-The backend runs inside Docker. To spin up task containers it uses the host
+The backend runs inside Docker. To spin up task containers it uses the host 
 Docker socket mounted at /var/run/docker.sock (see docker-compose.yml).
 Containers are launched as siblings on the host daemon, not children.
 Every container gets a unique name derived from taskId + stage so parallel
@@ -54,10 +54,61 @@ def _docker_client() -> docker.DockerClient:
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _task_dir(storage_path: str) -> Path:
+    """
+    Resolve storage_path to an unpacked task directory.
+
+    storage_path may be either:
+      - A path to a .zip file  -> extract next to it (cached after first call)
+      - An already-extracted directory -> return as-is
+
+    The extracted directory is placed at <zip_stem>/ beside the zip so every
+    pipeline stage reuses the same extraction without re-unzipping.
+    """
     p = Path(storage_path)
-    if not p.exists():
-        raise FileNotFoundError(f"Task directory not found: {storage_path}")
-    return p
+
+    # Already an extracted directory — nothing to do.
+    if p.is_dir():
+        return p
+
+    # It's a ZIP file — extract if not already done.
+    if p.is_file() and p.suffix.lower() == ".zip":
+        extract_dir = p.parent / p.stem  # e.g. uploads/abc/e5e5c5f8-.../
+
+        if not extract_dir.exists():
+            extract_dir.mkdir(parents=True, exist_ok=True)
+            with zipfile.ZipFile(p) as zf:
+                names = zf.namelist()
+                if not names:
+                    raise ValueError(f"ZIP is empty: {p}")
+
+                # Detect single nested root folder inside ZIP.
+                # e.g. ["my-task/instruction.md", "my-task/environment/Dockerfile"]
+                # vs   ["instruction.md", "environment/Dockerfile"]
+                top_level = {n.split("/")[0] for n in names if n.strip()}
+                first = next(iter(top_level))
+                has_single_root = (
+                    len(top_level) == 1
+                    and all(
+                        n.startswith(first + "/") or n == first
+                        for n in names
+                    )
+                )
+
+                zf.extractall(extract_dir)
+
+                if has_single_root:
+                    # Contents landed in extract_dir/<root>/ — hoist them up one level
+                    root_folder = extract_dir / first
+                    if root_folder.is_dir():
+                        for item in list(root_folder.iterdir()):
+                            shutil.move(str(item), str(extract_dir / item.name))
+                        root_folder.rmdir()
+
+        return extract_dir
+
+    raise FileNotFoundError(
+        f"storage_path is neither a directory nor a .zip file: {storage_path}"
+    )
 
 
 def _run_subprocess(cmd: list[str], cwd: str | None = None) -> Tuple[int, str]:

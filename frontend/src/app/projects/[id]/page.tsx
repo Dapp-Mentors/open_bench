@@ -310,9 +310,14 @@ function ModelPicker({
 
 // ─── Task accordion row ───────────────────────────────────────────────────────
 
-function TaskRow({ task }: { task: ProjectTask }) {
+function TaskRow({ task, projectId, onDeleted }: { 
+  task: ProjectTask; 
+  projectId: string;
+  onDeleted: (taskId: string) => void;
+}) {
   const [open, setOpen] = useState(false);
   const [showPicker, setShowPicker] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const stages = buildStages(task.pipelineLogs ?? [], task.status, task.stageDetails);
   const passedStages = stages.filter((s) => s.passed === true).length;
@@ -320,26 +325,40 @@ function TaskRow({ task }: { task: ProjectTask }) {
   const isApproved = task.status === "approved";
   const isRejected = task.status === "rejected";
 
+  async function handleDelete() {
+    if (!confirm(`Delete "${task.title}"? This can't be undone.`)) return;
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/projects/${projectId}/tasks/${task.id}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        alert(data.error ?? "Failed to delete task");
+        setDeleting(false);
+        return;
+      }
+      onDeleted(task.id);
+    } catch {
+      alert("Something went wrong");
+      setDeleting(false);
+    }
+  }
+
   return (
     <div
       className="rounded-lg border overflow-hidden"
       style={{ borderColor: isRejected ? "rgba(255,68,68,0.2)" : isApproved ? "rgba(0,230,118,0.2)" : "var(--border)" }}
     >
-      {/* Row header — always visible */}
+      {/* Row header */}
       <div
         className="flex items-center gap-3 px-5 py-4 cursor-pointer select-none"
         style={{ background: "var(--surface)" }}
         onClick={() => setOpen((o) => !o)}
       >
-        {/* Expand arrow */}
         <div style={{ color: "var(--muted)" }}>
-          {open
-            ? <ChevronDown className="w-4 h-4" />
-            : <ChevronRight className="w-4 h-4" />
-          }
+          {open ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
         </div>
-
-        {/* File icon + name */}
         <div className="flex items-center gap-2 flex-1 min-w-0">
           <span className="text-base" style={{ color: "var(--subtle)" }}>📄</span>
           <div className="min-w-0">
@@ -361,8 +380,6 @@ function TaskRow({ task }: { task: ProjectTask }) {
             </p>
           </div>
         </div>
-
-        {/* Right side: pipeline progress + status badge */}
         <div className="flex items-center gap-3 flex-shrink-0">
           {isRunning && (
             <span className="font-mono text-xs" style={{ color: "var(--blue)" }}>
@@ -381,7 +398,6 @@ function TaskRow({ task }: { task: ProjectTask }) {
             className="mx-4 my-4 rounded-lg border overflow-hidden"
             style={{ borderColor: "var(--border)" }}
           >
-            {/* Pipeline header */}
             <div
               className="flex items-center justify-between px-5 py-3 border-b"
               style={{ background: "var(--surface)", borderColor: "var(--border)" }}
@@ -400,12 +416,8 @@ function TaskRow({ task }: { task: ProjectTask }) {
                         : "Pending"}
                 </p>
               </div>
-              {/* Progress bar */}
               <div className="w-32">
-                <div
-                  className="h-1 rounded-full overflow-hidden"
-                  style={{ background: "var(--muted)" }}
-                >
+                <div className="h-1 rounded-full overflow-hidden" style={{ background: "var(--muted)" }}>
                   <div
                     className="h-full rounded-full transition-all duration-700"
                     style={{
@@ -419,14 +431,12 @@ function TaskRow({ task }: { task: ProjectTask }) {
                 </p>
               </div>
             </div>
-
-            {/* Stage rows */}
             {stages.map((stage) => (
               <PipelineStageRow key={stage.key} stage={stage} />
             ))}
           </div>
 
-          {/* Approved — show run history + run button */}
+          {/* Approved — run history + run button */}
           {isApproved && (
             <div className="mx-4 mb-4">
               {task.runs && task.runs.length > 0 && (
@@ -450,9 +460,7 @@ function TaskRow({ task }: { task: ProjectTask }) {
                           >
                             {r.provider}
                           </span>
-                          <span className="font-mono text-sm" style={{ color: "var(--text)" }}>
-                            {r.modelId}
-                          </span>
+                          <span className="font-mono text-sm" style={{ color: "var(--text)" }}>{r.modelId}</span>
                         </div>
                         <div className="flex items-center gap-3">
                           {r.score != null && (
@@ -464,16 +472,13 @@ function TaskRow({ task }: { task: ProjectTask }) {
                             </span>
                           )}
                           <StatusChip status={r.status} />
-                          {r.siaHash && (
-                            <Database className="w-3.5 h-3.5" style={{ color: "var(--cyan)" }} />
-                          )}
+                          {r.siaHash && <Database className="w-3.5 h-3.5" style={{ color: "var(--cyan)" }} />}
                         </div>
                       </div>
                     ))}
                   </div>
                 </div>
               )}
-
               {!showPicker ? (
                 <button
                   onClick={() => setShowPicker(true)}
@@ -488,22 +493,51 @@ function TaskRow({ task }: { task: ProjectTask }) {
             </div>
           )}
 
-          {/* Sia proof if available */}
+          {/* Sia proof */}
           {task.siaHash && (
             <div className="mx-4 mb-4 rounded-lg p-3 border flex items-center gap-3"
               style={{ background: "rgba(0,188,212,0.04)", borderColor: "rgba(0,188,212,0.2)" }}
             >
               <Database className="w-4 h-4 flex-shrink-0" style={{ color: "var(--cyan)" }} />
               <div className="flex-1 min-w-0">
-                <p className="font-mono text-xs font-semibold mb-0.5" style={{ color: "var(--cyan)" }}>
-                  SIA NETWORK
-                </p>
-                <p className="font-mono text-xs truncate" style={{ color: "var(--subtle)" }}>
-                  {task.siaHash}
-                </p>
+                <p className="font-mono text-xs font-semibold mb-0.5" style={{ color: "var(--cyan)" }}>SIA NETWORK</p>
+                <p className="font-mono text-xs truncate" style={{ color: "var(--subtle)" }}>{task.siaHash}</p>
               </div>
             </div>
           )}
+
+          {/* ── Bottom action bar ── */}
+          <div
+            className="mx-4 mb-4 pt-3 flex items-center gap-2 border-t"
+            style={{ borderColor: "var(--border)" }}
+          >
+            {isApproved && (
+            <a href={`/api/projects/${projectId}/tasks/${task.id}/download`}
+              className="bench-btn-ghost inline-flex items-center gap-1.5 px-4 py-2 rounded text-xs"
+            >
+              <Upload className="w-3.5 h-3.5 rotate-180" />
+              Download
+            </a>
+          )}
+            {!isApproved && (
+              <button
+                onClick={handleDelete}
+                disabled={deleting}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded text-xs font-mono transition-all disabled:opacity-40"
+                style={{
+                  background: "rgba(255,68,68,0.08)",
+                  border: "1px solid rgba(255,68,68,0.25)",
+                  color: "var(--red)",
+                }}
+              >
+                {deleting ? (
+                  <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Deleting…</>
+                ) : (
+                  <><XCircle className="w-3.5 h-3.5" /> Delete Task</>
+                )}
+              </button>
+            )}
+          </div>
         </div>
       )}
     </div>
@@ -567,6 +601,7 @@ function buildStages(
 export default function ProjectDetail({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const [project, setProject] = useState<Project | null>(null);
+  const [tasks, setTasks] = useState<ProjectTask[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchProject = useCallback(async () => {
@@ -589,6 +624,13 @@ export default function ProjectDetail({ params }: { params: Promise<{ id: string
     const timer = setInterval(fetchProject, 2500);
     return () => clearInterval(timer);
   }, [project, fetchProject]);
+
+  function handleTaskDeleted(taskId: string) {
+  setProject((prev) => prev ? {
+    ...prev,
+    tasks: prev.tasks.filter((t) => t.id !== taskId),
+  } : prev);
+}
 
   const approvedCount = project?.tasks.filter((t) => t.status === "approved").length ?? 0;
   const pendingCount = project?.tasks.filter(
@@ -694,7 +736,12 @@ export default function ProjectDetail({ params }: { params: Promise<{ id: string
       ) : (
         <div className="space-y-3">
           {project.tasks.map((task) => (
-            <TaskRow key={task.id} task={task} />
+            <TaskRow
+              key={task.id}
+              task={task}
+              projectId={project.id}
+              onDeleted={handleTaskDeleted}
+            />
           ))}
         </div>
       )}
