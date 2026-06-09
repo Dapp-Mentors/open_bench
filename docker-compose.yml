@@ -26,11 +26,16 @@ services:
     image: inngest/inngest:latest
     container_name: openbench_inngest
     restart: unless-stopped
-    command: inngest dev --host 0.0.0.0 --port 8288 --no-discovery
+    # Removed --no-discovery so Inngest can reach the frontend to sync functions.
+    # -u tells it exactly where to find the app on startup — no manual syncing needed.
+    command: inngest dev --host 0.0.0.0 --port 8288 -u http://frontend:3000/api/inngest
     ports:
       - "8288:8288"
     environment:
       INNGEST_DEV: "1"
+    depends_on:
+      frontend:
+        condition: service_started
 
 
   backend:
@@ -78,8 +83,6 @@ services:
         condition: service_healthy
       backend:
         condition: service_started
-      inngest:
-        condition: service_started
 
     ports:
       - "3000:3000"
@@ -95,6 +98,7 @@ services:
       NEXT_TELEMETRY_DISABLED: "1"
       HOSTNAME: 0.0.0.0
       PORT: 3000
+      RUNNING_IN_DOCKER: "1"
 
 
 volumes:
