@@ -5,7 +5,7 @@ from pydantic import BaseModel
 
 
 # ─────────────────────────────────────────
-# Task schemas
+# Task
 # ─────────────────────────────────────────
 
 class TaskRead(BaseModel):
@@ -37,7 +37,23 @@ class TaskRead(BaseModel):
 
 
 # ─────────────────────────────────────────
-# BenchmarkRun schemas
+# Pipeline stage request/response
+# Used by Inngest to call each pipeline stage endpoint
+# ─────────────────────────────────────────
+
+class PipelineStageRequest(BaseModel):
+    taskId: str
+    storagePath: str       # absolute path to the unpacked task directory
+
+
+class PipelineStageResponse(BaseModel):
+    passed: bool
+    message: str
+    detail: Optional[str] = None   # extra context on failure
+
+
+# ─────────────────────────────────────────
+# Benchmark run
 # ─────────────────────────────────────────
 
 class RunCreate(BaseModel):
@@ -66,10 +82,6 @@ class RunRead(BaseModel):
         from_attributes = True
 
 
-# ─────────────────────────────────────────
-# RunLog schemas
-# ─────────────────────────────────────────
-
 class RunLogRead(BaseModel):
     id: str
     runId: str
@@ -79,3 +91,15 @@ class RunLogRead(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+# ─────────────────────────────────────────
+# Benchmark execute request
+# Called by Inngest benchmark runner
+# ─────────────────────────────────────────
+
+class BenchmarkExecuteRequest(BaseModel):
+    runId: str
+    taskId: str
+    storagePath: str
+    agentConfig: dict           # {"provider": "openai", "modelId": "gpt-4o", ...}

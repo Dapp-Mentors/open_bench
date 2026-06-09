@@ -26,8 +26,6 @@ services:
     image: inngest/inngest:latest
     container_name: openbench_inngest
     restart: unless-stopped
-    # Removed --no-discovery so Inngest can reach the frontend to sync functions.
-    # -u tells it exactly where to find the app on startup — no manual syncing needed.
     command: inngest dev --host 0.0.0.0 --port 8288 -u http://frontend:3000/api/inngest
     ports:
       - "8288:8288"
@@ -52,7 +50,6 @@ services:
 
     ports:
       - "8000:8000"
-      - "8001:8001"
 
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-openbench}:${POSTGRES_PASSWORD:-openbench_secret}@postgres:5432/${POSTGRES_DB:-openbench}
@@ -63,8 +60,14 @@ services:
 
       CORS_ORIGINS: '["http://localhost:3000"]'
 
+      UPLOADS_DIR: /uploads
+
     volumes:
       - ./backend:/app
+      # Shared task ZIPs — frontend writes here after upload, backend reads for execution
+      - task_uploads:/uploads
+      # Docker socket — lets the backend spin up sibling task containers on the host daemon
+      - /var/run/docker.sock:/var/run/docker.sock
 
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -100,6 +103,11 @@ services:
       PORT: 3000
       RUNNING_IN_DOCKER: "1"
 
+    volumes:
+      # Same shared volume so the frontend can write ZIPs here after upload
+      - task_uploads:/uploads
+
 
 volumes:
   postgres_data:
+  task_uploads:

@@ -1,3 +1,10 @@
+"""
+database.py
+-----------
+Read/write access to the shared Postgres instance.
+Schema is fully owned by Prisma (frontend) — this backend never calls
+create_all, run_sync, or any DDL. It only reads and updates rows.
+"""
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 from sqlalchemy.orm import DeclarativeBase
 

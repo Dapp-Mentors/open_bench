@@ -1,4 +1,10 @@
 # app/routers/tasks.py
+#
+# Read-only task endpoints.
+# The frontend (Next.js / Prisma) owns all task creation, status updates,
+# and approval writes. The backend only needs to read task data when the
+# pipeline service needs it — but these endpoints are handy for debugging.
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -22,12 +28,3 @@ async def get_task(task_id: str, db: AsyncSession = Depends(get_db)):
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
     return task
-
-
-@router.delete("/{task_id}", status_code=204)
-async def delete_task(task_id: str, db: AsyncSession = Depends(get_db)):
-    task = await db.get(Task, task_id)
-    if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
-    await db.delete(task)
-    await db.commit()

@@ -1,4 +1,9 @@
 # app/models/orm.py
+#
+# These ORM classes mirror the Prisma schema owned by the frontend.
+# DO NOT add columns, rename tables, or run DDL from here.
+# If the Prisma schema changes, update these classes to match.
+
 from sqlalchemy import Column, String, Float, Integer, Boolean, DateTime, Text
 from sqlalchemy.orm import relationship
 from app.core.database import Base
