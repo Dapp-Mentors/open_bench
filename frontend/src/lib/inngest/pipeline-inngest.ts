@@ -1,10 +1,18 @@
 // lib/inngest/pipeline-inngest.ts
 //
 // Inngest function that runs all 8 pipeline stages sequentially.
-// Deterministic stages (CI, preflight, oracle/NOP) delegate to the Python
-// backend via HTTP — that's where Docker runs.
-// LLM-powered stages (similarity, quality, easiness, difficulty, agent_quality)
-// are still stubbed and will be wired in when those services are ready.
+//
+// Stages wired to the Python backend (real execution):
+//   similarity   — embedding + cosine compare vs approved tasks
+//   ci           — syntax checks + Docker build
+//   quality      — LLM-as-judge across 11 criteria (avg >= 0.6)
+//   preflight    — pytest --collect-only inside the built image (>= 6 tests)
+//   oracle_nop   — NOP reward=0 + Oracle reward=1 container validation
+//
+// Stages still stubbed (TODO):
+//   easiness     — run default model × 5, require exactly 1/5 pass
+//   difficulty   — run default model × 5, require 1–3 passes
+//   agent_quality — LLM-as-judge for instruction quality / no leaked assertions
 //
 // If any stage fails, the task is marked "rejected" and the function stops.
 // If all 8 pass, the task moves to "pipeline_passed" — awaiting human review.
@@ -26,14 +34,9 @@ const STAGES = [
 type StageKey = typeof STAGES[number];
 
 // ── Helper: resolve backend URL ───────────────────────────────────────────────
-// Mirrors the same pattern used in client.ts for Inngest URL resolution.
-// Inside Docker  → BACKEND_URL="http://backend:8000"  resolves via Docker DNS.
-// Local next dev → "backend" is unknown; rewrite to localhost so the FastAPI
-//                  server running on the host (port 8000) is reachable.
 function resolveBackendUrl(): string {
   const url = process.env.BACKEND_URL ?? "http://backend:8000";
   if (process.env.RUNNING_IN_DOCKER === "1") return url;
-  // Replace the Docker service hostname with localhost
   return url.replace("http://backend:", "http://localhost:");
 }
 
@@ -71,15 +74,11 @@ async function callBackend(
 }
 
 // ── Default agent config (DeepSeek via OpenRouter) ────────────────────────────
-// Provider hierarchy:
-//   1. DeepSeek direct API  (DEEPSEEK_API_KEY set)
-//   2. OpenRouter           (OPENROUTER_API_KEY set)
-//   3. OpenAI               (fallback)
 function defaultAgentConfig(): Record<string, string> {
   if (process.env.DEEPSEEK_API_KEY) {
     return {
       provider: "deepseek",
-      modelId: "deepseek-chat",   // deepseek-chat = DeepSeek-V3; use deepseek-reasoner for R1
+      modelId: "deepseek-chat",
     };
   }
   if (process.env.OPENROUTER_API_KEY) {
@@ -88,7 +87,6 @@ function defaultAgentConfig(): Record<string, string> {
       modelId: "deepseek/deepseek-chat-v3-0324:free",
     };
   }
-  // Fallback — original behaviour
   return {
     provider: "openai",
     modelId: "gpt-4o",
@@ -112,15 +110,17 @@ export const runPipeline = inngest.createFunction(
     });
 
     // ── Stage 1: Similarity & Diversity ───────────────────────────────────────
-    // TODO: compute embedding, cosine compare vs approved tasks
+    // Real: embeds instruction.md, cosine-compares against approved tasks.
+    // Persists the embedding back onto the Task row for future comparisons.
     const similarityPassed = await step.run("stage-similarity", async () => {
-      await logStage(taskId, "similarity", true, "No near-duplicates found");
-      return true;
+      const result = await callBackend("similarity", taskId, storagePath);
+      await logStage(taskId, "similarity", result.passed, result.message);
+      return result.passed;
     });
     if (!similarityPassed) return await reject(taskId, "Rejected at similarity check");
 
     // ── Stage 2: CI Checks ────────────────────────────────────────────────────
-    // Runs on Python backend: syntax checks + Docker build
+    // Real: syntax checks + Docker build on Python backend.
     const ciPassed = await step.run("stage-ci", async () => {
       const result = await callBackend("ci", taskId, storagePath);
       await logStage(taskId, "ci", result.passed, result.message);
@@ -129,15 +129,21 @@ export const runPipeline = inngest.createFunction(
     if (!ciPassed) return await reject(taskId, "Rejected at CI checks");
 
     // ── Stage 3: Quality Check ────────────────────────────────────────────────
-    // TODO: LLM quality scorer across 11 criteria, require avg >= 0.6
+    // Real: LLM-as-judge scores across 11 criteria; average must be >= 0.6.
+    // Full per-criterion breakdown is stored in Task.qualityDetails.
     const qualityPassed = await step.run("stage-quality", async () => {
-      await logStage(taskId, "quality", true, "Quality score: 82% (threshold: 60%)");
-      return true;
+      const result = await callBackend("quality", taskId, storagePath);
+      // Log only the summary line — the breakdown is stored server-side on the Task row
+      const summaryLine = result.message.split("\n")[0];
+      await logStage(taskId, "quality", result.passed, summaryLine);
+      return result.passed;
     });
     if (!qualityPassed) return await reject(taskId, "Rejected at quality check");
 
     // ── Stage 4: Validation pre-flight ───────────────────────────────────────
-    // Runs on Python backend: pytest --collect-only inside the built image
+    // Real: pytest --collect-only inside the built Docker image.
+    // Fixed: robust log parsing no longer mis-counts when PytestCacheWarning
+    // appears on the same output stream as the "N tests collected" summary.
     const preflightPassed = await step.run("stage-preflight", async () => {
       const result = await callBackend("preflight", taskId, storagePath);
       await logStage(taskId, "preflight", result.passed, result.message);
@@ -146,7 +152,9 @@ export const runPipeline = inngest.createFunction(
     if (!preflightPassed) return await reject(taskId, "Rejected at pre-flight validation");
 
     // ── Stage 5: Oracle / NOP validation ─────────────────────────────────────
-    // Runs on Python backend: two independent containers, checks reward.txt
+    // Real: two independent containers.
+    //   NOP    — run test.sh only → reward.txt must be "0"
+    //   Oracle — run solve.sh then test.sh → reward.txt must be "1"
     const oraclePassed = await step.run("stage-oracle-nop", async () => {
       const result = await callBackend("oracle-nop", taskId, storagePath);
       await logStage(taskId, "oracle_nop", result.passed, result.message);
@@ -197,11 +205,10 @@ export const runBenchmark = inngest.createFunction(
   async ({ event, step }) => {
     const { runId, taskId, storagePath, agentConfig } = event.data;
 
-    // Fall back to DeepSeek (or the best available provider) if caller didn't specify
     const resolvedAgentConfig = agentConfig ?? defaultAgentConfig();
 
     const result = await step.run("execute-run", async () => {
-      const backendUrl = resolveBackendUrl();  // ← uses the same hostname fix
+      const backendUrl = resolveBackendUrl();
 
       const res = await fetch(`${backendUrl}/api/pipeline/benchmark/execute`, {
         method: "POST",
@@ -217,7 +224,6 @@ export const runBenchmark = inngest.createFunction(
       const data: { passed: boolean; message: string } = await res.json();
       const score = data.passed ? 1 : 0;
 
-      // Keep Prisma in sync — backend also writes this, but belt-and-suspenders
       await prisma.benchmarkRun.update({
         where: { id: runId },
         data:  { status: data.passed ? "completed" : "failed", score },

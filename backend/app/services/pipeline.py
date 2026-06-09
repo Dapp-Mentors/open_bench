@@ -6,7 +6,7 @@ Each function corresponds to one pipeline stage and returns (passed, message).
 
 Container strategy
 ──────────────────
-The backend runs inside Docker. To spin up task containers it uses the host 
+The backend runs inside Docker. To spin up task containers it uses the host
 Docker socket mounted at /var/run/docker.sock (see docker-compose.yml).
 Containers are launched as siblings on the host daemon, not children.
 Every container gets a unique name derived from taskId + stage so parallel
@@ -33,19 +33,18 @@ from __future__ import annotations
 
 import asyncio
 import os
+import re
 import shutil
 import subprocess
 import tempfile
-import time
 import zipfile
 from pathlib import Path
 from typing import Tuple
 
 import docker
-from docker.errors import BuildError, ContainerError, ImageNotFound
+from docker.errors import BuildError, ImageNotFound
 
 # ── Docker client (connects via socket mounted from host) ─────────────────────
-# We create it lazily per-call so import doesn't fail if the socket isn't there yet.
 
 def _docker_client() -> docker.DockerClient:
     return docker.from_env()
@@ -60,19 +59,14 @@ def _task_dir(storage_path: str) -> Path:
     storage_path may be either:
       - A path to a .zip file  -> extract next to it (cached after first call)
       - An already-extracted directory -> return as-is
-
-    The extracted directory is placed at <zip_stem>/ beside the zip so every
-    pipeline stage reuses the same extraction without re-unzipping.
     """
     p = Path(storage_path)
 
-    # Already an extracted directory — nothing to do.
     if p.is_dir():
         return p
 
-    # It's a ZIP file — extract if not already done.
     if p.is_file() and p.suffix.lower() == ".zip":
-        extract_dir = p.parent / p.stem  # e.g. uploads/abc/e5e5c5f8-.../
+        extract_dir = p.parent / p.stem
 
         if not extract_dir.exists():
             extract_dir.mkdir(parents=True, exist_ok=True)
@@ -81,9 +75,6 @@ def _task_dir(storage_path: str) -> Path:
                 if not names:
                     raise ValueError(f"ZIP is empty: {p}")
 
-                # Detect single nested root folder inside ZIP.
-                # e.g. ["my-task/instruction.md", "my-task/environment/Dockerfile"]
-                # vs   ["instruction.md", "environment/Dockerfile"]
                 top_level = {n.split("/")[0] for n in names if n.strip()}
                 first = next(iter(top_level))
                 has_single_root = (
@@ -97,7 +88,6 @@ def _task_dir(storage_path: str) -> Path:
                 zf.extractall(extract_dir)
 
                 if has_single_root:
-                    # Contents landed in extract_dir/<root>/ — hoist them up one level
                     root_folder = extract_dir / first
                     if root_folder.is_dir():
                         for item in list(root_folder.iterdir()):
@@ -125,7 +115,6 @@ def _run_subprocess(cmd: list[str], cwd: str | None = None) -> Tuple[int, str]:
 
 
 def _image_tag(task_id: str) -> str:
-    # Lowercase slug safe for Docker image tags
     return f"openbench-task-{task_id.lower()}"
 
 
@@ -197,9 +186,8 @@ def _ci_checks_sync(task_id: str, storage_path: str) -> Tuple[bool, str]:
             forcerm=True,
         )
     except BuildError as e:
-        # Collect build log into a readable string
         log_lines = [l.get("stream", "") for l in e.build_log if isinstance(l, dict)]
-        return False, "Docker build failed: " + " ".join(log_lines)[-500:]
+        return False, "Docker build failed: " + "".join(log_lines)[-500:]
     except Exception as e:
         return False, f"Docker build error: {e}"
 
@@ -215,8 +203,13 @@ async def run_preflight(task_id: str, storage_path: str) -> Tuple[bool, str]:
 
 def _preflight_sync(task_id: str, storage_path: str) -> Tuple[bool, str]:
     """
-    Runs the built image and does pytest --collect-only to confirm
-    at least 6 test functions are discoverable inside the container.
+    Run pytest --collect-only inside the built image and verify >= 6 tests are found.
+
+    Bug fix (v2): Docker container logs are returned as a raw byte stream that may
+    use \\r\\n or have no newlines between pytest's warning messages and the summary
+    line.  We now search the *entire* decoded output with a single regex pass
+    rather than relying on splitlines() + reversed(), which was silently missing
+    the summary when it appeared on the same "logical line" as a warning.
     """
     task_dir = _task_dir(storage_path)
     image_tag = _image_tag(task_id)
@@ -225,11 +218,10 @@ def _preflight_sync(task_id: str, storage_path: str) -> Tuple[bool, str]:
     try:
         client = _docker_client()
 
-        # Copy tests/ into a temp context, run collect-only
         container = client.containers.run(
             image=image_tag,
             name=container_name,
-            command=["pytest", "--collect-only", "-q", "/tests"],
+            command=["pytest", "--collect-only", "-q", "--no-header", "/tests"],
             volumes={
                 str(task_dir / "tests"): {"bind": "/tests", "mode": "ro"},
             },
@@ -237,14 +229,41 @@ def _preflight_sync(task_id: str, storage_path: str) -> Tuple[bool, str]:
             detach=True,
         )
 
-        result = container.wait(timeout=60)
-        logs = container.logs(stdout=True, stderr=True).decode()
+        container.wait(timeout=60)
+
+        # Decode with errors="replace" so malformed UTF-8 never crashes us.
+        # Replace Windows-style \r\n so the regex anchors work correctly.
+        raw_bytes = container.logs(stdout=True, stderr=True)
+        logs = raw_bytes.decode("utf-8", errors="replace").replace("\r\n", "\n").replace("\r", "\n")
         container.remove(force=True)
 
-        # Count collected items from pytest output
-        collected = logs.count("<Function test_")
+        # ── Robust collection count extraction ────────────────────────────────
+        # pytest summary formats (any of these may appear):
+        #   "8 tests collected in 0.01s"
+        #   "8 test collected in 0.01s"        (pytest older versions)
+        #   "collected 8 items"                 (verbose mode)
+        #   "no tests ran"  / "0 tests collected"
+        #
+        # We search the full log string so we're immune to newline/position noise.
+        collected = 0
+
+        # Primary: "N tests? collected"
+        m = re.search(r"(\d+)\s+tests?\s+collected", logs, re.IGNORECASE)
+        if m:
+            collected = int(m.group(1))
+        else:
+            # Fallback: "collected N items"
+            m2 = re.search(r"collected\s+(\d+)\s+items?", logs, re.IGNORECASE)
+            if m2:
+                collected = int(m2.group(1))
+
         if collected < 6:
-            return False, f"Only {collected} test functions collected — need at least 6. Output: {logs[-300:]}"
+            # Show last 400 chars of log to help diagnose without flooding
+            tail = logs[-400:].replace("\n", " ").strip()
+            return (
+                False,
+                f"Only {collected} test functions collected — need at least 6. Output: {tail}",
+            )
 
         return True, f"{collected} test functions collected"
 
@@ -277,9 +296,16 @@ def _oracle_nop_sync(task_id: str, storage_path: str) -> Tuple[bool, str]:
     if oracle_reward is None:
         return False, "Oracle run failed to produce reward.txt"
     if nop_reward != "0":
-        return False, f"NOP check failed — tests passed before solve.sh ran (reward={nop_reward}). Tests must fail in the initial state."
+        return (
+            False,
+            f"NOP check failed — tests passed before solve.sh ran (reward={nop_reward}). "
+            "Tests must fail in the initial state.",
+        )
     if oracle_reward != "1":
-        return False, f"Oracle check failed — tests did not pass after solve.sh ran (reward={oracle_reward})."
+        return (
+            False,
+            f"Oracle check failed — tests did not pass after solve.sh ran (reward={oracle_reward}).",
+        )
 
     return True, "NOP reward=0 ✓  Oracle reward=1 ✓"
 
@@ -298,7 +324,6 @@ def _run_container_stage(
     container_name = _container_name(task_id, stage)
     client = _docker_client()
 
-    # Use a temp dir for the reward file so we can read it back
     with tempfile.TemporaryDirectory() as tmpdir:
         reward_host_path = os.path.join(tmpdir, "reward.txt")
 
@@ -309,7 +334,6 @@ def _run_container_stage(
         if oracle:
             volumes[str(task_dir / "solution")] = {"bind": "/solution", "mode": "ro"}
 
-        # Build the shell command to run inside the container
         if oracle:
             cmd = "bash /solution/solve.sh && bash /tests/test.sh"
         else:
@@ -324,13 +348,12 @@ def _run_container_stage(
                 remove=False,
                 detach=True,
                 mem_limit="512m",
-                network_mode="none",   # no outbound network during test runs
+                network_mode="none",
             )
 
             container.wait(timeout=120)
             container.remove(force=True)
 
-            # Read reward.txt from the host-side temp dir
             if os.path.exists(reward_host_path):
                 return open(reward_host_path).read().strip()
             return None
@@ -367,19 +390,12 @@ def _benchmark_run_sync(
     storage_path: str,
     agent_config: dict,
 ) -> Tuple[int, str | None]:
-    """
-    Spins up the task container and injects the agent.
-    Currently scaffolded — wires up the container and reads the reward file.
-    Actual agent injection (streaming stdout, model calls) is a TODO.
-    """
     task_dir   = _task_dir(storage_path)
     image_tag  = _image_tag(task_id)
     container_name = _container_name(run_id[:12], "bench")
 
     client = _docker_client()
 
-    # Make sure the image exists — if it was built during pipeline it'll be cached;
-    # if not, build it now (e.g. for tasks that skipped CI or were approved externally)
     try:
         client.images.get(image_tag)
     except ImageNotFound:
@@ -398,9 +414,7 @@ def _benchmark_run_sync(
             tmpdir:                     {"bind": "/logs/verifier", "mode": "rw"},
         }
 
-        # TODO: replace this with real agent injection
-        # The agent should be given /instruction.md and work via the container shell.
-        # For now we run the oracle solution so the system is end-to-end wired.
+        # TODO: replace with real agent injection
         cmd = "bash /solution/solve.sh && bash /tests/test.sh"
 
         try:
@@ -449,7 +463,6 @@ def unzip_task(zip_path: str, dest_dir: str) -> str:
         if not names:
             raise ValueError("ZIP is empty")
 
-        # All entries must share the same top-level directory (flat-root layout)
         roots = {n.split("/")[0] for n in names if n.strip()}
         if len(roots) != 1:
             raise ValueError(

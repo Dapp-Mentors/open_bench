@@ -8,6 +8,8 @@ class Settings(BaseSettings):
     CORS_ORIGINS: List[str] = ["http://localhost:3000"]
 
     OLLAMA_BASE_URL: str = "http://host.docker.internal:11434"
+    # Model used for task instruction embeddings (similarity check)
+    OLLAMA_EMBED_MODEL: str = "nomic-embed-text:latest"
 
     # ── OpenAI ────────────────────────────────────────────────────────────────
     OPENAI_API_KEY: str = ""
