@@ -28,10 +28,16 @@ class Settings(BaseSettings):
     OPENROUTER_BASE_URL: str = "https://openrouter.ai/api/v1"
 
     # ── Default provider / model ──────────────────────────────────────────────
-    # Priority: deepseek > openrouter > openai
+    # Used for quality checks, agent quality, and the easiness prefilter.
     # Override with DEFAULT_PROVIDER=openrouter / DEFAULT_MODEL_ID=<slug>
     DEFAULT_PROVIDER: str = "deepseek"
     DEFAULT_MODEL_ID: str = "deepseek-v4-flash"
+
+    # ── Difficulty probe model ────────────────────────────────────────────────
+    # The difficulty probe uses a stronger frontier model than the easiness
+    # prefilter. Override DIFFICULTY_MODEL_ID in .env to swap models without
+    # touching code. Provider is shared with DEFAULT_PROVIDER.
+    DIFFICULTY_MODEL_ID: str = "deepseek-v4-pro"
 
     # Where uploaded task ZIPs land (mounted shared volume)
     UPLOADS_DIR: str = "/uploads"

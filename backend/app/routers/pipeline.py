@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from cuid2 import Cuid
 
 from app.core.database import get_db
+from app.core.config import settings
 from app.models.orm import Task, PipelineLog, BenchmarkRun, RunLog
 from app.schemas.schemas import (
     PipelineStageRequest,
@@ -28,12 +29,28 @@ _cuid = Cuid()
 router = APIRouter()
 
 
+# ── Logging helpers ───────────────────────────────────────────────────────────
+
 def _diag(msg: str) -> None:
-    """Always-visible diagnostic — bypasses log level config."""
+    """Always-visible diagnostic line — bypasses log level config."""
     print(f"[PIPELINE-DIAG] {msg}", file=sys.stderr, flush=True)
 
 
-# ── Shared helper ─────────────────────────────────────────────────────────────
+def _stage_result(stage: str, passed: bool, message: str) -> None:
+    """
+    Emit a structured pass/fail line for every stage so logs are scannable.
+    For failures the full message (potentially multi-line) is printed so the
+    terminal shows the complete reason without having to query the DB.
+    """
+    status = "PASS" if passed else "FAIL"
+    print(f"[PIPELINE] [{stage}] {status}", file=sys.stderr, flush=True)
+    if not passed:
+        # Print each line individually so log aggregators don't eat newlines
+        for line in message.splitlines():
+            print(f"[PIPELINE] [{stage}]   {line}", file=sys.stderr, flush=True)
+
+
+# ── Shared helpers ────────────────────────────────────────────────────────────
 
 async def _write_log(
     db: AsyncSession,
@@ -61,16 +78,11 @@ async def _get_task_or_404(db: AsyncSession, task_id: str) -> Task:
     return task
 
 
-# ── Stage: Similarity & Diversity ─────────────────────────────────────────────
-#
-# Embeds instruction.md and cosine-compares against all approved tasks that
-# have stored embeddings. The new embedding is always persisted back onto
-# the Task row so future submissions can compare against it.
+# ── Stage 1: Similarity & Diversity ──────────────────────────────────────────
 
 @router.post("/similarity", response_model=PipelineStageResponse)
 async def stage_similarity(body: PipelineStageRequest, db: AsyncSession = Depends(get_db)):
     task = await _get_task_or_404(db, body.taskId)
-
     _diag(f"[similarity] taskId={body.taskId} storagePath={body.storagePath}")
 
     passed, message = await sim_svc.run_similarity_check(
@@ -78,6 +90,8 @@ async def stage_similarity(body: PipelineStageRequest, db: AsyncSession = Depend
         storage_path=body.storagePath,
         db=db,
     )
+
+    _stage_result("similarity", passed, message)
 
     task.isDuplicate = not passed
     if not passed:
@@ -89,13 +103,12 @@ async def stage_similarity(body: PipelineStageRequest, db: AsyncSession = Depend
     return PipelineStageResponse(passed=passed, message=message)
 
 
-# ── Stage: CI checks ──────────────────────────────────────────────────────────
+# ── Stage 2: CI checks ────────────────────────────────────────────────────────
 
 @router.post("/ci", response_model=PipelineStageResponse)
 async def stage_ci(body: PipelineStageRequest, db: AsyncSession = Depends(get_db)):
     task = await _get_task_or_404(db, body.taskId)
 
-    # ── DIAGNOSTIC ────────────────────────────────────────────────────────────
     sp = body.storagePath
     _diag("=" * 60)
     _diag(f"taskId      = {body.taskId}")
@@ -122,9 +135,10 @@ async def stage_ci(body: PipelineStageRequest, db: AsyncSession = Depends(get_db
     else:
         _diag("WARNING: storagePath does not exist or is not a ZIP/directory!")
     _diag("=" * 60)
-    # ── END DIAGNOSTIC ────────────────────────────────────────────────────────
 
     passed, message = await svc.run_ci_checks(body.taskId, body.storagePath)
+
+    _stage_result("ci", passed, message)
 
     task.ciPassed = passed
     task.updatedAt = datetime.now(timezone.utc)
@@ -134,15 +148,11 @@ async def stage_ci(body: PipelineStageRequest, db: AsyncSession = Depends(get_db
     return PipelineStageResponse(passed=passed, message=message)
 
 
-# ── Stage: Quality Check ──────────────────────────────────────────────────────
-#
-# LLM-as-judge scores across 11 criteria; average must be >= 0.6.
-# Full per-criterion breakdown stored in Task.qualityDetails.
+# ── Stage 3: Quality Check ────────────────────────────────────────────────────
 
 @router.post("/quality", response_model=PipelineStageResponse)
 async def stage_quality(body: PipelineStageRequest, db: AsyncSession = Depends(get_db)):
     task = await _get_task_or_404(db, body.taskId)
-
     _diag(f"[quality] taskId={body.taskId} storagePath={body.storagePath}")
 
     passed, message = await qual_svc.run_quality_check(
@@ -150,99 +160,114 @@ async def stage_quality(body: PipelineStageRequest, db: AsyncSession = Depends(g
         storage_path=body.storagePath,
     )
 
+    _stage_result("quality", passed, message)
+
     score_match = re.search(r"Quality score:\s*(\d+(?:\.\d+)?)\s*%", message)
     if score_match:
         task.qualityScore = float(score_match.group(1)) / 100.0
-
     if "\n" in message:
         task.qualityDetails = message.split("\n", 1)[1]
-
     task.updatedAt = datetime.now(timezone.utc)
     await db.commit()
 
-    log_message = message.split("\n")[0]
-    await _write_log(db, body.taskId, "quality", passed, log_message)
+    # Log only the summary line to keep PipelineLog readable
+    await _write_log(db, body.taskId, "quality", passed, message.split("\n")[0])
     return PipelineStageResponse(passed=passed, message=message)
 
 
-# ── Stage: Validation preflight ───────────────────────────────────────────────
+# ── Stage 4: Validation preflight ─────────────────────────────────────────────
 
 @router.post("/preflight", response_model=PipelineStageResponse)
 async def stage_preflight(body: PipelineStageRequest, db: AsyncSession = Depends(get_db)):
     await _get_task_or_404(db, body.taskId)
+    _diag(f"[preflight] taskId={body.taskId}")
 
     passed, message = await svc.run_preflight(body.taskId, body.storagePath)
+
+    _stage_result("preflight", passed, message)
 
     await _write_log(db, body.taskId, "preflight", passed, message)
     return PipelineStageResponse(passed=passed, message=message)
 
 
-# ── Stage: Oracle / NOP validation ───────────────────────────────────────────
+# ── Stage 5: Oracle / NOP validation ─────────────────────────────────────────
 
 @router.post("/oracle-nop", response_model=PipelineStageResponse)
 async def stage_oracle_nop(body: PipelineStageRequest, db: AsyncSession = Depends(get_db)):
     await _get_task_or_404(db, body.taskId)
+    _diag(f"[oracle-nop] taskId={body.taskId}")
 
     passed, message = await svc.run_oracle_nop(body.taskId, body.storagePath)
+
+    _stage_result("oracle-nop", passed, message)
 
     await _write_log(db, body.taskId, "oracle_nop", passed, message)
     return PipelineStageResponse(passed=passed, message=message)
 
 
-# ── Stage: Easiness prefilter ─────────────────────────────────────────────────
+# ── Stage 6: Easiness prefilter ───────────────────────────────────────────────
 #
-# Runs oracle ×5. Passes only if exactly 1/5 succeed.
-# 0/5 → TOO_HARD, 2+/5 → TOO_EASY, 1/5 → GOOD.
+# 5 parallel oracle runs using DEFAULT_MODEL_ID (fast model).
+# Passes only if exactly 1/5 succeed.
 
 @router.post("/easiness", response_model=PipelineStageResponse)
 async def stage_easiness(body: PipelineStageRequest, db: AsyncSession = Depends(get_db)):
     task = await _get_task_or_404(db, body.taskId)
-
-    _diag(f"[easiness] taskId={body.taskId}")
+    _diag(
+        f"[easiness] taskId={body.taskId} "
+        f"model={settings.DEFAULT_PROVIDER}/{settings.DEFAULT_MODEL_ID}"
+    )
 
     passed, message = await easiness_svc.run_easiness_prefilter(
         task_id=body.taskId,
         storage_path=body.storagePath,
     )
 
-    # Persist result on the Task row so the frontend can surface it
+    _stage_result("easiness", passed, message)
+
+    # Persist summary line on Task row for the frontend
     task.easinessResult = message.split("\n")[0]
     task.updatedAt = datetime.now(timezone.utc)
     await db.commit()
 
+    # Full message (with per-run details) goes to PipelineLog
     await _write_log(db, body.taskId, "easiness", passed, message)
     return PipelineStageResponse(passed=passed, message=message)
 
 
-# ── Stage: Difficulty probe ───────────────────────────────────────────────────
+# ── Stage 7: Difficulty probe ─────────────────────────────────────────────────
 #
-# Runs oracle ×5. Passes if 1–3/5 succeed.
-# 0/5 → TOO_HARD, 4–5/5 → TOO_EASY, 1–3/5 → GOOD.
+# 5 parallel oracle runs using DIFFICULTY_MODEL_ID (frontier model).
+# Passes if 1–3/5 succeed.
 
 @router.post("/difficulty", response_model=PipelineStageResponse)
 async def stage_difficulty(body: PipelineStageRequest, db: AsyncSession = Depends(get_db)):
     await _get_task_or_404(db, body.taskId)
-
-    _diag(f"[difficulty] taskId={body.taskId}")
+    _diag(
+        f"[difficulty] taskId={body.taskId} "
+        f"model={settings.DEFAULT_PROVIDER}/{settings.DIFFICULTY_MODEL_ID}"
+    )
 
     passed, message = await easiness_svc.run_difficulty_probe(
         task_id=body.taskId,
         storage_path=body.storagePath,
     )
 
+    _stage_result("difficulty", passed, message)
+
     await _write_log(db, body.taskId, "difficulty", passed, message)
     return PipelineStageResponse(passed=passed, message=message)
 
 
-# ── Stage: Agent quality check ────────────────────────────────────────────────
+# ── Stage 8: Agent quality check ──────────────────────────────────────────────
 #
-# LLM-as-judge across 6 criteria focused on instruction realism and the
-# absence of leaked assertions / oracle hints. Threshold: 0.7 average.
+# LLM-as-judge across 6 criteria: instruction realism, natural register,
+# no leaked assertions, no oracle hints, no over-specified steps,
+# agent actionability. Threshold: 70%.
 
 @router.post("/agent-quality", response_model=PipelineStageResponse)
 async def stage_agent_quality(body: PipelineStageRequest, db: AsyncSession = Depends(get_db)):
     task = await _get_task_or_404(db, body.taskId)
-
     _diag(f"[agent-quality] taskId={body.taskId}")
 
     passed, message = await agent_quality_svc.run_agent_quality_check(
@@ -250,13 +275,13 @@ async def stage_agent_quality(body: PipelineStageRequest, db: AsyncSession = Dep
         storage_path=body.storagePath,
     )
 
-    # Persist note on Task row so reviewers can see the breakdown
+    _stage_result("agent-quality", passed, message)
+
     task.agentQualityNote = message.split("\n")[0]
     task.updatedAt = datetime.now(timezone.utc)
     await db.commit()
 
-    log_message = message.split("\n")[0]
-    await _write_log(db, body.taskId, "agent_quality", passed, log_message)
+    await _write_log(db, body.taskId, "agent_quality", passed, message.split("\n")[0])
     return PipelineStageResponse(passed=passed, message=message)
 
 
@@ -287,6 +312,9 @@ async def execute_benchmark(
     run.runtimeMs = end_ms - start_ms
     run.updatedAt = datetime.now(timezone.utc)
     await db.commit()
+
+    if error:
+        _diag(f"[benchmark] runId={body.runId} FAILED: {error}")
 
     log = RunLog(
         id=_cuid.generate(),
