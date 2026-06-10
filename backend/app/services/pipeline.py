@@ -14,19 +14,27 @@ runs never collide. Containers are always removed after the stage completes.
 
 File layout assumed
 ───────────────────
-storagePath points to the unpacked task directory, which looks like:
+storagePath points to the unpacked task directory:
   <storagePath>/
     instruction.md
-    task.toml
+    task.toml          ← may declare working_dir, network_required
     environment/
       Dockerfile
-      ...
     solution/
       solve.sh
     tests/
       test.sh
-      test_*.py
-      ...
+      test_*.py / hardhat/*.js / ...
+
+reward.txt contract
+───────────────────
+test.sh MUST write reward.txt to $REWARD_FILE.
+The container runner injects:
+  REWARD_FILE=/logs/verifier/reward.txt
+  SOLUTION_DIR=/solution   (oracle run only)
+  TESTS_DIR=/tests
+
+If test.sh writes reward.txt to a different path it will not be found.
 """
 
 from __future__ import annotations
@@ -36,6 +44,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import zipfile
 from pathlib import Path
@@ -44,7 +53,7 @@ from typing import Tuple
 import docker
 from docker.errors import BuildError, ImageNotFound
 
-# ── Docker client (connects via socket mounted from host) ─────────────────────
+# ── Docker client ─────────────────────────────────────────────────────────────
 
 def _docker_client() -> docker.DockerClient:
     return docker.from_env()
@@ -55,10 +64,7 @@ def _docker_client() -> docker.DockerClient:
 def _task_dir(storage_path: str) -> Path:
     """
     Resolve storage_path to an unpacked task directory.
-
-    storage_path may be either:
-      - A path to a .zip file  -> extract next to it (cached after first call)
-      - An already-extracted directory -> return as-is
+    Handles both plain directories and .zip files (extracts on first call).
     """
     p = Path(storage_path)
 
@@ -79,10 +85,7 @@ def _task_dir(storage_path: str) -> Path:
                 first = next(iter(top_level))
                 has_single_root = (
                     len(top_level) == 1
-                    and all(
-                        n.startswith(first + "/") or n == first
-                        for n in names
-                    )
+                    and all(n.startswith(first + "/") or n == first for n in names)
                 )
 
                 zf.extractall(extract_dir)
@@ -101,17 +104,27 @@ def _task_dir(storage_path: str) -> Path:
     )
 
 
+def _read_task_toml(task_dir: Path) -> dict:
+    """
+    Parse task.toml and return its contents as a dict.
+    Returns {} if the file is missing or unparseable — callers use .get() with defaults.
+    """
+    try:
+        import tomllib
+        toml_path = task_dir / "task.toml"
+        if toml_path.exists():
+            with open(toml_path, "rb") as f:
+                return tomllib.load(f)
+    except Exception:
+        pass
+    return {}
+
+
 def _run_subprocess(cmd: list[str], cwd: str | None = None) -> Tuple[int, str]:
-    """Run a subprocess, return (returncode, combined stdout+stderr)."""
     result = subprocess.run(
-        cmd,
-        cwd=cwd,
-        capture_output=True,
-        text=True,
-        timeout=30,
+        cmd, cwd=cwd, capture_output=True, text=True, timeout=30,
     )
-    output = (result.stdout + result.stderr).strip()
-    return result.returncode, output
+    return result.returncode, (result.stdout + result.stderr).strip()
 
 
 def _image_tag(task_id: str) -> str:
@@ -122,13 +135,13 @@ def _container_name(task_id: str, stage: str) -> str:
     return f"openbench_{task_id[:12]}_{stage}"
 
 
+def _diag(msg: str) -> None:
+    print(f"[PIPELINE] {msg}", file=sys.stderr, flush=True)
+
+
 # ── Stage 1: CI checks ────────────────────────────────────────────────────────
 
 async def run_ci_checks(task_id: str, storage_path: str) -> Tuple[bool, str]:
-    """
-    Syntax-checks all scripts and builds the Docker image.
-    Returns (passed, message).
-    """
     loop = asyncio.get_event_loop()
     return await loop.run_in_executor(None, _ci_checks_sync, task_id, storage_path)
 
@@ -154,7 +167,7 @@ def _ci_checks_sync(task_id: str, storage_path: str) -> Tuple[bool, str]:
         if code != 0:
             return False, f"Bash syntax error in {sh.name}: {out}"
 
-    # 3. Python syntax on test files
+    # 3. Python syntax on test files (skip if there are none — JS tasks are fine)
     for py in (task_dir / "tests").glob("test_*.py"):
         code, out = _run_subprocess(["python", "-m", "py_compile", str(py)])
         if code != 0:
@@ -168,15 +181,12 @@ def _ci_checks_sync(task_id: str, storage_path: str) -> Tuple[bool, str]:
     if code != 0:
         return False, f"task.toml parse error: {out}"
 
-    # 5. Count test functions — need at least 6
-    test_functions = 0
-    for py in (task_dir / "tests").glob("test_*.py"):
-        content = py.read_text()
-        test_functions += content.count("\ndef test_")
-    if test_functions < 6:
-        return False, f"Only {test_functions} test_ functions found — need at least 6"
+    # 5. Count test functions — need at least 6 across Python OR JS test files
+    test_count = _count_tests(task_dir)
+    if test_count < 6:
+        return False, f"Only {test_count} test functions found — need at least 6"
 
-    # 6. Docker build from environment/
+    # 6. Docker build
     try:
         client = _docker_client()
         client.images.build(
@@ -194,7 +204,29 @@ def _ci_checks_sync(task_id: str, storage_path: str) -> Tuple[bool, str]:
     return True, "Syntax checks passed, Docker build succeeded"
 
 
-# ── Stage 2: Preflight (pytest collect) ───────────────────────────────────────
+def _count_tests(task_dir: Path) -> int:
+    """
+    Count test functions across Python test files and JS/TS test files.
+    Python: lines matching ^def test_
+    JS/TS:  it(...) / it.skip(...) / test(...) blocks
+    """
+    count = 0
+
+    # Python
+    for py in (task_dir / "tests").glob("test_*.py"):
+        content = py.read_text(errors="replace")
+        count += len(re.findall(r"^\s*def test_", content, re.MULTILINE))
+
+    # JavaScript / TypeScript  (Mocha / Jest / Hardhat)
+    for js in list((task_dir / "tests").rglob("*.js")) + list((task_dir / "tests").rglob("*.ts")):
+        content = js.read_text(errors="replace")
+        # match:  it("...",   it(`...`,   it('...',   and same for test(
+        count += len(re.findall(r"\b(?:it|test)\s*\(", content))
+
+    return count
+
+
+# ── Stage 2: Preflight (pytest collect OR JS test dry-run) ────────────────────
 
 async def run_preflight(task_id: str, storage_path: str) -> Tuple[bool, str]:
     loop = asyncio.get_event_loop()
@@ -202,74 +234,115 @@ async def run_preflight(task_id: str, storage_path: str) -> Tuple[bool, str]:
 
 
 def _preflight_sync(task_id: str, storage_path: str) -> Tuple[bool, str]:
-    """
-    Run pytest --collect-only inside the built image and verify >= 6 tests are found.
+    task_dir   = _task_dir(storage_path)
+    task_meta  = _read_task_toml(task_dir)
+    image_tag  = _image_tag(task_id)
 
-    Bug fix (v2): Docker container logs are returned as a raw byte stream that may
-    use \\r\\n or have no newlines between pytest's warning messages and the summary
-    line.  We now search the *entire* decoded output with a single regex pass
-    rather than relying on splitlines() + reversed(), which was silently missing
-    the summary when it appeared on the same "logical line" as a warning.
-    """
-    task_dir = _task_dir(storage_path)
-    image_tag = _image_tag(task_id)
+    # Decide test runner from task.toml [task] test_runner field, or auto-detect
+    test_runner = task_meta.get("task", {}).get("test_runner", "").lower()
+    if not test_runner:
+        test_runner = _detect_test_runner(task_dir)
+
+    _diag(f"preflight: test_runner={test_runner} task={task_id}")
+
+    if test_runner in ("hardhat", "mocha", "jest", "js"):
+        return _preflight_js(task_id, task_dir, image_tag, task_meta)
+    else:
+        return _preflight_pytest(task_id, task_dir, image_tag)
+
+
+def _detect_test_runner(task_dir: Path) -> str:
+    """Infer the test runner from task file structure."""
+    # Hardhat project: hardhat.config.js in environment/
+    if (task_dir / "environment" / "hardhat.config.js").exists():
+        return "hardhat"
+    if (task_dir / "environment" / "hardhat.config.ts").exists():
+        return "hardhat"
+    # Any JS test files
+    js_tests = list((task_dir / "tests").rglob("*.js")) + list((task_dir / "tests").rglob("*.ts"))
+    if js_tests:
+        return "js"
+    return "pytest"
+
+
+def _preflight_pytest(task_id: str, task_dir: Path, image_tag: str) -> Tuple[bool, str]:
+    """Run pytest --collect-only inside the image."""
     container_name = _container_name(task_id, "preflight")
-
     try:
         client = _docker_client()
-
         container = client.containers.run(
             image=image_tag,
             name=container_name,
             command=["pytest", "--collect-only", "-q", "--no-header", "/tests"],
-            volumes={
-                str(task_dir / "tests"): {"bind": "/tests", "mode": "ro"},
-            },
+            volumes={str(task_dir / "tests"): {"bind": "/tests", "mode": "ro"}},
             remove=False,
             detach=True,
         )
-
         container.wait(timeout=60)
-
-        # Decode with errors="replace" so malformed UTF-8 never crashes us.
-        # Replace Windows-style \r\n so the regex anchors work correctly.
-        raw_bytes = container.logs(stdout=True, stderr=True)
-        logs = raw_bytes.decode("utf-8", errors="replace").replace("\r\n", "\n").replace("\r", "\n")
+        raw = container.logs(stdout=True, stderr=True)
+        logs = raw.decode("utf-8", errors="replace").replace("\r\n", "\n").replace("\r", "\n")
         container.remove(force=True)
 
-        # ── Robust collection count extraction ────────────────────────────────
-        # pytest summary formats (any of these may appear):
-        #   "8 tests collected in 0.01s"
-        #   "8 test collected in 0.01s"        (pytest older versions)
-        #   "collected 8 items"                 (verbose mode)
-        #   "no tests ran"  / "0 tests collected"
-        #
-        # We search the full log string so we're immune to newline/position noise.
         collected = 0
-
-        # Primary: "N tests? collected"
         m = re.search(r"(\d+)\s+tests?\s+collected", logs, re.IGNORECASE)
         if m:
             collected = int(m.group(1))
         else:
-            # Fallback: "collected N items"
             m2 = re.search(r"collected\s+(\d+)\s+items?", logs, re.IGNORECASE)
             if m2:
                 collected = int(m2.group(1))
 
         if collected < 6:
-            # Show last 400 chars of log to help diagnose without flooding
             tail = logs[-400:].replace("\n", " ").strip()
-            return (
-                False,
-                f"Only {collected} test functions collected — need at least 6. Output: {tail}",
-            )
-
+            return False, f"Only {collected} tests collected — need at least 6. Output: {tail}"
         return True, f"{collected} test functions collected"
 
     except Exception as e:
         _force_remove_container(container_name)
         return False, f"Preflight error: {e}"
+
+
+def _preflight_js(
+    task_id: str, task_dir: Path, image_tag: str, task_meta: dict
+) -> Tuple[bool, str]:
+    """
+    For Hardhat / Mocha tasks: do a compile-only dry-run to verify the
+    project builds cleanly and count test cases from source.
+    We don't run the actual tests here — that's oracle/NOP's job.
+    """
+    container_name = _container_name(task_id, "preflight")
+    working_dir = task_meta.get("task", {}).get("working_dir", "/app")
+
+    try:
+        client = _docker_client()
+        # Just compile — verify the project is well-formed
+        container = client.containers.run(
+            image=image_tag,
+            name=container_name,
+            command=["bash", "-c", "npx hardhat compile 2>&1 || true"],
+            working_dir=working_dir,
+            remove=False,
+            detach=True,
+        )
+        container.wait(timeout=120)
+        logs = container.logs(stdout=True, stderr=True).decode("utf-8", errors="replace")
+        container.remove(force=True)
+
+        _diag(f"preflight JS compile output: {logs[-300:]}")
+
+        if "Error" in logs and "compiled" not in logs.lower():
+            return False, f"Hardhat compile failed: {logs[-300:]}"
+
+        # Count test cases from source (no execution needed)
+        test_count = _count_tests(task_dir)
+        if test_count < 6:
+            return False, f"Only {test_count} test cases found — need at least 6"
+
+        return True, f"{test_count} test functions collected (Hardhat/JS)"
+
+    except Exception as e:
+        _force_remove_container(container_name)
+        return False, f"Preflight JS error: {e}"
 
 
 # ── Stage 3: Oracle / NOP validation ─────────────────────────────────────────
@@ -281,30 +354,40 @@ async def run_oracle_nop(task_id: str, storage_path: str) -> Tuple[bool, str]:
 
 def _oracle_nop_sync(task_id: str, storage_path: str) -> Tuple[bool, str]:
     """
-    NOP run:    mount tests/, run test.sh → reward.txt must be "0"
-    Oracle run: mount tests/ + solution/, run solve.sh then test.sh → reward.txt must be "1"
-    Both runs use completely independent containers.
+    NOP run:    mount tests/ + environment working dir, run test.sh only
+                → reward.txt must contain "0"
+    Oracle run: same, but also mount solution/ and run solve.sh first
+                → reward.txt must contain "1"
+
+    The REWARD_FILE env var tells test.sh exactly where to write reward.txt.
+    The working directory is set to match what the Dockerfile expects (default /app).
+    network_mode is controlled by task.toml [task] network_required (default false).
     """
     task_dir  = _task_dir(storage_path)
     image_tag = _image_tag(task_id)
+    task_meta = _read_task_toml(task_dir)
 
-    nop_reward    = _run_container_stage(task_id, "nop",    task_dir, image_tag, oracle=False)
-    oracle_reward = _run_container_stage(task_id, "oracle", task_dir, image_tag, oracle=True)
+    nop_reward, nop_logs    = _run_container_stage(task_id, "nop",    task_dir, image_tag, oracle=False, task_meta=task_meta)
+    oracle_reward, ora_logs = _run_container_stage(task_id, "oracle", task_dir, image_tag, oracle=True,  task_meta=task_meta)
+
+    _diag(f"NOP    reward={nop_reward!r}  logs_tail={nop_logs[-200:]!r}")
+    _diag(f"Oracle reward={oracle_reward!r}  logs_tail={ora_logs[-200:]!r}")
 
     if nop_reward is None:
-        return False, "NOP run failed to produce reward.txt"
+        return False, f"NOP run failed to produce reward.txt. Container output: {nop_logs[-400:]}"
     if oracle_reward is None:
-        return False, "Oracle run failed to produce reward.txt"
+        return False, f"Oracle run failed to produce reward.txt. Container output: {ora_logs[-400:]}"
     if nop_reward != "0":
         return (
             False,
-            f"NOP check failed — tests passed before solve.sh ran (reward={nop_reward}). "
-            "Tests must fail in the initial state.",
+            f"NOP check failed — tests passed before solve.sh ran (reward={nop_reward!r}). "
+            f"Tests must fail on the unmodified code.\nContainer output: {nop_logs[-300:]}",
         )
     if oracle_reward != "1":
         return (
             False,
-            f"Oracle check failed — tests did not pass after solve.sh ran (reward={oracle_reward}).",
+            f"Oracle check failed — tests did not pass after solve.sh ran (reward={oracle_reward!r}). "
+            f"Check that solve.sh correctly fixes the code.\nContainer output: {ora_logs[-300:]}",
         )
 
     return True, "NOP reward=0 ✓  Oracle reward=1 ✓"
@@ -316,51 +399,112 @@ def _run_container_stage(
     task_dir: Path,
     image_tag: str,
     oracle: bool,
-) -> str | None:
+    task_meta: dict,
+) -> Tuple[str | None, str]:
     """
-    Spin up a fresh container, optionally run solve.sh, then run test.sh.
-    Returns the content of /logs/verifier/reward.txt, or None on error.
+    Spin up a fresh container for a NOP or Oracle run.
+
+    Returns (reward_value, container_log_output).
+    reward_value is None if reward.txt was not written.
+
+    Key design points
+    ─────────────────
+    1. REWARD_FILE env var:
+       Container gets REWARD_FILE=/logs/verifier/reward.txt so test.sh can
+       write to the right location regardless of working directory.
+
+    2. Working directory:
+       Set to task.toml [task] working_dir (default "/app") so Hardhat / npm
+       commands resolve node_modules correctly.
+
+    3. Tests are copied, not bind-mounted read-only into /tests:
+       We mount /tests read-only for reading, but test.sh may need to write
+       temp files in the project tree. The working dir is the image's own
+       project root — tests are accessed via /tests mount.
+
+    4. network_mode:
+       Default "none" (no outbound network). Set task.toml [task]
+       network_required = true to enable bridge networking. This is needed
+       if solve.sh or test.sh fetches packages at runtime (discouraged —
+       packages should be baked into the Dockerfile).
+
+    5. solve.sh contract (oracle run):
+       solve.sh is mounted at /solution/solve.sh and run from working_dir.
+       It may modify files in the project tree (the image's own filesystem,
+       which is writable per-container).
     """
     container_name = _container_name(task_id, stage)
     client = _docker_client()
 
+    task_cfg     = task_meta.get("task", {})
+    working_dir  = task_cfg.get("working_dir", "/app")
+    net_required = task_cfg.get("network_required", False)
+    network_mode = "bridge" if net_required else "none"
+
+    _diag(f"{stage}: working_dir={working_dir} network={network_mode} oracle={oracle}")
+
     with tempfile.TemporaryDirectory() as tmpdir:
         reward_host_path = os.path.join(tmpdir, "reward.txt")
 
-        volumes = {
+        volumes: dict = {
             str(task_dir / "tests"): {"bind": "/tests", "mode": "ro"},
-            tmpdir: {"bind": "/logs/verifier", "mode": "rw"},
+            tmpdir:                  {"bind": "/logs/verifier", "mode": "rw"},
         }
         if oracle:
             volumes[str(task_dir / "solution")] = {"bind": "/solution", "mode": "ro"}
 
+        # Environment injected into the container
+        environment = {
+            "REWARD_FILE": "/logs/verifier/reward.txt",
+            "TESTS_DIR":   "/tests",
+        }
         if oracle:
-            cmd = "bash /solution/solve.sh && bash /tests/test.sh"
+            environment["SOLUTION_DIR"] = "/solution"
+
+        # Build the shell command
+        # Use set -e so any failure in solve.sh propagates correctly
+        if oracle:
+            cmd = (
+                "set -e; "
+                "bash /solution/solve.sh; "
+                "bash /tests/test.sh"
+            )
         else:
             cmd = "bash /tests/test.sh"
 
+        container_logs = ""
         try:
             container = client.containers.run(
                 image=image_tag,
                 name=container_name,
                 command=["bash", "-c", cmd],
+                working_dir=working_dir,
                 volumes=volumes,
+                environment=environment,
                 remove=False,
                 detach=True,
-                mem_limit="512m",
-                network_mode="none",
+                mem_limit="1g",
+                network_mode=network_mode,
             )
 
-            container.wait(timeout=120)
+            result = container.wait(timeout=180)
+            raw_logs = container.logs(stdout=True, stderr=True)
+            container_logs = raw_logs.decode("utf-8", errors="replace")
+            exit_code = result.get("StatusCode", -1)
             container.remove(force=True)
 
-            if os.path.exists(reward_host_path):
-                return open(reward_host_path).read().strip()
-            return None
+            _diag(f"{stage}: exit_code={exit_code}")
 
-        except Exception:
+            if os.path.exists(reward_host_path):
+                reward = open(reward_host_path).read().strip()
+                return reward, container_logs
+
+            # reward.txt missing — surface why
+            return None, container_logs
+
+        except Exception as e:
             _force_remove_container(container_name)
-            return None
+            return None, f"Container exception: {e}\n{container_logs}"
 
 
 # ── Stage 4: Benchmark run execution ─────────────────────────────────────────
@@ -371,16 +515,9 @@ async def execute_benchmark_run(
     storage_path: str,
     agent_config: dict,
 ) -> Tuple[int, str | None]:
-    """
-    Runs the task against the specified agent.
-    Returns (score, error_message).
-    score is 1 (pass) or 0 (fail).
-    """
     loop = asyncio.get_event_loop()
     return await loop.run_in_executor(
-        None,
-        _benchmark_run_sync,
-        run_id, task_id, storage_path, agent_config,
+        None, _benchmark_run_sync, run_id, task_id, storage_path, agent_config,
     )
 
 
@@ -392,8 +529,8 @@ def _benchmark_run_sync(
 ) -> Tuple[int, str | None]:
     task_dir   = _task_dir(storage_path)
     image_tag  = _image_tag(task_id)
+    task_meta  = _read_task_toml(task_dir)
     container_name = _container_name(run_id[:12], "bench")
-
     client = _docker_client()
 
     try:
@@ -401,9 +538,11 @@ def _benchmark_run_sync(
     except ImageNotFound:
         client.images.build(
             path=str(task_dir / "environment"),
-            tag=image_tag,
-            rm=True,
+            tag=image_tag, rm=True,
         )
+
+    task_cfg    = task_meta.get("task", {})
+    working_dir = task_cfg.get("working_dir", "/app")
 
     with tempfile.TemporaryDirectory() as tmpdir:
         reward_host_path = os.path.join(tmpdir, "reward.txt")
@@ -413,21 +552,27 @@ def _benchmark_run_sync(
             str(task_dir / "solution"): {"bind": "/solution", "mode": "ro"},
             tmpdir:                     {"bind": "/logs/verifier", "mode": "rw"},
         }
+        environment = {
+            "REWARD_FILE":   "/logs/verifier/reward.txt",
+            "TESTS_DIR":     "/tests",
+            "SOLUTION_DIR":  "/solution",
+        }
 
         # TODO: replace with real agent injection
-        cmd = "bash /solution/solve.sh && bash /tests/test.sh"
+        cmd = "set -e; bash /solution/solve.sh; bash /tests/test.sh"
 
         try:
             container = client.containers.run(
                 image=image_tag,
                 name=container_name,
                 command=["bash", "-c", cmd],
+                working_dir=working_dir,
                 volumes=volumes,
+                environment=environment,
                 remove=False,
                 detach=True,
                 mem_limit="1g",
             )
-
             container.wait(timeout=300)
             container.remove(force=True)
 
@@ -444,7 +589,6 @@ def _benchmark_run_sync(
 # ── Utility ───────────────────────────────────────────────────────────────────
 
 def _force_remove_container(name: str) -> None:
-    """Best-effort cleanup — never raises."""
     try:
         client = _docker_client()
         c = client.containers.get(name)
@@ -454,21 +598,14 @@ def _force_remove_container(name: str) -> None:
 
 
 def unzip_task(zip_path: str, dest_dir: str) -> str:
-    """
-    Unzips a task ZIP into dest_dir/<task-name>/ and returns that path.
-    Validates flat-root layout.
-    """
     with zipfile.ZipFile(zip_path) as zf:
         names = zf.namelist()
         if not names:
             raise ValueError("ZIP is empty")
-
         roots = {n.split("/")[0] for n in names if n.strip()}
         if len(roots) != 1:
             raise ValueError(
-                f"ZIP must have exactly one top-level directory (flat-root). Found: {roots}"
+                f"ZIP must have exactly one top-level directory. Found: {roots}"
             )
-
         zf.extractall(dest_dir)
-        task_name = roots.pop()
-        return os.path.join(dest_dir, task_name)
+        return os.path.join(dest_dir, roots.pop())
