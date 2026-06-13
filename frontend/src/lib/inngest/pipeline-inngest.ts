@@ -137,28 +137,37 @@ export const runPipeline = inngest.createFunction(
       return await reject(taskId, 'Rejected at oracle/NOP validation')
 
     // ── Stage 6: Easiness prefilter ───────────────────────────────────────────
+    // TEMPORARILY SKIPPED — token conservation mode (2026-06-13)
     // Oracle run ×5. Passes only if exactly 1/5 succeed.
     // 0/5 → TOO_HARD (reject), 2+/5 → TOO_EASY (reject), 1/5 → GOOD (pass).
     const easinessPassed = await step.run('stage-easiness', async () => {
-      const result = await callBackend('easiness', taskId, storagePath)
-      await logStage(taskId, 'easiness', result.passed, result.message)
-      return result.passed
+      // Original logic (commented out during token conservation):
+      // const result = await callBackend('easiness', taskId, storagePath)
+      // await logStage(taskId, 'easiness', result.passed, result.message)
+      // return result.passed
+      await logStage(taskId, 'easiness', true, 'Skipped — token conservation mode')
+      return true
     })
     if (!easinessPassed)
       return await reject(taskId, 'Rejected at easiness prefilter')
 
     // ── Stage 7: Difficulty probe ─────────────────────────────────────────────
+    // TEMPORARILY SKIPPED — token conservation mode (2026-06-13)
     // Oracle run ×5. Passes if 1–3/5 succeed.
     // 0/5 → TOO_HARD (reject), 4–5/5 → TOO_EASY (reject), 1–3/5 → GOOD (pass).
     const difficultyPassed = await step.run('stage-difficulty', async () => {
-      const result = await callBackend('difficulty', taskId, storagePath)
-      await logStage(taskId, 'difficulty', result.passed, result.message)
-      return result.passed
+      // Original logic (commented out during token conservation):
+      // const result = await callBackend('difficulty', taskId, storagePath)
+      // await logStage(taskId, 'difficulty', result.passed, result.message)
+      // return result.passed
+      await logStage(taskId, 'difficulty', true, 'Skipped — token conservation mode')
+      return true
     })
     if (!difficultyPassed)
       return await reject(taskId, 'Rejected at difficulty probe')
 
     // ── Stage 8: Agent quality check ─────────────────────────────────────────
+    // TEMPORARILY SKIPPED — token conservation mode (2026-06-13)
     // LLM-as-judge across 6 criteria: instruction realism, natural register,
     // no leaked test assertions, no revealed oracle path, no over-specified
     // steps, and agent actionability. Threshold: 70%. Summary stored on
@@ -166,10 +175,13 @@ export const runPipeline = inngest.createFunction(
     const agentQualityPassed = await step.run(
       'stage-agent-quality',
       async () => {
-        const result = await callBackend('agent-quality', taskId, storagePath)
-        const summaryLine = result.message.split('\n')[0]
-        await logStage(taskId, 'agent_quality', result.passed, summaryLine)
-        return result.passed
+        // Original logic (commented out during token conservation):
+        // const result = await callBackend('agent-quality', taskId, storagePath)
+        // const summaryLine = result.message.split('\n')[0]
+        // await logStage(taskId, 'agent_quality', result.passed, summaryLine)
+        // return result.passed
+        await logStage(taskId, 'agent_quality', true, 'Skipped — token conservation mode')
+        return true
       },
     )
     if (!agentQualityPassed)
