@@ -1,0 +1,95 @@
+"""
+app/services/sia.py
+-------------------
+Public upload API used by the pipeline approve endpoint.
+
+Depends on sia_client.py for the SDK singleton — don't call Builder or
+AppKey directly from here.
+"""
+
+from __future__ import annotations
+
+import io
+import json
+import zipfile
+from pathlib import Path
+
+from sia_storage import PinnedObject
+
+from app.services.sia_client import get_sdk, is_demo_mode
+
+
+async def upload_task(
+    task_id: str,
+    storage_path: str,
+    extra_meta: dict | None = None,
+) -> str:
+    """
+    Upload a task ZIP (or directory) to Sia and return the pinned object ID.
+
+    In demo mode returns a fake ID prefixed with "demo-sia-" so callers can
+    tell the difference without special-casing the None case everywhere.
+
+    Parameters
+    ----------
+    task_id:      OpenBench task CUID
+    storage_path: absolute path to the task ZIP or unpacked directory
+    extra_meta:   optional dict merged into the object's metadata
+
+    Returns
+    -------
+    Sia object ID string — store this as Task.siaHash
+    """
+    sdk = await get_sdk()
+
+    # ── Demo mode ──────────────────────────────────────────────────────────────
+    if sdk is None:
+        print(f"[Sia][demo] skipping upload for task {task_id}")
+        return f"demo-sia-{task_id}"
+
+    # ── Read data ──────────────────────────────────────────────────────────────
+    path = Path(storage_path)
+    if not path.exists():
+        raise FileNotFoundError(f"storage_path does not exist: {storage_path}")
+
+    if path.is_file():
+        data = path.read_bytes()
+        file_name = path.name
+    else:
+        # Directory — zip it up in memory before uploading
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+            for f in sorted(path.rglob("*")):
+                if f.is_file():
+                    zf.write(f, f.relative_to(path))
+        data = buf.getvalue()
+        file_name = f"{path.name}.zip"
+
+    print(f"[Sia] uploading {file_name} ({len(data):,} bytes) for task {task_id}")
+
+    # ── Upload ─────────────────────────────────────────────────────────────────
+    pinned_obj = PinnedObject()
+    uploaded_obj = await sdk.upload(pinned_obj, data)  # bytes accepted directly
+
+    object_id: str = uploaded_obj.id()
+    if not object_id:
+        raise RuntimeError("sdk.upload() returned an object with no ID")
+
+    print(f"[Sia] upload complete, objectId={object_id}")
+
+    # ── Metadata ───────────────────────────────────────────────────────────────
+    metadata: dict = {
+        "taskId": task_id,
+        "fileName": file_name,
+        "sizeBytes": len(data),
+    }
+    if extra_meta:
+        metadata.update(extra_meta)
+
+    uploaded_obj.update_metadata(json.dumps(metadata).encode())
+
+    # ── Pin ────────────────────────────────────────────────────────────────────
+    await sdk.pin_object(uploaded_obj)
+    print(f"[Sia] pinned objectId={object_id}")
+
+    return object_id

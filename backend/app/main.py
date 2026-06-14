@@ -7,12 +7,29 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.database import get_db
-from app.routers import pipeline, runs, tasks
+from app.routers import approve, pipeline, runs, tasks
+from app.services import sia_client
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Prisma (frontend) owns the schema — we never call create_all here.
+
+    # ── Eagerly initialise the Sia client on boot ────────────────────────────
+    # This triggers the approval flow (if needed) immediately so the operator
+    # sees the ACTION REQUIRED URL without having to approve a task first.
+    if settings.SIA_MODE != "demo":
+        print("[Sia] Initialising Sia client on startup…")
+        try:
+            sdk = await sia_client.get_sdk()
+            if sdk:
+                print("[Sia] Successfully connected to Sia indexer")
+            elif sia_client.is_demo_mode():
+                print(f"[Sia] Running in demo mode: {sia_client.get_demo_reason()}")
+        except Exception as exc:
+            print(f"[Sia] Failed to initialise Sia client: {exc}")
+            print("[Sia] The server is still running — uploads will fail until Sia is connected.")
+
     yield
 
 
@@ -43,6 +60,9 @@ app.include_router(runs.router, prefix="/api/runs", tags=["runs"])
 
 # Task reads — mostly for debugging; frontend owns task writes
 app.include_router(tasks.router, prefix="/api/tasks", tags=["tasks"])
+
+# Task approval + Sia upload — called by the frontend after human review
+app.include_router(approve.router, prefix="/api", tags=["approve"])
 
 
 @app.get("/health", tags=["health"])

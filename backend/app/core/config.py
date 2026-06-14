@@ -42,6 +42,15 @@ class Settings(BaseSettings):
     # Where uploaded task ZIPs land (mounted shared volume)
     UPLOADS_DIR: str = "/uploads"
 
+    # ── Sia Storage ────────────────────────────────────────────────────────────
+    SIA_MODE: str = "auto"                      # "auto" or "demo"
+    SIA_INDEXER_URL: str = "https://sia.storage"
+    SIA_APP_ID: str = ""
+    SIA_APP_NAME: str = "OpenBench"
+    SIA_APP_SERVICE_URL: str = "http://localhost:8000"
+    SIA_KEY_PATH: str = "/app/data/appkey.hex"
+    SIA_PHRASE_PATH: str = "/app/data/phrase.enc"
+
     class Config:
         env_file = ".env"
         extra = "ignore"

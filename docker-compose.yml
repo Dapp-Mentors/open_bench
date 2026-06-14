@@ -105,12 +105,23 @@ services:
 
       UPLOADS_DIR: /uploads
 
+      # ── Sia Storage ──────────────────────────────────────
+      SIA_MODE: ${SIA_MODE:-auto}
+      SIA_INDEXER_URL: ${SIA_INDEXER_URL:-https://sia.storage}
+      SIA_APP_ID: ${SIA_APP_ID:-8f70656e62656e63686d61726b0000000000000000000000000000000000000000}
+      SIA_APP_NAME: ${SIA_APP_NAME:-OpenBench}
+      SIA_APP_SERVICE_URL: ${SIA_APP_SERVICE_URL:-http://backend:8000}
+      SIA_KEY_PATH: ${SIA_KEY_PATH:-/app/data/appkey.hex}
+      SIA_PHRASE_PATH: ${SIA_PHRASE_PATH:-/app/data/phrase.enc}
+
     volumes:
       - ./backend:/app
       # Shared task ZIPs — frontend writes here after upload, backend reads for execution
       - task_uploads:/uploads
       # Docker socket — lets the backend spin up sibling task containers on the host daemon
       - /var/run/docker.sock:/var/run/docker.sock
+      # Persistent Sia app key & recovery phrase
+      - sia_data:/app/data
 
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -155,3 +166,4 @@ volumes:
   postgres_data:
   task_uploads:
   ollama_data:
+  sia_data:
