@@ -3,7 +3,7 @@
 import Link from "next/link";
 import {
     CheckCircle, XCircle, RefreshCw, ShieldCheck,
-    ExternalLink, Clock, ListFilter,
+    ExternalLink, Clock, ListFilter, Undo2,
 } from "lucide-react";
 import { StatusBadge } from "@/components/StatusBadge";
 import { ScoreDisplay } from "@/components/ScoreDisplay";
@@ -27,7 +27,7 @@ const TABS: { key: AdminTab; label: string; description: string }[] = [
 function AdminPageInner() {
     const {
         tasks, stats, loading, activeTab, acting, expanded,
-        setActiveTab, setExpanded, refresh, approveTask, rejectTask,
+        setActiveTab, setExpanded, refresh, approveTask, rejectTask, revertTask,
     } = useAdmin();
 
     return (
@@ -205,6 +205,27 @@ function AdminPageInner() {
 
                                         <StatusBadge status={task.status} />
 
+                                        {/* Revert button — for approved/rejected tasks */}
+                                        {(task.status === "approved" || task.status === "rejected") && (
+                                            <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                                                <button
+                                                    disabled={isActing}
+                                                    onClick={() => revertTask(task)}
+                                                    className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-mono transition-all"
+                                                    style={{
+                                                        background: "rgba(140,148,168,0.08)",
+                                                        color: "var(--subtle)",
+                                                        border: "1px solid rgba(140,148,168,0.2)",
+                                                        opacity: isActing ? 0.5 : 1,
+                                                        cursor: isActing ? "not-allowed" : "pointer",
+                                                    }}
+                                                >
+                                                    <Undo2 className="w-3.5 h-3.5" />
+                                                    Revert
+                                                </button>
+                                            </div>
+                                        )}
+
                                         {/* Inline action buttons — only for awaiting_review tasks */}
                                         {task.status === "pipeline_passed" && (
                                             <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
@@ -353,6 +374,26 @@ function AdminPageInner() {
                                                 </div>
                                             ))}
                                         </div>
+
+                                        {/* Bottom actions — revert for approved/rejected tasks */}
+                                        {(task.status === "approved" || task.status === "rejected") && (
+                                            <div className="flex items-center justify-end gap-2 pt-2">
+                                                <button
+                                                    disabled={isActing}
+                                                    onClick={() => revertTask(task)}
+                                                    className="flex items-center gap-1.5 px-4 py-2 rounded text-xs font-mono transition-all"
+                                                    style={{
+                                                        background: "rgba(140,148,168,0.08)",
+                                                        color: "var(--subtle)",
+                                                        border: "1px solid rgba(140,148,168,0.2)",
+                                                        opacity: isActing ? 0.5 : 1,
+                                                    }}
+                                                >
+                                                    <Undo2 className="w-3.5 h-3.5" />
+                                                    Revert — Send back to review
+                                                </button>
+                                            </div>
+                                        )}
 
                                         {/* Bottom actions — only for awaiting_review tasks */}
                                         {task.status === "pipeline_passed" && (

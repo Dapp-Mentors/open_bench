@@ -34,6 +34,8 @@ interface AdminActions {
   approveTask: (task: Task) => Promise<void>;
   /** Reject a task — removes from visible list optimistically */
   rejectTask: (task: Task) => Promise<void>;
+  /** Revert an approved/rejected task back to pipeline_passed */
+  revertTask: (task: Task) => Promise<void>;
 }
 
 type AdminContextValue = AdminState & AdminActions;
@@ -142,6 +144,27 @@ export function AdminProvider({ children }: { children: ReactNode }) {
     }
   }, [expanded]);
 
+  const revertTask = useCallback(async (task: Task) => {
+    setActing(task.id);
+    try {
+      const res = await fetch(
+        `/api/projects/${task.projectId}/tasks/${task.id}/revert`,
+        { method: "POST" }
+      );
+      if (res.ok) {
+        setTasks((prev) => prev.filter((t) => t.id !== task.id));
+        if (expanded === task.id) setExpanded(null);
+        // Also refetch stats to keep counts accurate
+        fetch("/api/admin/stats")
+          .then((r) => r.json())
+          .then((d) => setStats(d ?? null))
+          .catch(() => {});
+      }
+    } finally {
+      setActing(null);
+    }
+  }, [expanded]);
+
   // Handle tab switch — collapse expanded task
   const handleSetActiveTab = useCallback((tab: AdminTab) => {
     setExpanded(null);
@@ -162,6 +185,7 @@ export function AdminProvider({ children }: { children: ReactNode }) {
         refresh,
         approveTask,
         rejectTask,
+        revertTask,
       }}
     >
       {children}
