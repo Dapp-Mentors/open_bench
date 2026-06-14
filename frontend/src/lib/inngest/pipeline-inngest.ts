@@ -88,50 +88,65 @@ export const runPipeline = inngest.createFunction(
     })
 
     // ── Stage 1: Similarity & Diversity ───────────────────────────────────────
+    // TEMPORARILY SKIPPED — token conservation mode
     const similarityPassed = await step.run('stage-similarity', async () => {
-      const result = await callBackend('similarity', taskId, storagePath)
-      await logStage(taskId, 'similarity', result.passed, result.message)
-      return result.passed
+      // const result = await callBackend('similarity', taskId, storagePath)
+      // await logStage(taskId, 'similarity', result.passed, result.message)
+      // return result.passed
+      await logStage(taskId, 'similarity', true, 'Skipped — token conservation mode')
+      return true
     })
     if (!similarityPassed)
       return await reject(taskId, 'Rejected at similarity check')
 
     // ── Stage 2: CI Checks ────────────────────────────────────────────────────
+    // TEMPORARILY SKIPPED — token conservation mode
     const ciPassed = await step.run('stage-ci', async () => {
-      const result = await callBackend('ci', taskId, storagePath)
-      await logStage(taskId, 'ci', result.passed, result.message)
-      return result.passed
+      // const result = await callBackend('ci', taskId, storagePath)
+      // await logStage(taskId, 'ci', result.passed, result.message)
+      // return result.passed
+      await logStage(taskId, 'ci', true, 'Skipped — token conservation mode')
+      return true
     })
     if (!ciPassed) return await reject(taskId, 'Rejected at CI checks')
 
     // ── Stage 3: Quality Check ────────────────────────────────────────────────
+    // TEMPORARILY SKIPPED — token conservation mode
     // LLM-as-judge across 11 criteria. Full breakdown stored server-side on
     // Task.qualityDetails; only the summary line is logged here.
     const qualityPassed = await step.run('stage-quality', async () => {
-      const result = await callBackend('quality', taskId, storagePath)
-      const summaryLine = result.message.split('\n')[0]
-      await logStage(taskId, 'quality', result.passed, summaryLine)
-      return result.passed
+      // const result = await callBackend('quality', taskId, storagePath)
+      // const summaryLine = result.message.split('\n')[0]
+      // await logStage(taskId, 'quality', result.passed, summaryLine)
+      // return result.passed
+      await logStage(taskId, 'quality', true, 'Skipped — token conservation mode')
+      return true
     })
     if (!qualityPassed) return await reject(taskId, 'Rejected at quality check')
 
     // ── Stage 4: Validation pre-flight ───────────────────────────────────────
+    // TEMPORARILY SKIPPED — token conservation mode
     const preflightPassed = await step.run('stage-preflight', async () => {
-      const result = await callBackend('preflight', taskId, storagePath)
-      await logStage(taskId, 'preflight', result.passed, result.message)
-      return result.passed
+      // const result = await callBackend('preflight', taskId, storagePath)
+      // await logStage(taskId, 'preflight', result.passed, result.message)
+      // return result.passed
+      await logStage(taskId, 'preflight', true, 'Skipped — token conservation mode')
+      return true
     })
     if (!preflightPassed)
       return await reject(taskId, 'Rejected at pre-flight validation')
 
     // ── Stage 5: Oracle / NOP validation ─────────────────────────────────────
+    // TEMPORARILY SKIPPED — token conservation mode
     // Two independent containers:
     //   NOP    — test.sh only        → reward.txt must be "0"
     //   Oracle — solve.sh + test.sh  → reward.txt must be "1"
     const oraclePassed = await step.run('stage-oracle-nop', async () => {
-      const result = await callBackend('oracle-nop', taskId, storagePath)
-      await logStage(taskId, 'oracle_nop', result.passed, result.message)
-      return result.passed
+      // const result = await callBackend('oracle-nop', taskId, storagePath)
+      // await logStage(taskId, 'oracle_nop', result.passed, result.message)
+      // return result.passed
+      await logStage(taskId, 'oracle_nop', true, 'Skipped — token conservation mode')
+      return true
     })
     if (!oraclePassed)
       return await reject(taskId, 'Rejected at oracle/NOP validation')

@@ -36,6 +36,47 @@ services:
         condition: service_started
 
 
+  ollama:
+    image: ollama/ollama:latest
+    container_name: openbench_ollama
+    restart: unless-stopped
+
+    ports:
+      - "11434:11434"
+
+    volumes:
+      - ollama_data:/root/.ollama
+
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list 2>/dev/null | grep -q . && exit 0 || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+
+
+  ollama-setup:
+    image: ollama/ollama:latest
+    container_name: openbench_ollama_setup
+    restart: "no"
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+    entrypoint: >
+      sh -c "
+        echo '[OLLAMA-SETUP] Waiting for ollama service to be ready...' &&
+        until ollama list 2>/dev/null; do
+          sleep 2
+        done &&
+        echo '[OLLAMA-SETUP] Pulling embedding model: nomic-embed-text:latest' &&
+        ollama pull nomic-embed-text:latest &&
+        echo '[OLLAMA-SETUP] Model pulled successfully. Exiting.' &&
+        exit 0
+      "
+    depends_on:
+      ollama:
+        condition: service_healthy
+
+
   backend:
     build:
       context: ./backend
@@ -47,6 +88,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      ollama-setup:
+        condition: service_completed_successfully
 
     ports:
       - "8000:8000"
@@ -54,7 +97,7 @@ services:
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-openbench}:${POSTGRES_PASSWORD:-openbench_secret}@postgres:5432/${POSTGRES_DB:-openbench}
 
-      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      OLLAMA_BASE_URL: http://ollama:11434
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
 
@@ -111,3 +154,4 @@ services:
 volumes:
   postgres_data:
   task_uploads:
+  ollama_data:
