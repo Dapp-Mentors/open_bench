@@ -1,72 +1,34 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { CheckCircle, XCircle, RefreshCw, ShieldCheck, ExternalLink, Clock } from "lucide-react";
+import {
+    CheckCircle, XCircle, RefreshCw, ShieldCheck,
+    ExternalLink, Clock, ListFilter,
+} from "lucide-react";
 import { StatusBadge } from "@/components/StatusBadge";
 import { ScoreDisplay } from "@/components/ScoreDisplay";
 import { PipelineStages } from "@/components/PipelineStages";
 import { SiaProof } from "@/components/SiaProof";
 import { BenchmarkCards } from "@/components/admin/BenchmarkCards";
-import type { BenchmarkStats } from "@/components/admin/BenchmarkCards";
 import type { Task } from "@/lib/types";
+import { AdminProvider, useAdmin, type AdminTab } from "@/lib/admin-context";
 
-export default function AdminPage() {
-    const [tasks, setTasks] = useState<Task[]>([]);
-    const [stats, setStats] = useState<BenchmarkStats | null>(null);
-    const [loading, setLoading] = useState(true);
-    const [expanded, setExpanded] = useState<string | null>(null);
-    const [acting, setActing] = useState<string | null>(null);
+// ─── Tab configuration ───────────────────────────────────────────────────────
 
-    const fetchData = useCallback(async () => {
-        setLoading(true);
-        try {
-            const [tasksData, statsData] = await Promise.all([
-                fetch("/api/admin/ready-tasks").then((r) => r.json()),
-                fetch("/api/admin/stats").then((r) => r.json()),
-            ]);
-            setTasks(Array.isArray(tasksData) ? tasksData : []);
-            setStats(statsData ?? null);
-        } catch {
-            setTasks([]);
-        } finally {
-            setLoading(false);
-        }
-    }, []);
+const TABS: { key: AdminTab; label: string; description: string }[] = [
+    { key: "awaiting_review", label: "Awaiting Review", description: "Pipeline-passed tasks needing human sign-off" },
+    { key: "all",             label: "All Tasks",        description: "Every task across every project" },
+    { key: "approved",        label: "Approved",         description: "Tasks that have been human-approved" },
+    { key: "rejected",        label: "Rejected",         description: "Tasks that were rejected during review" },
+];
 
-    useEffect(() => { fetchData(); }, [fetchData]);
+// ─── Inner component (consumes context) ──────────────────────────────────────
 
-    async function handleApprove(task: Task) {
-        setActing(task.id);
-        try {
-            const res = await fetch(
-                `/api/projects/${task.projectId}/tasks/${task.id}/approve`,
-                { method: "POST" }
-            );
-            if (res.ok) {
-                setTasks((prev) => prev.filter((t) => t.id !== task.id));
-                if (expanded === task.id) setExpanded(null);
-            }
-        } finally {
-            setActing(null);
-        }
-    }
-
-    async function handleReject(task: Task) {
-        setActing(task.id);
-        try {
-            const res = await fetch(
-                `/api/projects/${task.projectId}/tasks/${task.id}/reject`,
-                { method: "POST" }
-            );
-            if (res.ok) {
-                setTasks((prev) => prev.filter((t) => t.id !== task.id));
-                if (expanded === task.id) setExpanded(null);
-            }
-        } finally {
-            setActing(null);
-        }
-    }
+function AdminPageInner() {
+    const {
+        tasks, stats, loading, activeTab, acting, expanded,
+        setActiveTab, setExpanded, refresh, approveTask, rejectTask,
+    } = useAdmin();
 
     return (
         <div className="max-w-5xl mx-auto px-6 py-10">
@@ -79,11 +41,11 @@ export default function AdminPage() {
                         Task Review Queue
                     </h1>
                     <p className="text-xs mt-1.5" style={{ color: "var(--subtle)" }}>
-                        Tasks that have cleared all automated pipeline checks and are waiting for a human sign-off.
+                        View and manage tasks across all pipeline stages.
                     </p>
                 </div>
                 <button
-                    onClick={fetchData}
+                    onClick={refresh}
                     className="bench-btn-ghost flex items-center gap-1.5 px-3 py-2 rounded text-xs"
                 >
                     <RefreshCw className="w-3.5 h-3.5" />
@@ -98,8 +60,48 @@ export default function AdminPage() {
                 </div>
             )}
 
+            {/* Tabs */}
+            <div className="mb-6">
+                <div className="flex items-center gap-1 mb-3">
+                    <ListFilter className="w-3.5 h-3.5" style={{ color: "var(--subtle)" }} />
+                    <span className="section-label ml-1">Filter</span>
+                </div>
+                <div
+                    className="inline-flex rounded-lg p-1 gap-1"
+                    style={{ background: "var(--surface)", border: "1px solid var(--border)" }}
+                >
+                    {TABS.map((tab) => {
+                        const isActive = activeTab === tab.key;
+                        return (
+                            <button
+                                key={tab.key}
+                                onClick={() => setActiveTab(tab.key)}
+                                className="px-4 py-2 rounded-md text-xs font-mono transition-all"
+                                style={{
+                                    background: isActive ? "var(--bg, #0a0b0d)" : "transparent",
+                                    color: isActive ? "var(--text)" : "var(--subtle)",
+                                    border: isActive ? "1px solid var(--border)" : "1px solid transparent",
+                                    boxShadow: isActive ? "0 1px 3px rgba(0,0,0,0.3)" : "none",
+                                }}
+                            >
+                                {tab.label}
+                            </button>
+                        );
+                    })}
+                </div>
+                <p className="text-xs mt-2" style={{ color: "var(--subtle)" }}>
+                    {TABS.find((t) => t.key === activeTab)?.description ?? ""}
+                </p>
+            </div>
+
             {/* Queue */}
-            <div className="section-label mb-3">Review Queue</div>
+            <div className="section-label mb-3">
+                {activeTab === "all" ? "All Tasks" :
+                 activeTab === "awaiting_review" ? "Review Queue" :
+                 activeTab === "approved" ? "Approved Tasks" :
+                 "Rejected Tasks"}
+            </div>
+
             {loading ? (
                 <div className="text-center py-12 font-mono text-sm" style={{ color: "var(--subtle)" }}>
                     <span className="animate-pulse">▋</span> Loading…
@@ -110,9 +112,21 @@ export default function AdminPage() {
                     style={{ borderColor: "var(--border)", borderStyle: "dashed" }}
                 >
                     <CheckCircle className="w-8 h-8 mx-auto mb-4" style={{ color: "var(--green)" }} />
-                    <p className="font-mono text-sm mb-1" style={{ color: "var(--text)" }}>Queue is empty</p>
+                    <p className="font-mono text-sm mb-1" style={{ color: "var(--text)" }}>
+                        {activeTab === "awaiting_review"
+                            ? "Queue is empty"
+                            : activeTab === "approved"
+                                ? "No approved tasks"
+                                : activeTab === "rejected"
+                                    ? "No rejected tasks"
+                                    : "No tasks found"}
+                    </p>
                     <p className="text-xs" style={{ color: "var(--subtle)" }}>
-                        All pipeline-passed tasks have been reviewed. Check back later.
+                        {activeTab === "awaiting_review"
+                            ? "All pipeline-passed tasks have been reviewed. Check back later."
+                            : activeTab === "all"
+                                ? "Tasks will appear here once submitted through the pipeline."
+                                : "No tasks match this filter."}
                     </p>
                 </div>
             ) : (
@@ -133,12 +147,29 @@ export default function AdminPage() {
                                     onClick={() => setExpanded(isExpanded ? null : task.id)}
                                 >
                                     <div className="flex items-center gap-4 min-w-0">
-                                        {/* Ready indicator */}
+                                        {/* Status icon based on task status */}
                                         <div
                                             className="w-8 h-8 rounded flex items-center justify-center flex-shrink-0"
-                                            style={{ background: "rgba(251,191,36,0.08)", border: "1px solid rgba(251,191,36,0.2)" }}
+                                            style={{
+                                                background: task.status === "approved"
+                                                    ? "rgba(0,230,118,0.08)"
+                                                    : task.status === "rejected"
+                                                        ? "rgba(255,68,68,0.08)"
+                                                        : "rgba(251,191,36,0.08)",
+                                                border: task.status === "approved"
+                                                    ? "1px solid rgba(0,230,118,0.2)"
+                                                    : task.status === "rejected"
+                                                        ? "1px solid rgba(255,68,68,0.2)"
+                                                        : "1px solid rgba(251,191,36,0.2)",
+                                            }}
                                         >
-                                            <Clock className="w-4 h-4" style={{ color: "var(--amber)" }} />
+                                            {task.status === "approved" ? (
+                                                <CheckCircle className="w-4 h-4" style={{ color: "var(--green)" }} />
+                                            ) : task.status === "rejected" ? (
+                                                <XCircle className="w-4 h-4" style={{ color: "var(--red)" }} />
+                                            ) : (
+                                                <Clock className="w-4 h-4" style={{ color: "var(--amber)" }} />
+                                            )}
                                         </div>
 
                                         <div className="min-w-0">
@@ -172,42 +203,44 @@ export default function AdminPage() {
                                             <ScoreDisplay score={task.qualityScore} size="sm" />
                                         </div>
 
-                                        <StatusBadge status="pipeline_passed" />
+                                        <StatusBadge status={task.status} />
 
-                                        {/* Inline action buttons */}
-                                        <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-                                            <button
-                                                disabled={isActing}
-                                                onClick={() => handleReject(task)}
-                                                className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-mono transition-all"
-                                                style={{
-                                                    background: "rgba(255,68,68,0.08)",
-                                                    color: "var(--red)",
-                                                    border: "1px solid rgba(255,68,68,0.2)",
-                                                    opacity: isActing ? 0.5 : 1,
-                                                    cursor: isActing ? "not-allowed" : "pointer",
-                                                }}
-                                            >
-                                                <XCircle className="w-3.5 h-3.5" />
-                                                Reject
-                                            </button>
-                                            <button
-                                                disabled={isActing}
-                                                onClick={() => handleApprove(task)}
-                                                className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-mono transition-all"
-                                                style={{
-                                                    background: "rgba(0,230,118,0.1)",
-                                                    color: "var(--green)",
-                                                    border: "1px solid rgba(0,230,118,0.25)",
-                                                    opacity: isActing ? 0.5 : 1,
-                                                    cursor: isActing ? "not-allowed" : "pointer",
-                                                    boxShadow: isActing ? "none" : "0 0 8px rgba(0,230,118,0.1)",
-                                                }}
-                                            >
-                                                <CheckCircle className="w-3.5 h-3.5" />
-                                                Approve
-                                            </button>
-                                        </div>
+                                        {/* Inline action buttons — only for awaiting_review tasks */}
+                                        {task.status === "pipeline_passed" && (
+                                            <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                                                <button
+                                                    disabled={isActing}
+                                                    onClick={() => rejectTask(task)}
+                                                    className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-mono transition-all"
+                                                    style={{
+                                                        background: "rgba(255,68,68,0.08)",
+                                                        color: "var(--red)",
+                                                        border: "1px solid rgba(255,68,68,0.2)",
+                                                        opacity: isActing ? 0.5 : 1,
+                                                        cursor: isActing ? "not-allowed" : "pointer",
+                                                    }}
+                                                >
+                                                    <XCircle className="w-3.5 h-3.5" />
+                                                    Reject
+                                                </button>
+                                                <button
+                                                    disabled={isActing}
+                                                    onClick={() => approveTask(task)}
+                                                    className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-mono transition-all"
+                                                    style={{
+                                                        background: "rgba(0,230,118,0.1)",
+                                                        color: "var(--green)",
+                                                        border: "1px solid rgba(0,230,118,0.25)",
+                                                        opacity: isActing ? 0.5 : 1,
+                                                        cursor: isActing ? "not-allowed" : "pointer",
+                                                        boxShadow: isActing ? "none" : "0 0 8px rgba(0,230,118,0.1)",
+                                                    }}
+                                                >
+                                                    <CheckCircle className="w-3.5 h-3.5" />
+                                                    Approve
+                                                </button>
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
 
@@ -297,10 +330,10 @@ export default function AdminPage() {
                                         )}
 
                                         {/* Pipeline stages */}
-                                        {task.pipelineLogs && (
+                                        {task.pipelineLogs && task.pipelineLogs.length > 0 && (
                                             <div>
                                                 <div className="section-label mb-2">Pipeline Stages</div>
-                                                <PipelineStages logs={task.pipelineLogs} taskStatus="pipeline_passed" />
+                                                <PipelineStages logs={task.pipelineLogs} taskStatus={task.status} />
                                             </div>
                                         )}
 
@@ -321,38 +354,40 @@ export default function AdminPage() {
                                             ))}
                                         </div>
 
-                                        {/* Bottom actions */}
-                                        <div className="flex items-center justify-end gap-2 pt-2">
-                                            <button
-                                                disabled={isActing}
-                                                onClick={() => handleReject(task)}
-                                                className="flex items-center gap-1.5 px-4 py-2 rounded text-xs font-mono transition-all"
-                                                style={{
-                                                    background: "rgba(255,68,68,0.08)",
-                                                    color: "var(--red)",
-                                                    border: "1px solid rgba(255,68,68,0.2)",
-                                                    opacity: isActing ? 0.5 : 1,
-                                                }}
-                                            >
-                                                <XCircle className="w-3.5 h-3.5" />
-                                                Reject Task
-                                            </button>
-                                            <button
-                                                disabled={isActing}
-                                                onClick={() => handleApprove(task)}
-                                                className="flex items-center gap-1.5 px-4 py-2 rounded text-xs font-mono transition-all"
-                                                style={{
-                                                    background: "rgba(0,230,118,0.1)",
-                                                    color: "var(--green)",
-                                                    border: "1px solid rgba(0,230,118,0.25)",
-                                                    opacity: isActing ? 0.5 : 1,
-                                                    boxShadow: isActing ? "none" : "0 0 12px rgba(0,230,118,0.15)",
-                                                }}
-                                            >
-                                                <CheckCircle className="w-3.5 h-3.5" />
-                                                Approve Task
-                                            </button>
-                                        </div>
+                                        {/* Bottom actions — only for awaiting_review tasks */}
+                                        {task.status === "pipeline_passed" && (
+                                            <div className="flex items-center justify-end gap-2 pt-2">
+                                                <button
+                                                    disabled={isActing}
+                                                    onClick={() => rejectTask(task)}
+                                                    className="flex items-center gap-1.5 px-4 py-2 rounded text-xs font-mono transition-all"
+                                                    style={{
+                                                        background: "rgba(255,68,68,0.08)",
+                                                        color: "var(--red)",
+                                                        border: "1px solid rgba(255,68,68,0.2)",
+                                                        opacity: isActing ? 0.5 : 1,
+                                                    }}
+                                                >
+                                                    <XCircle className="w-3.5 h-3.5" />
+                                                    Reject Task
+                                                </button>
+                                                <button
+                                                    disabled={isActing}
+                                                    onClick={() => approveTask(task)}
+                                                    className="flex items-center gap-1.5 px-4 py-2 rounded text-xs font-mono transition-all"
+                                                    style={{
+                                                        background: "rgba(0,230,118,0.1)",
+                                                        color: "var(--green)",
+                                                        border: "1px solid rgba(0,230,118,0.25)",
+                                                        opacity: isActing ? 0.5 : 1,
+                                                        boxShadow: isActing ? "none" : "0 0 12px rgba(0,230,118,0.15)",
+                                                    }}
+                                                >
+                                                    <CheckCircle className="w-3.5 h-3.5" />
+                                                    Approve Task
+                                                </button>
+                                            </div>
+                                        )}
                                     </div>
                                 )}
                             </div>
@@ -361,5 +396,15 @@ export default function AdminPage() {
                 </div>
             )}
         </div>
+    );
+}
+
+// ─── Exported page (wraps in AdminProvider) ──────────────────────────────────
+
+export default function AdminPage() {
+    return (
+        <AdminProvider>
+            <AdminPageInner />
+        </AdminProvider>
     );
 }
