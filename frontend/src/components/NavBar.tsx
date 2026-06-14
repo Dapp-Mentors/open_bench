@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Activity, FolderOpen, Plus } from "lucide-react";
+import { Activity, FolderOpen, Plus, ShieldCheck } from "lucide-react";
 
 const NAV_ITEMS = [
-  { href: "/dashboard",   label: "Projects",       icon: FolderOpen },
-  { href: "/projects/new",label: "New Project",    icon: Plus       },
+  { href: "/dashboard", label: "Projects", icon: FolderOpen },
+  { href: "/projects/new", label: "New Project", icon: Plus },
+  { href: "/admin", label: "Admin", icon: ShieldCheck },
 ];
 
 export function NavBar() {
@@ -39,15 +40,28 @@ export function NavBar() {
         <div className="flex items-center gap-1">
           {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
             const active = pathname === href || pathname.startsWith(href + "/");
+            // Give the Admin link a slightly different treatment to distinguish it
+            const isAdmin = href === "/admin";
             return (
               <Link
                 key={href}
                 href={href}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-mono transition-all"
                 style={{
-                  color:      active ? "var(--green)"               : "var(--subtle)",
-                  background: active ? "rgba(0,230,118,0.08)"       : "transparent",
-                  border:     active ? "1px solid rgba(0,230,118,0.2)" : "1px solid transparent",
+                  color:
+                    active
+                      ? isAdmin ? "var(--amber)" : "var(--green)"
+                      : "var(--subtle)",
+                  background:
+                    active
+                      ? isAdmin ? "rgba(251,191,36,0.08)" : "rgba(0,230,118,0.08)"
+                      : "transparent",
+                  border:
+                    active
+                      ? isAdmin
+                        ? "1px solid rgba(251,191,36,0.2)"
+                        : "1px solid rgba(0,230,118,0.2)"
+                      : "1px solid transparent",
                 }}
               >
                 <Icon className="w-3.5 h-3.5" />
