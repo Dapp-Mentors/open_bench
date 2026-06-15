@@ -313,8 +313,12 @@ function AdminPageInner() {
                                                         boxShadow: isActing ? "none" : "0 0 8px rgba(0,230,118,0.1)",
                                                     }}
                                                 >
-                                                    <CheckCircle className="w-3.5 h-3.5" />
-                                                    Approve
+                                                    {isActing ? (
+                                                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                                    ) : (
+                                                        <CheckCircle className="w-3.5 h-3.5" />
+                                                    )}
+                                                    {isActing ? "Approving…" : "Approve"}
                                                 </button>
                                             </div>
                                         )}
@@ -480,8 +484,12 @@ function AdminPageInner() {
                                                         boxShadow: isActing ? "none" : "0 0 12px rgba(0,230,118,0.15)",
                                                     }}
                                                 >
-                                                    <CheckCircle className="w-3.5 h-3.5" />
-                                                    Approve Task
+                                                    {isActing ? (
+                                                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                                    ) : (
+                                                        <CheckCircle className="w-3.5 h-3.5" />
+                                                    )}
+                                                    {isActing ? "Approving…" : "Approve Task"}
                                                 </button>
                                             </div>
                                         )}
