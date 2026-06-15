@@ -191,39 +191,35 @@ export function SiaProof({ siaHash, indexdKey, siaStatus, siaLogs }: Props) {
   const hasData = siaHash || indexdKey || logs.length > 0 || status !== "pending";
   if (!hasData) return null;
 
-  // Derive real upload state from data presence (more reliable than status alone)
-  const hasUploaded = !!siaHash;
-  const hasPinned = !!indexdKey;
+  // siaHash presence means the file is fully on Sia (uploaded + pinned).
+  // indexdKey is extra metadata; the upload is complete regardless.
+  const uploaded = !!siaHash;
 
   const logByStep = Object.fromEntries(logs.map((l) => [l.step, l]));
   const completedSteps = new Set(logs.filter((l) => l.passed === true).map((l) => l.step));
   const failedSteps = new Set(logs.filter((l) => l.passed === false).map((l) => l.step));
 
-  // Badge colour: prefer data-derived state over siaStatus field
+  // Badge colour: siaHash is the definitive "done" signal.
   const headerColor =
-    hasUploaded && hasPinned ? "var(--green)"
-      : hasUploaded ? "var(--blue)"
-        : status === "ready" ? "var(--green)"
-          : status === "failed" ? "var(--red)"
-            : status === "pending" ? "var(--amber)"
-              : "var(--blue)";
+    uploaded ? "var(--green)"
+      : status === "ready" ? "var(--green)"
+        : status === "failed" ? "var(--red)"
+          : status === "pending" ? "var(--amber)"
+            : "var(--blue)";
 
-  // Badge label: if siaHash exists the file is already on Sia — don't lie.
+  // Badge label: if siaHash exists the file is already on Sia.
   const headerLabel =
-    hasUploaded && hasPinned ? "Ready"
-      : hasUploaded ? "Pinning…"
-        : status === "ready" ? "Ready"
-          : status === "failed" ? "Failed"
-            : status === "pending" ? "Awaiting upload"
-              : status === "queued" ? "Queued"
-                : status === "uploading" ? "Uploading…"
-                  : status === "pinning" ? "Pinning…"
-                    : "Uploading…";
+    uploaded ? "Uploaded"
+      : status === "ready" ? "Ready"
+        : status === "failed" ? "Failed"
+          : status === "pending" ? "Awaiting upload"
+            : status === "queued" ? "Queued"
+              : status === "uploading" ? "Uploading…"
+                : status === "pinning" ? "Pinning…"
+                  : "Uploading…";
 
-  // Active (spinner) if the pipeline isn't in a terminal state or is partially done
-  const isActive =
-    status === "queued" || status === "uploading" || status === "pinning" ||
-    (hasUploaded && !hasPinned);
+  // Active (spinner) while the pipeline is in motion and not yet done
+  const isActive = !uploaded && !["ready", "failed", "pending"].includes(status);
 
   return (
     <div>
