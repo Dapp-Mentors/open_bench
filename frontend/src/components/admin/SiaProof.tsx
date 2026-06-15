@@ -83,8 +83,11 @@ function StepRow({ stepKey, log, state, isLast }: StepRowProps) {
               state === "complete" ? "rgba(0,230,118,0.12)"
                 : state === "failed" ? "rgba(255,68,68,0.12)"
                   : state === "active" ? "rgba(77,166,255,0.12)"
-                    : "rgba(140,148,168,0.06)",
-            border: `1px solid ${color}44`,
+                    : "rgba(140,148,168,0.12)",
+            border:
+              state === "pending"
+                ? "1px solid rgba(140,148,168,0.35)"
+                : `1px solid ${color}44`,
           }}
         >
           {state === "complete" ? (
@@ -94,7 +97,7 @@ function StepRow({ stepKey, log, state, isLast }: StepRowProps) {
           ) : state === "active" ? (
             <Loader2 className="w-4 h-4 animate-spin" style={{ color: "var(--blue)" }} />
           ) : (
-            <Icon className="w-3.5 h-3.5" style={{ color: "var(--muted)" }} />
+            <Icon className="w-3.5 h-3.5" style={{ color: "var(--subtle)" }} />
           )}
         </div>
         {!isLast && (
@@ -104,7 +107,7 @@ function StepRow({ stepKey, log, state, isLast }: StepRowProps) {
               background:
                 state === "complete" ? "rgba(0,230,118,0.3)"
                   : state === "failed" ? "rgba(255,68,68,0.2)"
-                    : "rgba(140,148,168,0.1)",
+                    : "rgba(140,148,168,0.25)",
               minHeight: 20,
             }}
           />
@@ -116,7 +119,7 @@ function StepRow({ stepKey, log, state, isLast }: StepRowProps) {
         <div className="flex items-center gap-2 flex-wrap">
           <span
             className="font-mono text-xs font-semibold"
-            style={{ color: state === "pending" ? "var(--subtle)" : "var(--text)" }}
+            style={{ color: state === "pending" ? "var(--muted)" : "var(--text)" }}
           >
             {meta.label}
           </span>
@@ -195,13 +198,13 @@ export function SiaProof({ siaHash, indexdKey, siaStatus, siaLogs }: Props) {
   const headerColor =
     status === "ready" ? "var(--green)"
       : status === "failed" ? "var(--red)"
-        : status === "pending" ? "var(--subtle)"
+        : status === "pending" ? "var(--amber)"
           : "var(--blue)";
 
   const headerLabel =
     status === "ready" ? "Ready"
       : status === "failed" ? "Failed"
-        : status === "pending" ? "Not started"
+        : status === "pending" ? "Awaiting upload"
           : status === "queued" ? "Queued"
             : status === "uploading" ? "Uploading…"
               : status === "pinning" ? "Pinning…"

@@ -17,7 +17,7 @@
  *    write can't leave the UI stuck showing stale data.
  *
  * 3. BACKGROUND POLLING — a setInterval fires fetchData(true, false) every
- *    60 seconds while the component is mounted. This is the safety net: if
+ *    5 minutes while the component is mounted. This is the safety net: if
  *    SSE never connects (Docker networking, CORS, etc.) the UI still heals
  *    itself within one poll cycle. The interval is cleared on unmount.
  *
@@ -117,7 +117,7 @@ function tabToStatusParam(tab: AdminTab): string {
 
 // ─── Provider ─────────────────────────────────────────────────────────────────
 
-const POLL_INTERVAL_MS = 120_000; // background poll cadence (2 minute)
+const POLL_INTERVAL_MS = 300_000; // background poll cadence (5 minutes)
 
 export function AdminProvider({ children }: { children: React.ReactNode }) {
   const [tasks, setTasks] = useState<Task[]>([]);

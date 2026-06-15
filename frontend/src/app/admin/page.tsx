@@ -8,7 +8,7 @@ import {
 import { StatusBadge } from "@/components/StatusBadge";
 import { ScoreDisplay } from "@/components/ScoreDisplay";
 import { PipelineStages } from "@/components/PipelineStages";
-import { SiaProof } from "@/components/SiaProof";
+import { SiaProof } from "@/components/admin/SiaProof";
 import { BenchmarkCards } from "@/components/admin/BenchmarkCards";
 import type { Task } from "@/lib/types";
 import { AdminProvider, useAdmin, type AdminTab } from "@/lib/admin-context";
@@ -49,7 +49,7 @@ function AdminPageInner() {
                     {/* SSE connection status indicator */}
                     <div
                         className="flex items-center gap-1.5 px-2.5 py-1.5 rounded text-xs font-mono"
-                        title={sseConnected ? "Live updates active" : "Live updates offline — using 8s polling fallback"}
+                        title={sseConnected ? "Live updates active" : "Live updates offline — using 5 min polling fallback"}
                         style={{
                             background: sseConnected
                                 ? "rgba(0,230,118,0.06)"
