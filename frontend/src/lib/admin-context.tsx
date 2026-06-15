@@ -3,6 +3,7 @@
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from "react";
 import type { Task } from "@/lib/types";
 import type { BenchmarkStats } from "@/components/admin/BenchmarkCards";
+import { useSiaSSE } from "@/lib/use-sia-sse";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -30,7 +31,7 @@ interface AdminActions {
   setExpanded: (id: string | null) => void;
   /** Refetch all data */
   refresh: () => Promise<void>;
-  /** Approve a task — removes from visible list optimistically */
+  /** Approve a task — starts Sia upload, keeps in list until Sia is done */
   approveTask: (task: Task) => Promise<void>;
   /** Reject a task — removes from visible list optimistically */
   rejectTask: (task: Task) => Promise<void>;
@@ -59,6 +60,10 @@ export function AdminProvider({ children }: { children: ReactNode }) {
   const [activeTab, setActiveTab] = useState<AdminTab>("awaiting_review");
   const [acting, setActing] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
+
+  // ── SSE-driven refresh trigger ─────────────────────────────────────────
+  // Increment this counter to trigger a re-fetch from the SSE hook
+  const [sseRefreshKey, setSseRefreshKey] = useState(0);
 
   /**
    * Build query string from active tab.
@@ -99,8 +104,7 @@ export function AdminProvider({ children }: { children: ReactNode }) {
   };
 
   /**
-   * Show loading spinner only on the very first fetch (or a manual refresh).
-   * Background polls silently update data without triggering the loading UI.
+   * Fetch data — called on mount, tab change, manual refresh, and SSE events.
    */
   const fetchData = useCallback(async (isBackgroundPoll = false) => {
     if (!isBackgroundPoll) setLoading(true);
@@ -116,7 +120,7 @@ export function AdminProvider({ children }: { children: ReactNode }) {
       const newTasks = Array.isArray(tasksData) ? tasksData : [];
       const newStats = statsData ?? null;
 
-      // Only update state if data actually changed (avoids re-render storms from polling)
+      // Only update state if data actually changed (avoids re-render storms)
       setTasks((prev) => isSameTasks(prev, newTasks) ? prev : newTasks);
       setStats((prev) => isSameStats(prev, newStats) ? prev : newStats);
     } catch {
@@ -126,16 +130,33 @@ export function AdminProvider({ children }: { children: ReactNode }) {
     }
   }, [activeTab, tabToStatusParam]);
 
-  // Initial fetch on mount
+  // Initial fetch on mount — only once
   useEffect(() => {
     fetchData(false);
-  }, [fetchData]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  // Auto-poll every 3s — silently updates data without flickering the UI
+  // Re-fetch on tab change
   useEffect(() => {
-    const interval = setInterval(() => { fetchData(true); }, 3000);
-    return () => clearInterval(interval);
-  }, [fetchData]);
+    fetchData(true);
+  }, [activeTab, fetchData]);
+
+  // Re-fetch when SSE indicates a Sia status change
+  useEffect(() => {
+    if (sseRefreshKey > 0) {
+      fetchData(true);
+    }
+  }, [sseRefreshKey, fetchData]);
+
+  // ── SSE subscription for real-time Sia updates ─────────────────────────
+  useSiaSSE({
+    onUpdate: useCallback((_taskId: string, siaStatus: string, _extra: Record<string, unknown>) => {
+      // On "ready" or "failed", trigger a re-fetch to update both stats and task list
+      if (siaStatus === "ready" || siaStatus === "failed") {
+        setSseRefreshKey((k) => k + 1);
+      }
+    }, []),
+  });
 
   const refresh = useCallback(async () => {
     await fetchData();
@@ -149,18 +170,14 @@ export function AdminProvider({ children }: { children: ReactNode }) {
         { method: "POST" }
       );
       if (res.ok) {
-        setTasks((prev) => prev.filter((t) => t.id !== task.id));
-        if (expanded === task.id) setExpanded(null);
-        // Also refetch stats to keep counts accurate
-        fetch("/api/admin/stats")
-          .then((r) => r.json())
-          .then((d) => setStats(d ?? null))
-          .catch(() => {});
+        // Don't remove from list! Status stays pipeline_passed until Sia completes.
+        // Just refetch so the Sia badge/status updates
+        await fetchData(true);
       }
     } finally {
       setActing(null);
     }
-  }, [expanded]);
+  }, [fetchData]);
 
   const rejectTask = useCallback(async (task: Task) => {
     setActing(task.id);

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import {
     CheckCircle, XCircle, RefreshCw, ShieldCheck,
-    ExternalLink, Clock, ListFilter, Undo2,
+    ExternalLink, Clock, ListFilter, Undo2, Loader2, CloudUpload,
 } from "lucide-react";
 import { StatusBadge } from "@/components/StatusBadge";
 import { ScoreDisplay } from "@/components/ScoreDisplay";
@@ -204,6 +204,37 @@ function AdminPageInner() {
                                         </div>
 
                                         <StatusBadge status={task.status} />
+
+                                        {/* Sia upload in progress badge — pipeline_passed + active siaStatus */}
+                                        {task.status === "pipeline_passed" && task.siaStatus && task.siaStatus !== "pending" && (
+                                            <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                                                {task.siaStatus === "failed" ? (
+                                                    <span
+                                                        className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-mono"
+                                                        style={{
+                                                            background: "rgba(255,68,68,0.08)",
+                                                            border: "1px solid rgba(255,68,68,0.2)",
+                                                            color: "var(--red)",
+                                                        }}
+                                                    >
+                                                        <XCircle className="w-3 h-3" />
+                                                        Sia failed
+                                                    </span>
+                                                ) : task.siaStatus === "queued" || task.siaStatus === "uploading" || task.siaStatus === "pinning" ? (
+                                                    <span
+                                                        className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-mono"
+                                                        style={{
+                                                            background: "rgba(77,166,255,0.08)",
+                                                            border: "1px solid rgba(77,166,255,0.2)",
+                                                            color: "var(--blue)",
+                                                        }}
+                                                    >
+                                                        <Loader2 className="w-3 h-3 animate-spin" />
+                                                        Sia {task.siaStatus}
+                                                    </span>
+                                                ) : null}
+                                            </div>
+                                        )}
 
                                         {/* Revert button — for approved/rejected tasks */}
                                         {(task.status === "approved" || task.status === "rejected") && (

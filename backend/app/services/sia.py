@@ -9,6 +9,7 @@ AppKey directly from here.
 
 from __future__ import annotations
 
+import asyncio
 import io
 import json
 import zipfile
@@ -21,6 +22,11 @@ from app.services.sia_client import get_sdk
 # ── Constants ──────────────────────────────────────────────────────────────────
 
 DEMO_PREFIX = "demo-sia-"
+
+# Timeouts for Sia operations to prevent indefinite hanging
+SIA_UPLOAD_TIMEOUT = 300   # 5 minutes for upload
+SIA_PIN_TIMEOUT    = 120   # 2 minutes for pinning
+SIA_META_TIMEOUT   = 30    # 30 seconds for metadata update
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
@@ -63,6 +69,8 @@ async def upload_task(
 
     Steps reported: "uploading" → "pinning" → "ready"
 
+    Each Sia SDK call is wrapped with a timeout to prevent indefinite hanging.
+
     Returns the Sia object ID.
     """
     sdk = await get_sdk()
@@ -81,7 +89,10 @@ async def upload_task(
         await on_status("uploading")
 
     pinned_obj = PinnedObject()
-    uploaded_obj = await sdk.upload(pinned_obj, data)
+    uploaded_obj = await asyncio.wait_for(
+        sdk.upload(pinned_obj, data),
+        timeout=SIA_UPLOAD_TIMEOUT,
+    )
 
     object_id: str = uploaded_obj.id()
     if not object_id:
@@ -98,13 +109,19 @@ async def upload_task(
     if extra_meta:
         metadata.update(extra_meta)
 
-    uploaded_obj.update_metadata(json.dumps(metadata).encode())
+    await asyncio.wait_for(
+        uploaded_obj.update_metadata(json.dumps(metadata).encode()),
+        timeout=SIA_META_TIMEOUT,
+    )
 
     # ── Step: pinning ──────────────────────────────────────────────────────────
     if on_status:
         await on_status("pinning")
 
-    await sdk.pin_object(uploaded_obj)
+    await asyncio.wait_for(
+        sdk.pin_object(uploaded_obj),
+        timeout=SIA_PIN_TIMEOUT,
+    )
     print(f"[Sia] pinned objectId={object_id}")
 
     return object_id
