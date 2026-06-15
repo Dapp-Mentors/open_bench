@@ -87,7 +87,12 @@ export function AdminProvider({ children }: { children: ReactNode }) {
    */
   const isSameTasks = (a: Task[], b: Task[]): boolean => {
     if (a.length !== b.length) return false;
-    return a.every((t, i) => t.id === b[i].id && t.status === b[i].status && t.qualityScore === b[i].qualityScore);
+    return a.every((t, i) => (
+      t.id === b[i].id &&
+      t.status === b[i].status &&
+      t.siaStatus === b[i].siaStatus &&
+      t.qualityScore === b[i].qualityScore
+    ));
   };
 
   /**
@@ -151,10 +156,11 @@ export function AdminProvider({ children }: { children: ReactNode }) {
   // ── SSE subscription for real-time Sia updates ─────────────────────────
   useSiaSSE({
     onUpdate: useCallback((_taskId: string, siaStatus: string, _extra: Record<string, unknown>) => {
-      // On "ready" or "failed", trigger a re-fetch to update both stats and task list
-      if (siaStatus === "ready" || siaStatus === "failed") {
-        setSseRefreshKey((k) => k + 1);
-      }
+      // Trigger a re-fetch on every Sia status change so the UI reflects
+      // intermediate states (queued → uploading → pinning → ready/failed)
+      // in real-time. The fetchData function uses shallow comparison to
+      // avoid unnecessary re-renders when data hasn't changed.
+      setSseRefreshKey((k) => k + 1);
     }, []),
   });
 
