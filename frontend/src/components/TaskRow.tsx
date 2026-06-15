@@ -242,7 +242,6 @@ export function TaskRow({ task, projectId, onDeleted }: {
 }) {
     const [open, setOpen] = useState(false);
     const [deleting, setDeleting] = useState(false);
-    const [approving, setApproving] = useState(false);
 
     const stages = buildStages(task.pipelineLogs ?? [], task.status, task.stageDetails);
     const passedStages = stages.filter((s) => s.passed === true).length;
@@ -267,17 +266,6 @@ export function TaskRow({ task, projectId, onDeleted }: {
         } catch {
             alert("Something went wrong");
             setDeleting(false);
-        }
-    }
-
-    async function handleApprove() {
-        setApproving(true);
-        try {
-            await fetch(`/api/projects/${projectId}/tasks/${task.id}/approve`, {
-                method: "POST",
-            });
-        } finally {
-            setApproving(false);
         }
     }
 
@@ -441,25 +429,6 @@ export function TaskRow({ task, projectId, onDeleted }: {
                                 <Upload className="w-3.5 h-3.5 rotate-180" />
                                 Download
                             </a>
-                        )}
-
-                        {task.status === "pipeline_passed" && (
-                            <button
-                                onClick={handleApprove}
-                                disabled={approving}
-                                className="inline-flex items-center gap-1.5 px-4 py-2 rounded text-xs font-mono transition-all disabled:opacity-40"
-                                style={{
-                                    background: "rgba(0,230,118,0.1)",
-                                    border: "1px solid rgba(0,230,118,0.25)",
-                                    color: "var(--green)",
-                                    boxShadow: approving ? "none" : "0 0 8px rgba(0,230,118,0.1)",
-                                }}
-                            >
-                                {approving
-                                    ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Approving…</>
-                                    : <><CheckCircle className="w-3.5 h-3.5" /> Approve Task</>
-                                }
-                            </button>
                         )}
 
                         {(task.status === "pending" || task.status === "rejected") && (
