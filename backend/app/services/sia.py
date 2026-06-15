@@ -109,10 +109,7 @@ async def upload_task(
     if extra_meta:
         metadata.update(extra_meta)
 
-    await asyncio.wait_for(
-        uploaded_obj.update_metadata(json.dumps(metadata).encode()),
-        timeout=SIA_META_TIMEOUT,
-    )
+    uploaded_obj.update_metadata(json.dumps(metadata).encode())
 
     # ── Step: pinning ──────────────────────────────────────────────────────────
     if on_status:
