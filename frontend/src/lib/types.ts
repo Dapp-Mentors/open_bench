@@ -13,15 +13,42 @@ export type EasinessResult = "too_easy" | "appropriate" | "too_hard";
 export type TaskStatus =
   | "pending"
   | "pipeline_running"
-  | "pipeline_passed"   // NEW — automated pipeline done, awaiting human review
+  | "pipeline_passed"   // automated pipeline done, awaiting human review
   | "approved"          // human-reviewed and accepted — runs allowed
   | "rejected";
+
+// Sia push lifecycle (set after admin approval):
+//   pending → queued → uploading → pinning → ready
+//                                        ↘ failed
+export type SiaStatus =
+  | "pending"       // not yet triggered (task not approved yet)
+  | "queued"        // approval received, waiting to start upload
+  | "uploading"     // transferring encrypted shards to Sia
+  | "pinning"       // pinning object on indexer node
+  | "ready"         // fully pinned and downloadable
+  | "failed";       // any step errored
+
+export const SIA_STEPS: SiaStatus[] = [
+  "queued",
+  "uploading",
+  "pinning",
+  "ready",
+];
+
+export interface SiaLog {
+  id: string;
+  taskId: string;
+  step: string;
+  passed: boolean | null;
+  message: string;
+  ts: string;
+}
 
 export interface AgentConfig { provider: ModelProvider; modelId: string; }
 
 export interface TaskDef {
   id: string;
-  projectId: string;          // NEW — every task belongs to a project
+  projectId: string;
   title: string;
   description: string;
   domain: string;
@@ -44,6 +71,7 @@ export interface PipelineLog {
 
 export interface Task extends TaskDef {
   status: TaskStatus;
+  siaStatus: SiaStatus;
   similarityScore?: number | null;
   isDuplicate?: boolean | null;
   ciPassed?: boolean | null;
@@ -56,8 +84,9 @@ export interface Task extends TaskDef {
   embeddingJson?: string | null;
   createdAt: string;
   updatedAt: string;
-  approvedAt?: string | null;   // set when an admin approves
+  approvedAt?: string | null;
   pipelineLogs?: PipelineLog[];
+  siaLogs?: SiaLog[];
   runs?: BenchmarkRun[];
   _count?: { runs: number };
 }
@@ -73,7 +102,7 @@ export interface RunLog {
 export interface BenchmarkRun {
   id: string;
   taskId: string;
-  projectId: string;            // denormalised for easier querying
+  projectId: string;
   modelId: string;
   provider: string;
   status: string;
