@@ -2,7 +2,16 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Activity, FolderOpen, Plus, ShieldCheck } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Activity, FolderOpen, Plus, ShieldCheck, Wifi, WifiOff } from "lucide-react";
+
+// ── Types ────────────────────────────────────────────────────────────────────
+
+interface SiaConnectionStatus {
+  connected: boolean;
+  mode: "live" | "demo";
+  reason: string | null;
+}
 
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Projects", icon: FolderOpen },
@@ -10,8 +19,46 @@ const NAV_ITEMS = [
   { href: "/admin", label: "Admin", icon: ShieldCheck },
 ];
 
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+async function fetchSiaStatus(): Promise<SiaConnectionStatus> {
+  try {
+    const res = await fetch("/api/sia/status");
+    if (!res.ok) {
+      return { connected: false, mode: "live", reason: `HTTP ${res.status}` };
+    }
+    return await res.json();
+  } catch {
+    return { connected: false, mode: "live", reason: "Backend unreachable" };
+  }
+}
+
+function statusLabel(status: SiaConnectionStatus): string {
+  if (status.connected) return "Sia live";
+  if (status.mode === "demo") return "Demo mode";
+  return `Offline (${status.reason ?? "unknown"})`;
+}
+
+// ── Component ────────────────────────────────────────────────────────────────
+
 export function NavBar() {
   const pathname = usePathname();
+  const [sia, setSia] = useState<SiaConnectionStatus | null>(null);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    // Initial fetch
+    fetchSiaStatus().then(setSia);
+
+    // Poll every 10 seconds to track mode changes
+    intervalRef.current = setInterval(() => {
+      fetchSiaStatus().then(setSia);
+    }, 10_000);
+
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
+  }, []);
 
   return (
     <nav
@@ -71,10 +118,38 @@ export function NavBar() {
           })}
         </div>
 
-        {/* Status */}
-        <div className="flex items-center gap-2 text-xs font-mono" style={{ color: "var(--subtle)" }}>
-          <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: "var(--green)" }} />
-          <span>LOCAL</span>
+        {/* Sia Connection Status */}
+        <div className="flex items-center gap-2 text-xs font-mono">
+          {sia ? (
+            <span
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border transition-colors duration-300 ${
+                sia.connected
+                  ? "text-emerald-400 border-emerald-500/30 bg-emerald-500/5"
+                  : sia.mode === "demo"
+                    ? "text-amber-400 border-amber-500/30 bg-amber-500/5"
+                    : "text-red-400 border-red-500/30 bg-red-500/5"
+              }`}
+            >
+              {sia.connected ? (
+                <Wifi className="h-3 w-3" />
+              ) : (
+                <WifiOff className="h-3 w-3" />
+              )}
+              {statusLabel(sia)}
+            </span>
+          ) : (
+            <span
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border transition-colors duration-300"
+              style={{
+                color: "var(--subtle)",
+                borderColor: "var(--border)",
+                background: "var(--muted)",
+              }}
+            >
+              <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: "var(--subtle)" }} />
+              Checking…
+            </span>
+          )}
         </div>
       </div>
     </nav>

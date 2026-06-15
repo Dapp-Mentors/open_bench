@@ -9,7 +9,7 @@ from app.core.config import settings
 from app.core.database import get_db
 from fastapi.responses import StreamingResponse
 
-from app.routers import approve, pipeline, runs, tasks
+from app.routers import approve, pipeline, runs, sia, tasks
 from app.services import sia_client
 from app.services.sse import sia_event_generator
 
@@ -66,6 +66,9 @@ app.include_router(tasks.router, prefix="/api/tasks", tags=["tasks"])
 
 # Task approval + Sia upload — called by the frontend after human review
 app.include_router(approve.router, prefix="/api", tags=["approve"])
+
+# Sia connection status — used by the NavBar
+app.include_router(sia.router, prefix="/api/sia", tags=["sia"])
 
 # SSE endpoint for real-time Sia pipeline status
 @app.get("/api/sia/events", tags=["sse"])
