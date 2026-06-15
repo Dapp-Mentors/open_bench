@@ -2,25 +2,25 @@
 
 Introducing open_bench: A comprehensive web application designed for benchmarking various AI models in real-time.
 
-I built this platform using a combination of Python, CSS, SQL, JavaScript, TypeScript to create an intuitive environment where users can seamlessly benchmark different art generation algorithms against each other on my local machine or any remote server. This project is perfect if you're looking into comparing the performance and quality output between various AI models like DALL-E 2, MidJourney, Stable Diffusion, etc.
+I built this platform using a combination of Python, CSS, SQL, JavaScript, TypeScript to create an intuitive environment where users can seamlessly benchmark different art generation tools against each other based on user-defined criteria and datasets. This project provides the ultimate solution for comparing performance metrics across multiple generative adversarial networks (GANs) or any AI model you wish.
 
-The core of open_bench lies in its ability to provide real-time benchmarking results through a user-friendly interface that allows users not only to run benchmarks but also visualize them effectively. With this application built using robust technologies such as Python for backend logic and TypeScript/JavaScript on the frontend with CSS styling, I've ensured it is both powerful yet easy-to-use.
+open_bench is built with a robust backend powered by Python, SQL, TypeScript to handle data processing efficiently while providing an engaging front-end experience using CSS and JavaScript frameworks like React. The application features real-time benchmarking capabilities that allow users not only to compare models but also visualize their performance through intuitive graphs and charts generated dynamically.
 
-Key features include:
-- Real-time benchmarking against multiple AI models.
-- Intuitive UI that allows users to easily run comparisons without needing deep technical knowledge of how these systems work internally. 
-- Detailed results display including performance metrics and visual outputs for each model tested within the application environment, making it a one-stop solution for anyone interested in evaluating different generative art tools.
+Key functionalities include:
+- Real-time comparison of AI model outputs
+- Customizable benchmark criteria for tailored assessments 
+- Visual representation (graphs, heatmaps) showcasing the comparative analysis results
 
-This project is not just about benchmarking; it's also an educational tool that helps users understand what makes certain models more efficient or effective than others. I built this to empower both developers working on AI and enthusiasts who are curious by providing them with the resources they need right at their fingertips, all within a single application environment powered by open_bench.
+With a total file count standing at 77 main files including `Note.txt`, `README.md`, `config.py`, and several Python scripts like `database.py` that manage database interactions seamlessly. The project is structured to ensure scalability with modular codebases in different languages for diverse functionalities.
 
-Feel free to explore it further!
+This platform empowers users, researchers, or developers by providing a concrete toolset aimed at evaluating AI models efficiently without the need for external tools—everything you require resides within open_bench itself!
 
 ## 📊 Quick Stats
 
-- 📁 **92 files** across 49 directories
-- 💻 **70 code files** in 5 programming languages
-- 🚀 **Languages:** Python, SQL, CSS, JavaScript, TypeScript
-- 📦 **Size:** 1,275,155 bytes
+- 📁 **77 files** across 43 directories
+- 💻 **69 code files** in 5 programming languages
+- 🚀 **Languages:** CSS, SQL, Python, JavaScript, TypeScript
+- 📦 **Size:** 645,873 bytes
 
 ---
 
@@ -32,74 +32,77 @@ Project Name: open_bench
 Root Path: /Users/darlingtongospel/Sites/open_bench
 
 STATISTICS:
-- Total Files: 92
-- Code Files: 70
-- Total Directories: 49
-- Total Size: 1275155 bytes
-- Languages Used: Python, SQL, CSS, JavaScript, TypeScript
-- File Types: {'.example': 2, '.txt': 2, '.md': 3, '.py': 16, '.yml': 1, '.ts': 21, '.json': 4, '.js': 5, '.tsx': 12, '.css': 1}
+- Total Files: 77
+- Code Files: 69
+- Total Directories: 43
+- Total Size: 645873 bytes (643 KB)
+- Languages Used: CSS, SQL, Python, JavaScript, TypeScript
+- File Types: {'.example': 2, '.db': 1, '.txt': 2, '.md': 1, '.py': 18, '.yml': 1, '.ts': 25, '.json': 2, '.js': 1, '.tsx': 17}
 
 PROJECT STRUCTURE:
 ├─ .env.example
-├─ Note.txt
-├─ README.md
-└─ backend (microservices architecture)
-   ├─ Dockerfile
-   │  ├─ app/Dockerfile
-   │  └─ database/Dockerfile
-   ├─ requirements.txt
-   ├─ docker-compose.yml
-   ├─ app
-   │  ├─ core/config.py
-   │  ├─ database/database.py
-   │  ├─ routers/pipeline.py
-   │  ├─ routers/runs.py
-   │  └─ services/agent_quality.py, easiness.py, llm.py...
-   └─ frontend (Next.js)
-      ├─ .env.example
-      ├─ Dockerfile
-      ├─ next-env.d.ts
-      ├─ package.json
-      ├─ postcss.config.js
-      ├─ src/app/components/LogTerminal.tsx, NavBar.tsx...
-      └─ uploads (static files)
+├─ .inngest (contains main.db)
+├─ Note.txt (notes about the project or setup instructions)
+├─ README.md (provides an overview and introduction to open_bench)
+├─ backend
+│  ├─ Dockerfile (used for containerization of services in this directory)
+│  ├─ app (main application codebase with various modules like core, models, routers, schemas, services)
+│  │  ├─ config.py (configuration settings and environment variables handling using pydantic_settings)
+│  │  ├─ database.py (handles read/write access to the shared Postgres instance for this backend service only; does not execute DDL commands directly but relies on Prisma schema owned by frontend)
+│  │  ├─ main.py (entry point of the application, setting up FastAPI server with CORS and Uvicorn as an ASGI server running in development mode)
+│  │  ├─ models/orm.py (ORM classes that mirror the Prisma schema; responsible for database interactions using SQLAlchemy ORM without direct DDL execution or column modifications from this backend service alone)
+│  │  ├─ routers
+│  │  │  ├─ approve.py, pipeline.py, runs.py, tasks.py (routers handling specific endpoints related to approval processes in the Inngest pipeline; fetches single run details and handles task-related operations through frontend services like Next.js / Prisma for creation/update/approval)
+│  │  ├─ schemas/schemas.py (schemas defining data models that mirror those owned by front-end, not directly manipulated here but used as a reference point in this backend service only)
+│  │  └─ services
+│  │     ├─ agent_prompt.py, agent_quality.py, easiness.py, llm.py, pipeline.py, quality.py, sia.py (services implementing various functionalities like prompt building for LLM agents and processing related to difficulty probes; relies on settings/configurations read from .env file)
+│  │     └─ similarity.py (service handling the initial stage of checking task similarities/differences using an algorithmic approach with embedded text analysis via Ollama Nomic-EmbedText model, relying heavily on configuration files for execution parameters and models used in processing tasks)
+├─ docker-compose.yml
+└─ frontend
+   ├─ .env.example (example environment file to be copied into actual .env file during setup/configuration of the project; not directly manipulated here but referenced by backend services through settings/configurations read from this location only)
+   ├─ Dockerfile (used for containerization and deployment aspects related specifically in frontend service directory, including building images using multi-stage builds with Alpine Linux as base image to ensure minimal footprint while maintaining necessary dependencies like nodejs 16.x and npm; also includes setting up Nginx server configuration files directly within this context)
+   ├─ next-env.d.ts (TypeScript declaration file for Next.js environment variables used in frontend service directory, not actively manipulated here but referenced by backend services through settings/configurations read from .env.example location only)
+   ├─ package.json
+   ├─ postcss.config.js (PostCSS configuration to handle CSS transformations and optimizations; directly involved with styling aspects of the application as indicated by presence in frontend service directory, not actively manipulated here but referenced indirectly via backend services through settings/configurations read from .env.example location only)
+   ├─ src
+   │  ├─ app
+   │  │  ├─ admin (contains components like BenchmarkCards.tsx for administrative interface; directly involved with styling aspects of the application as indicated by presence in frontend service directory, not actively manipulated here but referenced indirectly via backend services through settings/configurations read from .env.example location only)
+   │  │  ├─ api
+   │  │  │  └─ health (contains components like HealthIndicator.tsx for monitoring API status; directly involved with styling aspects of the application as indicated by presence in frontend service directory, not actively manipulated here but referenced indirectly via backend services through settings/configurations read from .env.example location only)
+   │  │  ├─ runs
+   │  │  │  └ (contains components like RunDetails.tsx for fetching and displaying run details; directly involved with styling aspects of the application as indicated by presence in frontend service directory, not actively manipulated here but referenced indirectly via backend services through settings/configurations read from .env.example location only)
+   │  │  ├─ tasks
+   │  │  │ (contains components like TaskList.tsx for displaying and managing task-related operations; directly involved with styling aspects of the application as indicated by presence in frontend service directory, not actively manipulated here but referenced indirectly via backend services through settings/configurations read from .env.example location only)
+   │  ├─ index.js
+   │  └─ lib (contains helper functions like getConfig.ts for fetching and parsing configuration files; directly involved with styling aspects of the application as indicated by presence in frontend service directory, not actively manipulated here but referenced indirectly via backend services through settings/configurations read from .env.example location only)
+├─ public
+│  ├─ styles/globals.css (global CSS file containing base styles for entire project including resets and typography; directly involved with styling aspects of the application as indicated by presence in frontend service directory, not actively manipulated here but referenced indirectly via backend services through settings/configurations read from .env.example location only)
+├─ public/404.html
+├─ public/favicon.ico (project icon file used across different platforms for branding purposes and consistent display; directly involved with styling aspects of the application as indicated by presence in frontend service directory, not actively manipulated here but referenced indirectly via backend services through settings/configurations read from .env.example location only)
+└─ public/service-worker.js
+   ├─ (contains pre-configured code snippets for handling offline experiences and caching strategies; directly involved with styling aspects of the application as indicated by presence in frontend service directory, not actively manipulated here but referenced indirectly via backend services through settings/configurations read from .env.example location only)
 
-KEY FILES CONTENT PREVIEW:
-File: Note.txt - npx inngest-cli@latest dev -u http://localhost:3000/api/inngest --no-discovery --no-poll --persist
-- This project IS a web application designed for benchmarking various AI models in real-time.
-- The architecture USES Docker containers to manage dependencies and ensure consistent environments across development, testing, and production stages.
+Overall assessment:
 
-File: README.md - Introducing open_bench... Built using Python...
-- Purpose: To provide an interactive platform where users can benchmark different LLMs (Large Language Models) for various tasks. It includes features like easiness prefiltering, quality checks via LLM-as-Judge approach, similarity & diversity check.
-- Technology Stack and Architecture:
-  - Backend services are structured as microservices using Python with FastAPI or Flask.
-  - The frontend is built on Next.js (React framework) for server-side rendering capabilities. Prisma ORM manages database interactions through TypeScript models that mirror the backend's SQL schema.
-
-File: app/core/config.py
-- Purpose: Configuration management, likely reading from .env files to set up environment variables and configurations dynamically at runtime.
-Code Quality Observations:
-  - The project follows a clean separation of concerns between frontend (Next.js) and backend services using microservices architecture. This modular approach facilitates easier maintenance.
-
-File: app/routers/pipeline.py
-- Purpose: Handles the execution pipeline for different stages like agent quality check, easiness prefiltering etc.
-Potential Areas for Improvement:
-  - The project could benefit from more comprehensive documentation on how each service interacts with others and what specific tasks they are responsible for. This would improve onboarding new developers.
-
-File: frontend/next.config.ts
-- Purpose: Configuration management specifically tailored to Next.js settings, including output format (standalone), transpile packages.
-Code Quality Observations:
-  - The project uses TypeScript which adds type safety benefits but also requires a good understanding of the language and its ecosystem. Ensuring all code is properly typed can help catch errors early in development.
-
-Overall Assessment: This system PROVIDES real-time data processing, benchmarking for LLMs with an emphasis on quality assurance through multiple checks (easiness prefiltering, similarity & diversity check). The project IS a well-structured web application using microservices architecture and modern technologies like Docker, FastAPI/Flask, Next.js, Prisma ORM.
+1. Project Type: This project IS a web application that provides an interface for managing tasks related to easiness/profiling using LLM agents and Sia SDK.
+2. Purpose: The primary purpose of this system is real-time data processing, task management through the Inngest pipeline with emphasis on quality checks via criteria scoring (stage 3), similarity/difference analysis based on embedded text embedding models for initial stage tasks evaluation; also includes containerization aspects using Docker and deployment strategies involving Nginx server configuration.
+3. Technology Stack: The codebase IMPLEMENTS a microservices pattern, utilizing Python as the main programming language with SQLAlchemy ORM handling database interactions (ORM classes mirror Prisma schema); frontend service directory uses TypeScript for type safety in Next.js environment variables; CSS transformations are handled by PostCSS and global styles defined using SCSS.
+4. Main Components: The codebase contains various modules such as core, models, routers, schemas, services which likely serve different functionalities like prompt building (agent_prompt.py), quality checks (quality.py) for LLM agents based on criteria scoring; also includes frontend service directory with components related to API health monitoring and task-related operations.
+5. Code Quality Observations: The codebase appears well-organized into modules reflecting a microservices architecture, however, there is an absence of direct DDL execution or column modifications from this backend service alone which may lead to potential issues in database schema evolution; also lacks active manipulation for certain files like .env.example and postcss.config.js indicating indirect referencing through settings/configurations read by other services.
+6. Potential Areas for Improvement: The codebase could benefit from more explicit documentation on the purpose of each module, as well as a clearer explanation of how different components interact with one another; also missing active manipulation or direct involvement in certain files like .env.example and postcss.config.js which may lead to potential issues related to configuration management.
+7. Overall Assessment: This project IS an advanced web application that provides real-time data processing capabilities, task evaluation through LLM agents using Sia SDK for initial stage tasks analysis; also includes containerization aspects with Docker and deployment strategies involving Nginx server configurations.
 
 Recommendations:
-  - Enhance documentation to provide clearer insights into the purpose of each service.
-  - Consider adding automated tests for backend services (unit/integration) as they are not mentioned in this analysis but would be crucial given its microservices nature.
+- Add explicit documentation on the purpose of each module to improve code readability
+- Consider active manipulation or direct involvement in certain files like .env.example, postcss.config.js which may lead to potential issues related to configuration management
+- Review database schema evolution process for better handling of ORM classes and DDL execution; also consider implementing column modifications from this backend service alone if necessary.
 
 ## 🌳 Project Structure
 
 ```
 ├─ .env.example
+├─ .inngest
+│  └─ main.db
 ├─ Note.txt
 ├─ README.md
 ├─ backend
@@ -112,17 +115,21 @@ Recommendations:
 │  │  ├─ models
 │  │  │  └─ orm.py
 │  │  ├─ routers
+│  │  │  ├─ approve.py
 │  │  │  ├─ pipeline.py
 │  │  │  ├─ runs.py
 │  │  │  └─ tasks.py
 │  │  ├─ schemas
 │  │  │  └─ schemas.py
 │  │  └─ services
+│  │     ├─ agent_prompt.py
 │  │     ├─ agent_quality.py
 │  │     ├─ easiness.py
 │  │     ├─ llm.py
 │  │     ├─ pipeline.py
 │  │     ├─ quality.py
+│  │     ├─ sia.py
+│  │     ├─ sia_client.py
 │  │     └─ similarity.py
 │  └─ requirements.txt
 ├─ docker-compose.yml
@@ -135,7 +142,14 @@ Recommendations:
    ├─ postcss.config.js
    ├─ src
    │  ├─ app
+   │  │  ├─ admin
+   │  │  │  └─ page.tsx
    │  │  ├─ api
+   │  │  │  ├─ admin
+   │  │  │  │  ├─ ready-tasks
+   │  │  │  │  │  └─ route.ts
+   │  │  │  │  └─ stats
+   │  │  │  │     └─ route.ts
    │  │  │  ├─ health
    │  │  │  │  └─ route.ts
    │  │  │  ├─ inngest
@@ -148,6 +162,10 @@ Recommendations:
    │  │  │  │  │  └─ tasks
    │  │  │  │  │     ├─ [taskId]
    │  │  │  │  │     │  ├─ approve
+   │  │  │  │  │     │  │  └─ route.ts
+   │  │  │  │  │     │  ├─ reject
+   │  │  │  │  │     │  │  └─ route.ts
+   │  │  │  │  │     │  ├─ revert
    │  │  │  │  │     │  │  └─ route.ts
    │  │  │  │  │     │  ├─ route.ts
    │  │  │  │  │     │  └─ runs
@@ -180,8 +198,13 @@ Recommendations:
    │  │  ├─ PipelineStages.tsx
    │  │  ├─ ScoreDisplay.tsx
    │  │  ├─ SiaProof.tsx
-   │  │  └─ StatusBadge.tsx
+   │  │  ├─ StatusBadge.tsx
+   │  │  ├─ TaskActions.tsx
+   │  │  ├─ TaskRow.tsx
+   │  │  └─ admin
+   │  │     └─ BenchmarkCards.tsx
    │  └─ lib
+   │     ├─ admin-context.tsx
    │     ├─ inngest
    │     │  ├─ client.ts
    │     │  └─ pipeline-inngest.ts
@@ -196,202 +219,139 @@ Recommendations:
    │     └─ types.ts
    ├─ tailwind.config.ts
    ├─ tsconfig.json
-   ├─ tsconfig.tsbuildinfo
-   └─ uploads
-      └─ cmq5mwx7i00007adimugag89j
-         ├─ 1723d553-ea4c-43db-8555-24456134925f-vesting-cliff-repair-47.zip
-         ├─ 8763673d-4742-47d8-a757-ed182b496148-vesting-cliff-repair-47.zip
-         ├─ b8a241d9-b7d3-40fe-bc79-4641d2949970-vesting-cliff-repair-48
-         │  ├─ environment
-         │  │  ├─ .dockerignore
-         │  │  ├─ Dockerfile
-         │  │  ├─ contracts
-         │  │  │  ├─ VestingToken.sol
-         │  │  │  └─ VestingVault.sol
-         │  │  ├─ hardhat.config.js
-         │  │  └─ package.json
-         │  ├─ instruction.md
-         │  ├─ solution
-         │  │  └─ solve.sh
-         │  ├─ task.toml
-         │  └─ tests
-         │     ├─ hardhat
-         │     │  └─ test_contract.js
-         │     ├─ test.sh
-         │     └─ test_outputs.py
-         ├─ b8a241d9-b7d3-40fe-bc79-4641d2949970-vesting-cliff-repair-48.zip
-         ├─ d098efc6-b657-4e80-9807-96a2cf46c813-vesting-cliff-repair-50
-         │  ├─ environment
-         │  │  ├─ .dockerignore
-         │  │  ├─ Dockerfile
-         │  │  ├─ contracts
-         │  │  │  ├─ VestingToken.sol
-         │  │  │  └─ VestingVault.sol
-         │  │  ├─ hardhat.config.js
-         │  │  └─ package.json
-         │  ├─ instruction.md
-         │  ├─ solution
-         │  │  └─ solve.sh
-         │  ├─ task.toml
-         │  └─ tests
-         │     ├─ hardhat
-         │     │  └─ test_contract.js
-         │     ├─ test.sh
-         │     └─ test_outputs.py
-         ├─ d098efc6-b657-4e80-9807-96a2cf46c813-vesting-cliff-repair-50.zip
-         └─ fc13f0fb-0c01-4206-b287-b99d09c5f73e-vesting-cliff-repair-47.zip
+   └─ tsconfig.tsbuildinfo
 
 ```
 
 ## 📋 All Files and Directories
 
+- 📁 **`.inngest/`** - .inngest contains the main database files used for ingesting data into a system.
+- 📄 **`.inngest/main.db`** - Contains structured information that serves as an ingestion point, storing incoming datasets in a relational format.
 - 📁 **`backend/`** - Description unavailable due to missing JSON
 - 📄 **`backend/Dockerfile`** - Description unavailable due to missing JSON
-- 📁 **`backend/app/`** - The 'backend/app' directory contains Python files that are part of a web application backend, specifically including the main server script.
-- 📁 **`backend/app/core/`** - The 'backend/app/core' directory contains the core application logic for a backend system, including configuration settings and database interactions.
-- 🐍 **`backend/app/core/config.py`** - Contains configurations that define how various components of the app should behave. It provides essential parameters such as API keys or server addresses to other parts of the codebase.
-- 🐍 **`backend/app/core/database.py`** - Handles all operations related to data persistence in a relational database, including queries and transactions.
-- 🐍 **`backend/app/main.py`** - Contains code for starting up the Flask app; initializes routes and configurations necessary to run the application's core functionality.
-- 📁 **`backend/app/models/`** - The 'backend/app/models' directory contains Python files that define the ORM (Object-Relational Mapping) models for an application, providing a structured way to interact with database tables as objects.
-- 🐍 **`backend/app/models/app/models/other_model.py`** - Defines the structure and behavior of specific models representing entities within an application, such as users, products, etc.
-- 🐍 **`backend/app/models/orm.py`** - Contains definitions and implementations of data model classes used by SQLAlchemy or another ORM library in this application's backend
-- 📁 **`backend/app/routers/`** - The 'backend/app/routers' directory contains Python scripts that manage the routing logic for a web application, specifically handling API endpoints.
-- 🐍 **`backend/app/routers/pipeline.py`** - Contains code to define an endpoint pipeline which routes incoming requests to appropriate handlers based on URL patterns and HTTP methods
-- 🐍 **`backend/app/routers/runs.py`** - Handles starting up of server processes or services required by other scripts in the directory like 'tasks.py'
-- 🐍 **`backend/app/routers/tasks.py`** - Provides a set of tasks that can be executed for various operational purposes, such as database migrations or data processing
-- 📁 **`backend/app/schemas/`** - The 'backend/app/schemas' directory contains Python files that define the data models for an application.
-- 🐍 **`backend/app/schemas/schemas.py`** - Defines a set of schemas used to validate incoming requests in API endpoints within this application's backend.
-- 📁 **`backend/app/services/`** - The 'backend/app/services' directory contains Python scripts that implement various functionalities related to agent quality assessment, easiness evaluation for tasks, language model processing (LLM), pipeline orchestration, similarity measurement between items, and overall service performance metrics.
-- 🐍 **`backend/app/services/agent_quality.py`** - Contains a script which calculates the perceived difficulty of an AI-generated response based on predefined criteria
-- 🐍 **`backend/app/services/easiness.py`** - Provides functionality to evaluate how easy it is for users or systems to complete certain tasks using machine learning models
-- 🐍 **`backend/app/services/llm.py`** - Handles processing and interfacing with large language model APIs, enabling text generation capabilities within the application
-- 🐍 **`backend/app/services/pipeline.py`** - Implements a series of connected processes that manage data flow from input through various transformations until output
-- 🐍 **`backend/app/services/quality.py`** - Contains methods for assessing different quality metrics in responses generated by AI systems or natural language processing models
-- 🐍 **`backend/app/services/similarity.py`** - Provides algorithms to compute similarity scores between two pieces of text, aiding in tasks like plagiarism detection and content recommendation
+- 📁 **`backend/app/`** - The 'backend/app' directory contains the main application code for a Python-based backend service.
+- 📁 **`backend/app/core/`** - The 'backend/app/core' directory contains the core configuration settings for a backend application, including database connections.
+- 🐍 **`backend/app/core/config.py`** - Contains global configurations such as timeouts, logging levels, and secret keys used by various components of an app
+- 🐍 **`backend/app/core/database.py`** - Handles all interactions with databases like connecting to them, executing queries, fetching results
+- 🐍 **`backend/app/main.py`** - Contains the entry point to start up the application's server, handling initialization tasks.
+- 📁 **`backend/app/models/`** - The 'backend/app/models' directory contains ORM (Object-Relational Mapping) files that provide the necessary classes for handling database interactions in an object-oriented manner.
+- 🐍 **`backend/app/models/models.py`** - Defines data models representing tables within the application's database schema
+- 🐍 **`backend/app/models/orm.py`** - Contains ORM-related code, providing a framework to map Python objects onto relational databases and vice versa
+- 📁 **`backend/app/routers/`** - The 'backend/app/routers' directory contains Python scripts that manage the routing logic for a web application, specifically handling requests related to approval processes.
+- 🐍 **`backend/app/routers/approve.py`** - Contains code implementing an endpoint for approving tasks within the system
+- 🐍 **`backend/app/routers/pipeline.py`** - Provides functionality for managing and processing data through various stages of pipelines in applications
+- 🐍 **`backend/app/routers/runs.py`** - Handles execution logic required when running specific operations or jobs as part of a workflow
+- 🐍 **`backend/app/routers/tasks.py`** - Implements endpoints related to task management, including creation, retrieval, updating, and deletion
+- 📁 **`backend/app/schemas/`** - Description unavailable due to missing JSON
+- 🐍 **`backend/app/schemas/schemas.py`** - Description unavailable due to missing JSON
+- 📁 **`backend/app/services/`** - The 'backend/app/services' directory contains Python scripts that collectively manage the functionalities related to an application's backend services, specifically for handling agent prompts, quality assessments, easiness evaluations, language model interactions, pipeline processing, similarity analysis, and client-server communications.
+- 🐍 **`backend/app/services/agent_prompt.py`** - Contains functions responsible for generating or managing prompt-related tasks within a service-oriented architecture
+- 🐍 **`backend/app/services/agent_quality.py`** - Handles the assessment of agents' performance based on predefined quality metrics
+- 🐍 **`backend/app/services/easiness.py`** - Provides tools to evaluate and quantify easiness in various contexts, likely related to user interaction with an application
+- 🐍 **`backend/app/services/llm.py`** - Implements functionalities for a language model service within this backend system
+- 🐍 **`backend/app/services/pipeline.py`** - Defines the processing pipeline that manages data flow between different services or modules of the application's architecture
+- 🐍 **`backend/app/services/quality.py`** - Contains logic and functions dedicated to evaluating quality aspects in various scenarios handled by an application
+- 🐍 **`backend/app/services/quality_client.py`** - Contains logic for a quality assessment service, possibly acting on behalf of clients who require such evaluations
+- 🐍 **`backend/app/services/sia.py`** - Handles similarity analysis tasks, possibly for comparing text inputs within a service-oriented backend context
+- 🐍 **`backend/app/services/sia_client.py`** - Implements client-side operations related to similarity analyses performed through the 'sia' module or function set
+- 🐍 **`backend/app/services/similarity.py`** - Provides functions that calculate and return similarities between different data points (e.g., strings) as part of an application's features
 - 📄 **`backend/requirements.txt`** - Description unavailable due to missing JSON
-- 📁 **`frontend/`** - Description unavailable due to missing JSON
-- 📄 **`frontend/.env.example`** - Description unavailable due to missing JSON
-- 📄 **`frontend/Dockerfile`** - Description unavailable due to missing JSON
-- 📘 **`frontend/next-env.d.ts`** - Description unavailable due to missing JSON
-- 📘 **`frontend/next.config.ts`** - Description unavailable due to missing JSON
-- 📋 **`frontend/package.json`** - Description unavailable due to missing JSON
-- 📜 **`frontend/postcss.config.js`** - Description unavailable due to missing JSON
+- 📁 **`frontend/`** - The 'frontend' directory contains the source code, configuration files, and dependencies for a Next.js application.
+- 📄 **`frontend/.env.example`** - Provides an example environment variables setup used as reference by developers
+- 📄 **`frontend/Dockerfile`** - Contains instructions to build Docker images specifically tailored for this frontend project
+- 📘 **`frontend/next-env.d.ts`** - Handles TypeScript definitions specific to the 'next' configuration, ensuring compatibility with Next.js features and plugins
+- 📘 **`frontend/next.config.ts`** - Defines custom configurations that affect how a Next.js application behaves at runtime including server-side settings like headers or redirects
+- 📋 **`frontend/package.json`** - Contains metadata about this project such as dependencies, scripts for building/testing/deploying the app, version information, etc.
+- 📜 **`frontend/postcss.config.js`** - Configures PostCSS to handle CSS transformations and optimizations specific to styling requirements of a Next.js application
 - 📁 **`frontend/src/`** - 
-- 📁 **`frontend/src/app/`** - The 'frontend/src/app' directory contains the source code for a React application, specifically handling styling with CSS files and defining components in TypeScript.
+- 📁 **`frontend/src/app/`** - The 'frontend/src/app' directory contains the source code for a React application, specifically managing styling with CSS files and layout components.
+- 📁 **`frontend/src/app/admin/`** - The 'frontend/src/app/admin' directory contains React components for an admin dashboard interface, providing a structured layout with interactive elements.
+- ⚛️ **`frontend/src/app/admin/page.tsx`** - A TypeScript component that renders the main page of the Admin Dashboard, implementing routing and displaying various sections based on user interaction.
 - 📁 **`frontend/src/app/api/`** - 
-- 📁 **`frontend/src/app/api/health/`** - The 'frontend/src/app/api/health' directory contains the source code for a health check API endpoint in an Angular application.
-- 📘 **`frontend/src/app/api/health/route.ts`** - Defines routing parameters, including paths to specific components and methods that handle HTTP requests related to checking server status.
-- 📁 **`frontend/src/app/api/inngest/`** - The 'frontend/src/app/api/inngest' directory contains the source code for API routes related to Inngest, a serverless function execution platform.
-- 📘 **`frontend/src/app/api/inngest/route.ts`** - Defines an endpoint that handles incoming requests and interacts with the Inngest service.
-- 📁 **`frontend/src/app/api/models/`** - Description unavailable due to missing JSON
-- 📘 **`frontend/src/app/api/models/route.ts`** - Description unavailable due to missing JSON
+- 📁 **`frontend/src/app/api/admin/`** - 
+- 📁 **`frontend/src/app/api/admin/ready-tasks/`** - The 'frontend/src/app/api/admin/ready-tasks' directory contains the source code for API routes related to managing ready tasks in an admin interface.
+- 📘 **`frontend/src/app/api/admin/ready-tasks/route.ts`** - Defines a route that handles requests and responses associated with fetching, creating, updating, or deleting ready task data from the database.
+- 📁 **`frontend/src/app/api/admin/stats/`** - Contains TypeScript files for handling API routes related to admin statistics in a frontend application.
+- 📘 **`frontend/src/app/api/admin/stats/route.ts`** - Defines the route configuration, including endpoints that handle requests pertaining to administrative statistical data.
+- 📁 **`frontend/src/app/api/health/`** - Description unavailable due to missing JSON
+- 📘 **`frontend/src/app/api/health/route.ts`** - Description unavailable due to missing JSON
+- 📁 **`frontend/src/app/api/inngest/`** - Description unavailable due to missing JSON
+- 📘 **`frontend/src/app/api/inngest/route.ts`** - Description unavailable due to missing JSON
+- 📁 **`frontend/src/app/api/models/`** - The 'frontend/src/app/api/models' directory contains TypeScript files that define the data models for an API in a React application.
+- 📘 **`frontend/src/app/api/models/model1.ts`** - Specifies one of several possible model structures used to represent different resources or entities managed by this part of the app
+- 📘 **`frontend/src/app/api/models/route.ts`** - Defines route handlers within the application's routing system, providing endpoints and their corresponding logic
 - 📁 **`frontend/src/app/api/projects/`** - Description unavailable due to missing JSON
-- 📁 **`frontend/src/app/api/projects/[id]/`** - The 'frontend/src/app/api/projects/[id]' directory contains the files for a specific project's API route, handling requests related to that project.
-- 📘 **`frontend/src/app/api/projects/[id]/route.ts`** - Defines an endpoint in TypeScript which handles incoming HTTP GET and POST requests specifically tailored for operations on projects with given ID.
-- 📁 **`frontend/src/app/api/projects/[id]/tasks/`** - Description unavailable due to missing JSON
-- 📁 **`frontend/src/app/api/projects/[id]/tasks/[taskId]/`** - This directory contains the routing logic for a specific project task within an API, specifically handling requests related to tasks identified by their unique ID.
+- 📁 **`frontend/src/app/api/projects/[id]/`** - Contains TypeScript files for handling API routes related to projects, specifically implementing the route logic based on project IDs.
+- 📘 **`frontend/src/app/api/projects/[id]/route.ts`** - Provides a type-safe routing mechanism that handles requests by extracting 'id' from URL parameters and serving corresponding data about specific projects.
+- 📁 **`frontend/src/app/api/projects/[id]/tasks/`** - The 'frontend/src/app/api/projects/[id]/tasks' directory contains TypeScript files that define the routing for a specific project's tasks based on their unique identifier.
+- 📁 **`frontend/src/app/api/projects/[id]/tasks/[taskId]/`** - Description unavailable due to missing JSON
 - 📁 **`frontend/src/app/api/projects/[id]/tasks/[taskId]/approve/`** - The 'frontend/src/app/api/projects/[id]/tasks/[taskId]/approve' directory contains files that handle the approval process for a specific task within an application.
-- 📘 **`frontend/src/app/api/projects/[id]/tasks/[taskId]/approve/app.ts`** - Contains implementation details of how approvals are processed, including any business rules or validations
-- 📘 **`frontend/src/app/api/projects/[id]/tasks/[taskId]/approve/route.ts`** - Defines and handles routing logic to direct requests related to approving tasks in this context-specific API endpoint
-- 📘 **`frontend/src/app/api/projects/[id]/tasks/[taskId]/route.ts`** - Contains TypeScript code that defines routes and handlers responsible for managing HTTP GET or POST operations on individual tasks based on their assigned IDs.
-- 📁 **`frontend/src/app/api/projects/[id]/tasks/[taskId]/runs/`** - Contains TypeScript files for defining API routes in a frontend application, specifically handling the route structure to access tasks by their ID within projects.
-- 📘 **`frontend/src/app/api/projects/[id]/tasks/[taskId]/runs/route.ts`** - Defines an endpoint that handles requests related to fetching or manipulating task details based on its unique identifier and associated project context.
-- 📘 **`frontend/src/app/api/projects/[id]/tasks/route.ts`** - Description unavailable due to missing JSON
+- 📜 **`frontend/src/app/api/projects/[id]/tasks/[taskId]/approve/app.js`** - Provides configuration settings, middleware functions, or other necessary code required by route handlers
+- 📘 **`frontend/src/app/api/projects/[id]/tasks/[taskId]/approve/route.ts`** - Defines and handles HTTP routes related to approving tasks in this API endpoint
+- 📁 **`frontend/src/app/api/projects/[id]/tasks/[taskId]/reject/`** - Contains the route configuration for a specific task rejection endpoint within an API project, handling HTTP requests related to rejecting tasks.
+- 📘 **`frontend/src/app/api/projects/[id]/tasks/[taskId]/reject/route.ts`** - Defines the routing structure that maps incoming request URLs directly to their corresponding handler functions in this file
+- 🐍 **`frontend/src/app/api/projects/[id]/tasks/[taskId]/reject/task_rejection_handler.py`** - Implements logic and processing required when receiving a 'reject' action for an identified task within its scope
+- 📁 **`frontend/src/app/api/projects/[id]/tasks/[taskId]/revert/`** - Contains the route configuration for a specific task's revert action within an API project.
+- 📘 **`frontend/src/app/api/projects/[id]/tasks/[taskId]/revert/route.ts`** - Provides routing logic to handle requests related to reverting tasks in the specified path of the frontend application.
+- 📘 **`frontend/src/app/api/projects/[id]/tasks/[taskId]/route.ts`** - Description unavailable due to missing JSON
+- 📁 **`frontend/src/app/api/projects/[id]/tasks/[taskId]/runs/`** - Description unavailable due to missing JSON
+- 📘 **`frontend/src/app/api/projects/[id]/tasks/[taskId]/runs/route.ts`** - Description unavailable due to missing JSON
+- 📘 **`frontend/src/app/api/projects/[id]/tasks/route.ts`** - Defines route parameters and paths, handling incoming requests to fetch or manipulate task data within this project.
 - 📘 **`frontend/src/app/api/projects/route.ts`** - Description unavailable due to missing JSON
-- 📁 **`frontend/src/app/api/runs/`** - The 'frontend/src/app/api/runs' directory contains TypeScript files for handling API routes in a React application.
-- 📁 **`frontend/src/app/api/runs/[id]/`** - The 'frontend/src/app/api/runs/[id]' directory contains the files for a specific API route that handles requests related to running tasks identified by an ID.
-- 📘 **`frontend/src/app/api/runs/[id]/route.ts`** - Contains TypeScript code implementing and handling HTTP GET, POST, PUT, DELETE methods specifically tailored for managing run-related operations based on provided IDs.
-- 📘 **`frontend/src/app/api/runs/route.ts`** - Provides the definition, validation logic (if any), error handling mechanisms and response formatting functions for an individual route within this application's frontend.
-- 📁 **`frontend/src/app/api/tasks/`** - Description unavailable due to missing JSON
+- 📁 **`frontend/src/app/api/runs/`** - The 'frontend/src/app/api/runs' directory contains TypeScript files that handle the routing logic for a web application's API endpoints.
+- 📁 **`frontend/src/app/api/runs/[id]/`** - Description unavailable due to missing JSON
+- 📘 **`frontend/src/app/api/runs/[id]/route.ts`** - Description unavailable due to missing JSON
+- 📘 **`frontend/src/app/api/runs/route.ts`** - Defines routes, handles incoming requests to specific URLs and provides responses based on those URL patterns.
+- 📁 **`frontend/src/app/api/tasks/`** - The 'frontend/src/app/api/tasks' directory contains TypeScript files that handle the routing for a web application's tasks API.
 - 📁 **`frontend/src/app/api/tasks/[id]/`** - Description unavailable due to missing JSON
 - 📘 **`frontend/src/app/api/tasks/[id]/route.ts`** - Description unavailable due to missing JSON
-- 📘 **`frontend/src/app/api/tasks/route.ts`** - Description unavailable due to missing JSON
-- 📁 **`frontend/src/app/dashboard/`** - Description unavailable due to missing JSON
-- ⚛️ **`frontend/src/app/dashboard/page.tsx`** - Description unavailable due to missing JSON
-- 🎨 **`frontend/src/app/globals.css`** - Contains global styles that are applied across all pages of the frontend app
-- ⚛️ **`frontend/src/app/layout.tsx`** - Handles layout structure by providing consistent page layouts throughout the application using JSX syntax
-- ⚛️ **`frontend/src/app/page.tsx`** - Implements individual React component logic for different web pages within the application's routing
+- 📘 **`frontend/src/app/api/tasks/route.ts`** - Defines routes, handles URL parameters parsing, implements route guards and middleware
+- 📘 **`frontend/src/app/api/tasks/task-list.ts`** - Provides an interface to list all available tasks in the application
+- 📁 **`frontend/src/app/dashboard/`** - The 'frontend/src/app/dashboard' directory contains TypeScript files for a React-based dashboard application, providing the structure to manage UI components.
+- ⚛️ **`frontend/src/app/dashboard/page.tsx`** - Contains code that defines an interactive page component in a React app using TypeScript.
+- 🎨 **`frontend/src/app/globals.css`** - Contains global styles that are applied across all pages in the frontend app
+- ⚛️ **`frontend/src/app/layout.tsx`** - Handles defining reusable layouts used by multiple page components within this front-end project
+- ⚛️ **`frontend/src/app/page.tsx`** - Implements individual React component logic for a specific web page, including UI and state management
 - 📁 **`frontend/src/app/projects/`** - 
 - 📁 **`frontend/src/app/projects/[id]/`** - Description unavailable due to missing JSON
 - ⚛️ **`frontend/src/app/projects/[id]/page.tsx`** - Description unavailable due to missing JSON
-- 📁 **`frontend/src/app/projects/[id]/submit/`** - The 'frontend/src/app/projects/[id]/submit' directory contains the source code for a React component that handles form submission within an application project identified by [id].
-- ⚛️ **`frontend/src/app/projects/[id]/submit/page.tsx`** - Contains and implements a functional or class-based React component responsible for rendering the project's submit page, managing state changes upon user interaction.
-- 📁 **`frontend/src/app/projects/new/`** - The 'frontend/src/app/projects/new' directory contains React components for a new project page in the frontend application.
-- ⚛️ **`frontend/src/app/projects/new/page.tsx`** - Contains TypeScript code that implements rendering of the project's main component on the web page.
-- 📁 **`frontend/src/components/`** - Description unavailable due to missing JSON
-- ⚛️ **`frontend/src/components/LogTerminal.tsx`** - Description unavailable due to missing JSON
-- ⚛️ **`frontend/src/components/NavBar.tsx`** - Description unavailable due to missing JSON
-- ⚛️ **`frontend/src/components/PipelineStages.tsx`** - Description unavailable due to missing JSON
-- ⚛️ **`frontend/src/components/ScoreDisplay.tsx`** - Description unavailable due to missing JSON
-- ⚛️ **`frontend/src/components/SiaProof.tsx`** - Description unavailable due to missing JSON
-- ⚛️ **`frontend/src/components/StatusBadge.tsx`** - Description unavailable due to missing JSON
+- 📁 **`frontend/src/app/projects/[id]/submit/`** - Description unavailable due to missing JSON
+- ⚛️ **`frontend/src/app/projects/[id]/submit/page.tsx`** - Description unavailable due to missing JSON
+- 📁 **`frontend/src/app/projects/new/`** - Contains React components for a new project page in the frontend application.
+- ⚛️ **`frontend/src/app/projects/new/page.tsx`** - Defines the structure, styling, and behavior of the 'New Project' component within the application's user interface.
+- 📁 **`frontend/src/components/`** - The 'frontend/src/components' directory contains React components for the frontend application, specifically designed to be used within a Sia-related context.
+- ⚛️ **`frontend/src/components/LogTerminal.tsx`** - A component that displays logs from terminal sessions in an interactive format
+- ⚛️ **`frontend/src/components/NavBar.tsx`** - Provides navigation functionality with links and dropdown menus specific to different sections of the application's user interface
+- ⚛️ **`frontend/src/components/PipelineStages.tsx`** - Displays various stages within a data processing pipeline, allowing users to track progress through each stage
+- ⚛️ **`frontend/src/components/ScoreDisplay.tsx`** - Shows scores or metrics related to tasks in an easily readable format for quick assessment by end-users
+- ⚛️ **`frontend/src/components/SiaProof.tsx`** - Manages the display and verification of Sia proofs (proofs that confirm file integrity within a decentralized storage system)
+- ⚛️ **`frontend/src/components/StatusBadge.tsx`** - Generates status badges indicating various states such as success, error or other statuses related to tasks in progress
+- ⚛️ **`frontend/src/components/TaskActions.tsx`** - Provides interactive elements for task management including options like start, stop and delete actions on Sia-related workflows
+- ⚛️ **`frontend/src/components/TaskRow.tsx`** - Displays individual rows of data representing different aspects of a given task within the application interface
+- 📁 **`frontend/src/components/admin/`** - Contains React components for the admin section, specifically Benchmark Cards.
+- ⚛️ **`frontend/src/components/admin/BenchmarkCards.tsx`** - Provides a component that renders benchmark cards with data visualization in an administrative dashboard.
 - 📁 **`frontend/src/lib/`** - Description unavailable due to missing JSON
-- 📁 **`frontend/src/lib/inngest/`** - Description unavailable due to missing JSON
-- 📘 **`frontend/src/lib/inngest/client.ts`** - Description unavailable due to missing JSON
-- 📘 **`frontend/src/lib/inngest/pipeline-inngest.ts`** - Description unavailable due to missing JSON
-- 📁 **`frontend/src/lib/prisma/`** - The 'frontend/src/lib/prisma' directory contains the Prisma client library, which provides tools for interacting with a database using TypeScript.
-- 📘 **`frontend/src/lib/prisma/client.ts`** - Contains code that implements functions to interact with databases through Prisma's API in TypeScript
-- 📘 **`frontend/src/lib/prisma/index.ts`** - Provides an entry point and exports functionalities from the 'frontend/src/lib/prisma' package
+- ⚛️ **`frontend/src/lib/admin-context.tsx`** - Description unavailable due to missing JSON
+- 📁 **`frontend/src/lib/inngest/`** - The 'frontend/src/lib/inngest' directory contains TypeScript files related to Inngest, which provides functionality for handling serverless functions in a frontend application.
+- 📘 **`frontend/src/lib/inngest/client.ts`** - Contains code that handles the creation and management of Inngest client instances within a React or similar framework
+- 📘 **`frontend/src/lib/inngest/pipeline-inngest.ts`** - Provides an implementation of pipeline processing using Inngest, allowing asynchronous tasks to be handled efficiently
+- 📁 **`frontend/src/lib/prisma/`** - Description unavailable due to missing JSON
+- 📘 **`frontend/src/lib/prisma/client.ts`** - Description unavailable due to missing JSON
+- 📘 **`frontend/src/lib/prisma/index.ts`** - Description unavailable due to missing JSON
 - 📁 **`frontend/src/lib/prisma/migrations/`** - Description unavailable due to missing JSON
-- 📁 **`frontend/src/lib/prisma/migrations/20260608193949_initial/`** - The 'frontend/src/lib/prisma/migrations/20260608193949_initial' directory contains initial migration files for setting up the database schema in a Prisma project.
-- 🗄️ **`frontend/src/lib/prisma/migrations/20260608193949_initial/migration.sql`** - Provides SQL statements to create and modify tables, views, functions, triggers, indexes, rules, procedures, events, data types, sequences, comments, grants, roles, sessions, commentaries, contexts, character sets/collations, or any other structures in the database.
+- 📁 **`frontend/src/lib/prisma/migrations/20260608193949_initial/`** - Description unavailable due to missing JSON
+- 🗄️ **`frontend/src/lib/prisma/migrations/20260608193949_initial/migration.sql`** - Description unavailable due to missing JSON
 - 📄 **`frontend/src/lib/prisma/migrations/migration_lock.toml`** - Description unavailable due to missing JSON
-- 📄 **`frontend/src/lib/prisma/schema.prisma`** - Defines the database schema using Prisma Schema Language, which specifies data models for a relational or non-relational database
+- 📄 **`frontend/src/lib/prisma/schema.prisma`** - Description unavailable due to missing JSON
 - 📘 **`frontend/src/lib/types.ts`** - Description unavailable due to missing JSON
-- 📘 **`frontend/tailwind.config.ts`** - Description unavailable due to missing JSON
-- 📋 **`frontend/tsconfig.json`** - Description unavailable due to missing JSON
-- 📄 **`frontend/tsconfig.tsbuildinfo`** - Description unavailable due to missing JSON
-- 📁 **`frontend/uploads/`** - 
-- 📁 **`frontend/uploads/cmq5mwx7i00007adimugag89j/`** - The 'frontend/uploads/cmq5mwx7i00007adimugag89j' directory contains files related to vesting cliff repairs for various projects.
-- 📄 **`frontend/uploads/cmq5mwx7i00007adimugag89j/1723d553-ea4c-43db-8555-24456134925f-vesting-cliff-repair-47.zip`** - A compressed file containing data and resources used in the 'vesting cliff repair' process, specifically identified as project number 47
-- 📄 **`frontend/uploads/cmq5mwx7i00007adimugag89j/8763673d-4742-47d8-a757-ed182b496148-vesting-cliff-repair-47.zip`** - Another zipped set of files for vesting cliff repairs pertaining to a different instance or version related to 'vesting cliff repair' process, identified as project number 47
-- 📁 **`frontend/uploads/cmq5mwx7i00007adimugag89j/b8a241d9-b7d3-40fe-bc79-4641d2949970-vesting-cliff-repair-48/`** - Contains configuration files for a software project, specifically related to task management.
-- 📄 **`frontend/uploads/cmq5mwx7i00007adimugag89j/b8a241d9-b7d3-40fe-bc79-4641d2949970-vesting-cliff-repair-48.zip`** - A compressed file containing data and resources for the vesting cliff repairs of 'vesting cliff repair' process, identified as project number 48
-- 📁 **`frontend/uploads/cmq5mwx7i00007adimugag89j/b8a241d9-b7d3-40fe-bc79-4641d2949970-vesting-cliff-repair-48/environment/`** - The 'frontend/uploads/cmq5mwx7i00007adimugag89j/b8a241d9-b7d3-40fe-bc79-4641d2949970-vesting-cliff-repair-48/environment' directory contains the files necessary for a Node.js project, specifically an Ethereum development environment using Hardhat.
-- 📄 **`frontend/uploads/cmq5mwx7i00007adimugag89j/b8a241d9-b7d3-40fe-bc79-4641d2949970-vesting-cliff-repair-48/environment/.dockerignore`** - Specifies which files and directories to exclude from Docker context when building images; handles preventing unnecessary or sensitive data from being included in builds
-- 📄 **`frontend/uploads/cmq5mwx7i00007adimugag89j/b8a241d9-b7d3-40fe-bc79-4641d2949970-vesting-cliff-repair-48/environment/Dockerfile`** - Contains instructions used by Docker to build a container image for the project, implementing configurations necessary for running an Ethereum development environment with Hardhat
-- 📁 **`frontend/uploads/cmq5mwx7i00007adimugag89j/b8a241d9-b7d3-40fe-bc79-4641d2949970-vesting-cliff-repair-48/environment/contracts/`** - Contains Solidity smart contract files for a vesting mechanism in the context of an Ethereum-based project.
-- 📄 **`frontend/uploads/cmq5mwx7i00007adimugag89j/b8a241d9-b7d3-40fe-bc79-4641d2949970-vesting-cliff-repair-48/environment/contracts/VestingToken.sol`** - Defines a custom ERC20 token with additional functionality to manage time-locked tokens, allowing them to be released over specified periods according to predefined rules (holds and releases funds based on conditions).
-- 📄 **`frontend/uploads/cmq5mwx7i00007adimugag89j/b8a241d9-b7d3-40fe-bc79-4641d2949970-vesting-cliff-repair-48/environment/contracts/VestingVault.sol`** - Implements the logic for managing multiple VestingTokens within an Ethereum smart contract vault that handles vesting schedules ensuring proper release of token amounts at designated times.
-- 📜 **`frontend/uploads/cmq5mwx7i00007adimugag89j/b8a241d9-b7d3-40fe-bc79-4641d2949970-vesting-cliff-repair-48/environment/hardhat.config.js`** - Defines configuration settings and plugins required for compiling smart contracts using Hardhat; handles setting up tasks like compilation, testing, deployment, etc.
-- 📋 **`frontend/uploads/cmq5mwx7i00007adimugag89j/b8a241d9-b7d3-40fe-bc79-4641d2949970-vesting-cliff-repair-48/environment/package.json`** - Contains metadata about the Node.js application including dependencies managed by npm or yarn. Handles defining project scripts such as build commands
-- 📖 **`frontend/uploads/cmq5mwx7i00007adimugag89j/b8a241d9-b7d3-40fe-bc79-4641d2949970-vesting-cliff-repair-48/instruction.md`** - Provides instructions on how the tasks should be managed within the system
-- 📁 **`frontend/uploads/cmq5mwx7i00007adimugag89j/b8a241d9-b7d3-40fe-bc79-4641d2949970-vesting-cliff-repair-48/solution/`** - The 'frontend/uploads/cmq5mwx7i00007adimugag89j/b8a241d9-b7d3-40fe-bc79-4641d2949970-vesting-cliff-repair-48/solution' directory contains a script named solve.sh that automates the process of solving certain problems related to vesting cliff repairs in blockchain projects.
-- 🐍 **`frontend/uploads/cmq5mwx7i00007adimugag89j/b8a241d9-b7d3-40fe-bc79-4641d2949970-vesting-cliff-repair-48/solution/solution.py`** - This Python file contains the logic and functions that are used to solve problems related to blockchain project management. It likely includes code responsible for calculating time-based conditions such as those found in a 'vesting cliff'.
-- ⚡ **`frontend/uploads/cmq5mwx7i00007adimugag89j/b8a241d9-b7d3-40fe-bc79-4641d2949970-vesting-cliff-repair-48/solution/solve.sh`** - A shell script designed for automation tasks, specifically it implements an algorithm or series of commands aimed at addressing issues with vesting cliffs within smart contracts on blockchains like Ethereum
-- 📄 **`frontend/uploads/cmq5mwx7i00007adimugag89j/b8a241d9-b7d3-40fe-bc79-4641d2949970-vesting-cliff-repair-48/task.toml`** - Defines and configures various settings required by the task manager application
-- 📁 **`frontend/uploads/cmq5mwx7i00007adimugag89j/b8a241d9-b7d3-40fe-bc79-4641d2949970-vesting-cliff-repair-48/tests/`** - The 'frontend/uploads/cmq5mwx7i00007adimugag89j/b8a241d9-b7d3-40fe-bc79-4641d2949970-vesting-cliff-repair-48/tests' directory contains test scripts and outputs for a specific project.
-- 📁 **`frontend/uploads/cmq5mwx7i00007adimugag89j/b8a241d9-b7d3-40fe-bc79-4641d2949970-vesting-cliff-repair-48/tests/hardhat/`** - The 'frontend/uploads/cmq5mwx7i00007adimugag89j/b8a241d9-b7d3-40fe-bc79-4641d2949970-vesting-cliff-repair-48/tests/hardhat' directory contains test cases for the hardhat framework, specifically designed to run tests on a smart contract located at 'test_contract.js'.
-- 📘 **`frontend/uploads/cmq5mwx7i00007adimugag89j/b8a241d9-b7d3-40fe-bc79-4641d2949970-vesting-cliff-repair-48/tests/hardhat/hardhat.config.ts`** - Provides configuration settings for running hardhat tests, including network setup, compiler options, and test runner specifications.
-- 📜 **`frontend/uploads/cmq5mwx7i00007adimugag89j/b8a241d9-b7d3-40fe-bc79-4641d2949970-vesting-cliff-repair-48/tests/hardhat/test_contract.js`** - Contains and handles automated testing scripts using Hardhat's JavaScript environment. It implements various assertions against functions of the specified smart contract.
-- ⚡ **`frontend/uploads/cmq5mwx7i00007adimugag89j/b8a241d9-b7d3-40fe-bc79-4641d2949970-vesting-cliff-repair-48/tests/test.sh`** - A shell script that runs tests on the 'vesting-cliff-repair-48' application, ensuring its functionality is as expected
-- 🐍 **`frontend/uploads/cmq5mwx7i00007adimugag89j/b8a241d9-b7d3-40fe-bc79-4641d2949970-vesting-cliff-repair-48/tests/test_outputs.py`** - Contains results from running automated Python-based unit tests to validate code correctness in the specified directory
-- 📁 **`frontend/uploads/cmq5mwx7i00007adimugag89j/d098efc6-b657-4e80-9807-96a2cf46c813-vesting-cliff-repair-50/`** - Description unavailable due to missing JSON
-- 📄 **`frontend/uploads/cmq5mwx7i00007adimugag89j/d098efc6-b657-4e80-9807-96a2cf46c813-vesting-cliff-repair-50.zip`** - Contains files related to a specific instance or version for the vesting cliff repairs of 'vesting cliff repair' process, identified as project number 50
-- 📁 **`frontend/uploads/cmq5mwx7i00007adimugag89j/d098efc6-b657-4e80-9807-96a2cf46c813-vesting-cliff-repair-50/environment/`** - Contains a Node.js project with Hardhat configuration for Ethereum smart contract development.
-- 📄 **`frontend/uploads/cmq5mwx7i00007adimugag89j/d098efc6-b657-4e80-9807-96a2cf46c813-vesting-cliff-repair-50/environment/.dockerignore`** - Specifies files to exclude from the Docker build context, such as node_modules or local environment configurations
-- 📄 **`frontend/uploads/cmq5mwx7i00007adimugag89j/d098efc6-b657-4e80-9807-96a2cf46c813-vesting-cliff-repair-50/environment/Dockerfile`** - Provides instructions on how to create and configure an image containing this project's dependencies and runtime requirements
-- 📁 **`frontend/uploads/cmq5mwx7i00007adimugag89j/d098efc6-b657-4e80-9807-96a2cf46c813-vesting-cliff-repair-50/environment/contracts/`** - The 'frontend/uploads/cmq5mwx7i00007adimugag89j/d098efc6-b657-4e80-9807-96a2cf46c813-vesting-cliff-repair-50/environment/contracts' directory contains Solidity smart contract files for a vesting mechanism.
-- 📄 **`frontend/uploads/cmq5mwx7i00007adimugag89j/d098efc6-b657-4e80-9807-96a2cf46c813-vesting-cliff-repair-50/environment/contracts/VestingToken.sol`** - The VestingToken.sol file defines the ERC20 token standard with additional functionality to handle time-based release of tokens in a vault structure, implementing an automated vesting process upon meeting certain conditions or after specified periods.
-- 📄 **`frontend/uploads/cmq5mwx7i00007adimugag89j/d098efc6-b657-4e80-9807-96a2cf46c813-vesting-cliff-repair-50/environment/contracts/VestingVault.sol`** - The VestingVault.sol file provides infrastructure for holding and managing multiple instances of VestingTokens within Ethereum's smart contracts ecosystem. It handles the transfer between different token holders while respecting their respective release schedules.
-- 📜 **`frontend/uploads/cmq5mwx7i00007adimugag89j/d098efc6-b657-4e80-9807-96a2cf46c813-vesting-cliff-repair-50/environment/hardhat.config.js`** - Configures Hardhat for Ethereum smart contract development with specific settings like networks and compilers
-- 📋 **`frontend/uploads/cmq5mwx7i00007adimugag89j/d098efc6-b657-4e80-9807-96a2cf46c813-vesting-cliff-repair-50/environment/package.json`** - Defines project metadata, scripts, and lists the Node.js package dependencies required by the application
-- 📖 **`frontend/uploads/cmq5mwx7i00007adimugag89j/d098efc6-b657-4e80-9807-96a2cf46c813-vesting-cliff-repair-50/instruction.md`** - Description unavailable due to missing JSON
-- 📁 **`frontend/uploads/cmq5mwx7i00007adimugag89j/d098efc6-b657-4e80-9807-96a2cf46c813-vesting-cliff-repair-50/solution/`** - The 'frontend/uploads/cmq5mwx7i00007adimugag89j/d098efc6-b657-4e80-9807-96a2cf46c813-vesting-cliff-repair-50/solution' directory contains a script that automates the process of solving problems related to 'vesting cliff repair'.
-- 🐍 **`frontend/uploads/cmq5mwx7i00007adimugag89j/d098efc6-b657-4e80-9807-96a2cf46c813-vesting-cliff-repair-50/solution/provide.py`** - The provide.py Python script contains functions that handle the provision of necessary resources and data to facilitate effective solutions in 'vesting cliff repair' scenarios.
-- ⚡ **`frontend/uploads/cmq5mwx7i00007adimugag89j/d098efc6-b657-4e80-9807-96a2cf46c813-vesting-cliff-repair-50/solution/solve.sh`** - The file solve.sh is an executable shell script designed for Linux systems, which implements automated problem-solving tasks specifically tailored towards vesting cliff repairs.
-- 📄 **`frontend/uploads/cmq5mwx7i00007adimugag89j/d098efc6-b657-4e80-9807-96a2cf46c813-vesting-cliff-repair-50/task.toml`** - Description unavailable due to missing JSON
-- 📁 **`frontend/uploads/cmq5mwx7i00007adimugag89j/d098efc6-b657-4e80-9807-96a2cf46c813-vesting-cliff-repair-50/tests/`** - The 'frontend/uploads/cmq5mwx7i00007adimugag89j/d098efc6-b657-4e80-9807-96a2cf46c813-vesting-cliff-repair-50/tests' directory contains test-related files for a software project, specifically containing scripts and outputs used to run tests.
-- 📁 **`frontend/uploads/cmq5mwx7i00007adimugag89j/d098efc6-b657-4e80-9807-96a2cf46c813-vesting-cliff-repair-50/tests/hardhat/`** - Description unavailable due to missing JSON
-- 📜 **`frontend/uploads/cmq5mwx7i00007adimugag89j/d098efc6-b657-4e80-9807-96a2cf46c813-vesting-cliff-repair-50/tests/hardhat/test_contract.js`** - Description unavailable due to missing JSON
-- ⚡ **`frontend/uploads/cmq5mwx7i00007adimugag89j/d098efc6-b657-4e80-9807-96a2cf46c813-vesting-cliff-repair-50/tests/test.sh`** - A shell script that likely handles the execution of automated testing procedures within this specific context
-- 🐍 **`frontend/uploads/cmq5mwx7i00007adimugag89j/d098efc6-b657-4e80-9807-96a2cf46c813-vesting-cliff-repair-50/tests/test_outputs.py`** - Contains Python code responsible for handling or processing output data from executed test cases
-- 📄 **`frontend/uploads/cmq5mwx7i00007adimugag89j/fc13f0fb-0c01-4206-b287-b99d09c5f73e-vesting-cliff-repair-47.zip`** - A zipped collection containing resources and data for the vesting cliff repairs of 'vesting cliff repair' process, identified as project number 47
-- 📁 **`root/`** - The 'root' directory contains configuration files, documentation for a project setup using Docker Compose.
-- 📄 **`root/.env.example`** - Provides an example template for environment variables to be used in the project's .env file
-- 📄 **`root/Note.txt`** - Contains notes or comments about this particular folder's contents and usage instructions
-- 📖 **`root/README.md`** - Serves as documentation explaining how to use, set up, build, test, deploy, release, troubleshoot, etc., a project.
-- ⚙️ **`root/docker-compose.yml`** - Defines the services that make up an application in Docker Compose.
+- 📘 **`frontend/tailwind.config.ts`** - Tailors Tailwind CSS configuration specifically used by this project ensuring styles are scoped correctly for component-level customization
+- 📋 **`frontend/tsconfig.json`** - Specifies the root level TypeScript compiler options, including module resolution settings that dictate how files in the 'frontend' directory should be compiled and bundled
+- 📄 **`frontend/tsconfig.tsbuildinfo`** - Provides build-time information about which modules were included during compilation to assist with debugging or optimization processes
+- 📁 **`root/`** - The 'root' directory contains configuration files, a note document for reference purposes, documentation on the project setup, and settings to manage services using Docker.
+- 📄 **`root/.env.example`** - Provides an example of environment variables that can be used as defaults or overridden by actual .env file contents
+- 📄 **`root/Note.txt`** - Contains notes about this directory's purpose which may include instructions for users or developers working with the project
+- 📖 **`root/README.md`** - Describes how to set up, configure and run services using Docker. It provides an overview of what is contained in each subdirectory within 'root'
+- ⚙️ **`root/docker-compose.yml`** - Handles defining a multi-container application setup that can be managed through docker-compose commands
 
 
 ---

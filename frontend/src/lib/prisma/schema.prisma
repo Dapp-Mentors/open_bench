@@ -30,6 +30,10 @@ model Project {
 //
 // pipeline_passed = all automated stages cleared, waiting for human approval
 // approved        = admin signed off, benchmark runs are now allowed
+//
+// Sia lifecycle (siaStatus):
+//   pending → queued → uploading → pinning → registering → ready
+//                                                        ↘ failed
 
 model Task {
   id              String      @id @default(cuid())
@@ -64,11 +68,16 @@ model Task {
   indexdKey       String?
   embeddingJson   String?     // stored for similarity search
 
+  // Sia push pipeline status (set after human approval)
+  // pending | queued | uploading | pinning | registering | ready | failed
+  siaStatus       String      @default("pending")
+
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
   approvedAt      DateTime?   // set when admin approves
 
   pipelineLogs    PipelineLog[]
+  siaLogs         SiaLog[]
   runs            BenchmarkRun[]
 }
 
@@ -79,6 +88,24 @@ model PipelineLog {
   taskId  String
   task    Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
   stage   String   // similarity | ci | quality | preflight | oracle_nop | easiness | difficulty | agent_quality
+  passed  Boolean?
+  message String   @default("")
+  ts      DateTime @default(now())
+
+  @@index([taskId])
+}
+
+// ─── SiaLog ───────────────────────────────────────────────────────────────────
+
+// Records each step of pushing an approved task's asset to the Sia network.
+// Steps: queued | uploading | pinning | registering | ready
+// One row is written per step as it completes (or fails).
+
+model SiaLog {
+  id      String   @id @default(cuid())
+  taskId  String
+  task    Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  step    String   // queued | uploading | pinning | registering | ready
   passed  Boolean?
   message String   @default("")
   ts      DateTime @default(now())

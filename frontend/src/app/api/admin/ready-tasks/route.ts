@@ -16,6 +16,7 @@ export async function GET(request: NextRequest) {
         orderBy: { updatedAt: "desc" },
         include: {
             pipelineLogs: { orderBy: { ts: "asc" } },
+            siaLogs:      { orderBy: { ts: "asc" } },
         },
     });
 

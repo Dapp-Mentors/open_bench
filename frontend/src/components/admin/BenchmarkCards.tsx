@@ -8,8 +8,27 @@ import {
     Activity,
     ListChecks,
 } from "lucide-react";
+import { SiaPipelineAccordion } from "@/components/admin/SiaPipelineAccordion";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
+
+/** Sia push pipeline counts (returned by /api/admin/stats) */
+export interface SiaStats {
+    /** Approved tasks not yet pushed (siaStatus=pending) */
+    pending: number;
+    /** Tasks queued for upload (siaStatus=queued) */
+    queued: number;
+    /** Tasks currently transferring to Sia (siaStatus=uploading) */
+    uploading: number;
+    /** Tasks being pinned on an indexer node (siaStatus=pinning) */
+    pinning: number;
+    /** Tasks fully on Sia and downloadable (siaStatus=ready) */
+    ready: number;
+    /** Tasks whose Sia push errored (siaStatus=failed) */
+    failed: number;
+    /** Total approved tasks (pending Sia push or done) */
+    total: number;
+}
 
 export interface BenchmarkStats {
     /** All tasks across all projects */
@@ -27,6 +46,8 @@ export interface BenchmarkStats {
     activeRuns?: number;
     /** Avg quality score 0–1 across pipeline-passed tasks */
     avgQualityScore?: number;
+    /** Sia push pipeline breakdown (present when approved tasks exist) */
+    sia?: SiaStats;
 }
 
 // ─── StatCard ─────────────────────────────────────────────────────────────────
@@ -134,7 +155,7 @@ function DistributionBar({
 export function BenchmarkCards({ stats }: { stats: BenchmarkStats }) {
     const {
         totalTasks, approved, inPipeline, rejected, awaitingReview,
-        passRate, totalRuns, activeRuns, avgQualityScore,
+        passRate, totalRuns, activeRuns, avgQualityScore, sia,
     } = stats;
 
     const passRateColor =
@@ -239,6 +260,13 @@ export function BenchmarkCards({ stats }: { stats: BenchmarkStats }) {
                     />
                 )}
             </div>
+
+            {/* ── Sia push pipeline accordion ── */}
+            {sia && sia.total > 0 && (
+                <div className="mb-3">
+                    <SiaPipelineAccordion sia={sia} />
+                </div>
+            )}
 
             {/* ── Secondary row: pass rate · avg quality · benchmark runs ── */}
             {(passRate != null || avgQualityScore != null || totalRuns != null) && (

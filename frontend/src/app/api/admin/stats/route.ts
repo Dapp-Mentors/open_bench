@@ -11,6 +11,13 @@ export async function GET() {
         totalRuns,
         activeRuns,
         avgQualityResult,
+        // Sia push pipeline counts (approved tasks only)
+        siaPending,
+        siaQueued,
+        siaUploading,
+        siaPinning,
+        siaReady,
+        siaFailed,
     ] = await Promise.all([
         prisma.task.count(),
         prisma.task.count({ where: { status: "approved" } }),
@@ -23,6 +30,12 @@ export async function GET() {
             where: { status: "pipeline_passed" },
             _avg: { qualityScore: true },
         }),
+        prisma.task.count({ where: { status: "approved", siaStatus: "pending" } }),
+        prisma.task.count({ where: { status: "approved", siaStatus: "queued" } }),
+        prisma.task.count({ where: { status: "approved", siaStatus: "uploading" } }),
+        prisma.task.count({ where: { status: "approved", siaStatus: "pinning" } }),
+        prisma.task.count({ where: { status: "approved", siaStatus: "ready" } }),
+        prisma.task.count({ where: { status: "approved", siaStatus: "failed" } }),
     ]);
 
     const totalProcessed = approved + rejected;
@@ -41,5 +54,14 @@ export async function GET() {
         avgQualityScore: avgQualityScore != null
             ? Math.round(avgQualityScore * 1000) / 1000
             : undefined,
+        sia: {
+            pending: siaPending,
+            queued: siaQueued,
+            uploading: siaUploading,
+            pinning: siaPinning,
+            ready: siaReady,
+            failed: siaFailed,
+            total: approved,
+        },
     });
 }

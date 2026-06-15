@@ -76,8 +76,34 @@ export function AdminProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const fetchData = useCallback(async () => {
-    setLoading(true);
+  /**
+   * Shallow-compare two arrays of tasks to avoid re-creating the array reference
+   * when the data hasn't actually changed (prevents unnecessary re-renders).
+   */
+  const isSameTasks = (a: Task[], b: Task[]): boolean => {
+    if (a.length !== b.length) return false;
+    return a.every((t, i) => t.id === b[i].id && t.status === b[i].status && t.qualityScore === b[i].qualityScore);
+  };
+
+  /**
+   * Shallow-compare two stats objects.
+   */
+  const isSameStats = (a: BenchmarkStats | null, b: BenchmarkStats | null): boolean => {
+    if (a === null && b === null) return true;
+    if (a === null || b === null) return false;
+    const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
+    for (const k of keys) {
+      if ((a as any)[k] !== (b as any)[k]) return false;
+    }
+    return true;
+  };
+
+  /**
+   * Show loading spinner only on the very first fetch (or a manual refresh).
+   * Background polls silently update data without triggering the loading UI.
+   */
+  const fetchData = useCallback(async (isBackgroundPoll = false) => {
+    if (!isBackgroundPoll) setLoading(true);
     try {
       const statusParam = tabToStatusParam(activeTab);
       const query = statusParam ? `?status=${statusParam}` : "";
@@ -87,16 +113,29 @@ export function AdminProvider({ children }: { children: ReactNode }) {
         fetch("/api/admin/stats").then((r) => r.json()),
       ]);
 
-      setTasks(Array.isArray(tasksData) ? tasksData : []);
-      setStats(statsData ?? null);
+      const newTasks = Array.isArray(tasksData) ? tasksData : [];
+      const newStats = statsData ?? null;
+
+      // Only update state if data actually changed (avoids re-render storms from polling)
+      setTasks((prev) => isSameTasks(prev, newTasks) ? prev : newTasks);
+      setStats((prev) => isSameStats(prev, newStats) ? prev : newStats);
     } catch {
       setTasks([]);
     } finally {
-      setLoading(false);
+      if (!isBackgroundPoll) setLoading(false);
     }
   }, [activeTab, tabToStatusParam]);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  // Initial fetch on mount
+  useEffect(() => {
+    fetchData(false);
+  }, [fetchData]);
+
+  // Auto-poll every 3s — silently updates data without flickering the UI
+  useEffect(() => {
+    const interval = setInterval(() => { fetchData(true); }, 3000);
+    return () => clearInterval(interval);
+  }, [fetchData]);
 
   const refresh = useCallback(async () => {
     await fetchData();

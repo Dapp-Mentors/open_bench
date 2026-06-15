@@ -48,6 +48,7 @@ class Task(Base):
     siaHash          = Column(String, nullable=True)
     indexdKey        = Column(String, nullable=True)
     embeddingJson    = Column(Text, nullable=True)
+    siaStatus        = Column(String, default="pending")
     createdAt        = Column(DateTime(timezone=True))
     updatedAt        = Column(DateTime(timezone=True))
     approvedAt       = Column(DateTime(timezone=True), nullable=True)
