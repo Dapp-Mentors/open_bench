@@ -3,7 +3,7 @@
 import Link from "next/link";
 import {
     CheckCircle, XCircle, RefreshCw, ShieldCheck,
-    ExternalLink, Clock, ListFilter, Undo2, Loader2, CloudUpload,
+    ExternalLink, Clock, ListFilter, Undo2, Loader2, Wifi, WifiOff,
 } from "lucide-react";
 import { StatusBadge } from "@/components/StatusBadge";
 import { ScoreDisplay } from "@/components/ScoreDisplay";
@@ -17,16 +17,16 @@ import { AdminProvider, useAdmin, type AdminTab } from "@/lib/admin-context";
 
 const TABS: { key: AdminTab; label: string; description: string }[] = [
     { key: "awaiting_review", label: "Awaiting Review", description: "Pipeline-passed tasks needing human sign-off" },
-    { key: "all",             label: "All Tasks",        description: "Every task across every project" },
-    { key: "approved",        label: "Approved",         description: "Tasks that have been human-approved" },
-    { key: "rejected",        label: "Rejected",         description: "Tasks that were rejected during review" },
+    { key: "all", label: "All Tasks", description: "Every task across every project" },
+    { key: "approved", label: "Approved", description: "Tasks that have been human-approved" },
+    { key: "rejected", label: "Rejected", description: "Tasks that were rejected during review" },
 ];
 
 // ─── Inner component (consumes context) ──────────────────────────────────────
 
 function AdminPageInner() {
     const {
-        tasks, stats, loading, activeTab, acting, expanded,
+        tasks, stats, loading, activeTab, acting, expanded, sseConnected,
         setActiveTab, setExpanded, refresh, approveTask, rejectTask, revertTask,
     } = useAdmin();
 
@@ -44,13 +44,38 @@ function AdminPageInner() {
                         View and manage tasks across all pipeline stages.
                     </p>
                 </div>
-                <button
-                    onClick={refresh}
-                    className="bench-btn-ghost flex items-center gap-1.5 px-3 py-2 rounded text-xs"
-                >
-                    <RefreshCw className="w-3.5 h-3.5" />
-                    Refresh
-                </button>
+
+                <div className="flex items-center gap-3">
+                    {/* SSE connection status indicator */}
+                    <div
+                        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded text-xs font-mono"
+                        title={sseConnected ? "Live updates active" : "Live updates offline — using 8s polling fallback"}
+                        style={{
+                            background: sseConnected
+                                ? "rgba(0,230,118,0.06)"
+                                : "rgba(140,148,168,0.06)",
+                            border: sseConnected
+                                ? "1px solid rgba(0,230,118,0.15)"
+                                : "1px solid rgba(140,148,168,0.15)",
+                            color: sseConnected ? "var(--green)" : "var(--subtle)",
+                        }}
+                    >
+                        {sseConnected ? (
+                            <Wifi className="w-3 h-3" />
+                        ) : (
+                            <WifiOff className="w-3 h-3" />
+                        )}
+                        {sseConnected ? "Live" : "Polling"}
+                    </div>
+
+                    <button
+                        onClick={refresh}
+                        className="bench-btn-ghost flex items-center gap-1.5 px-3 py-2 rounded text-xs"
+                    >
+                        <RefreshCw className="w-3.5 h-3.5" />
+                        Refresh
+                    </button>
+                </div>
             </div>
 
             {/* Platform stats */}
@@ -97,9 +122,9 @@ function AdminPageInner() {
             {/* Queue */}
             <div className="section-label mb-3">
                 {activeTab === "all" ? "All Tasks" :
-                 activeTab === "awaiting_review" ? "Review Queue" :
-                 activeTab === "approved" ? "Approved Tasks" :
-                 "Rejected Tasks"}
+                    activeTab === "awaiting_review" ? "Review Queue" :
+                        activeTab === "approved" ? "Approved Tasks" :
+                            "Rejected Tasks"}
             </div>
 
             {loading ? (
@@ -147,7 +172,7 @@ function AdminPageInner() {
                                     onClick={() => setExpanded(isExpanded ? null : task.id)}
                                 >
                                     <div className="flex items-center gap-4 min-w-0">
-                                        {/* Status icon based on task status */}
+                                        {/* Status icon */}
                                         <div
                                             className="w-8 h-8 rounded flex items-center justify-center flex-shrink-0"
                                             style={{
@@ -205,7 +230,7 @@ function AdminPageInner() {
 
                                         <StatusBadge status={task.status} />
 
-                                        {/* Sia upload in progress badge — pipeline_passed + active siaStatus */}
+                                        {/* Sia upload in-progress badge */}
                                         {task.status === "pipeline_passed" && task.siaStatus && task.siaStatus !== "pending" && (
                                             <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
                                                 {task.siaStatus === "failed" ? (
@@ -236,7 +261,7 @@ function AdminPageInner() {
                                             </div>
                                         )}
 
-                                        {/* Revert button — for approved/rejected tasks */}
+                                        {/* Revert button — approved/rejected tasks */}
                                         {(task.status === "approved" || task.status === "rejected") && (
                                             <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                                                 <button
@@ -257,7 +282,7 @@ function AdminPageInner() {
                                             </div>
                                         )}
 
-                                        {/* Inline action buttons — only for awaiting_review tasks */}
+                                        {/* Approve / Reject buttons — pipeline_passed tasks only */}
                                         {task.status === "pipeline_passed" && (
                                             <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                                                 <button
@@ -276,15 +301,15 @@ function AdminPageInner() {
                                                     Reject
                                                 </button>
                                                 <button
-                                                    disabled={isActing}
+                                                    disabled={isActing || task.siaStatus === "queued" || task.siaStatus === "uploading" || task.siaStatus === "pinning"}
                                                     onClick={() => approveTask(task)}
                                                     className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-mono transition-all"
                                                     style={{
                                                         background: "rgba(0,230,118,0.1)",
                                                         color: "var(--green)",
                                                         border: "1px solid rgba(0,230,118,0.25)",
-                                                        opacity: isActing ? 0.5 : 1,
-                                                        cursor: isActing ? "not-allowed" : "pointer",
+                                                        opacity: (isActing || task.siaStatus === "queued" || task.siaStatus === "uploading" || task.siaStatus === "pinning") ? 0.5 : 1,
+                                                        cursor: (isActing || task.siaStatus === "queued" || task.siaStatus === "uploading" || task.siaStatus === "pinning") ? "not-allowed" : "pointer",
                                                         boxShadow: isActing ? "none" : "0 0 8px rgba(0,230,118,0.1)",
                                                     }}
                                                 >
@@ -406,7 +431,7 @@ function AdminPageInner() {
                                             ))}
                                         </div>
 
-                                        {/* Bottom actions — revert for approved/rejected tasks */}
+                                        {/* Bottom actions — revert for approved/rejected */}
                                         {(task.status === "approved" || task.status === "rejected") && (
                                             <div className="flex items-center justify-end gap-2 pt-2">
                                                 <button
@@ -426,7 +451,7 @@ function AdminPageInner() {
                                             </div>
                                         )}
 
-                                        {/* Bottom actions — only for awaiting_review tasks */}
+                                        {/* Bottom actions — approve/reject for pipeline_passed */}
                                         {task.status === "pipeline_passed" && (
                                             <div className="flex items-center justify-end gap-2 pt-2">
                                                 <button
@@ -444,14 +469,14 @@ function AdminPageInner() {
                                                     Reject Task
                                                 </button>
                                                 <button
-                                                    disabled={isActing}
+                                                    disabled={isActing || task.siaStatus === "queued" || task.siaStatus === "uploading" || task.siaStatus === "pinning"}
                                                     onClick={() => approveTask(task)}
                                                     className="flex items-center gap-1.5 px-4 py-2 rounded text-xs font-mono transition-all"
                                                     style={{
                                                         background: "rgba(0,230,118,0.1)",
                                                         color: "var(--green)",
                                                         border: "1px solid rgba(0,230,118,0.25)",
-                                                        opacity: isActing ? 0.5 : 1,
+                                                        opacity: (isActing || task.siaStatus === "queued" || task.siaStatus === "uploading" || task.siaStatus === "pinning") ? 0.5 : 1,
                                                         boxShadow: isActing ? "none" : "0 0 12px rgba(0,230,118,0.15)",
                                                     }}
                                                 >
