@@ -1,12 +1,12 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import {
     ChevronDown, ChevronRight,
     CheckCircle, XCircle, Loader2, Clock,
-    Play, Upload, Database, Zap,
+    Upload, Database,
 } from "lucide-react";
-import type { Task, PipelineLog, BenchmarkRun, ModelOption } from "@/lib/types";
+import type { Task, PipelineLog, BenchmarkRun } from "@/lib/types";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -213,7 +213,8 @@ function StatusChip({ status }: { status: string }) {
     const cfg: Record<string, { bg: string; color: string; label: string }> = {
         pending: { bg: "rgba(90,96,114,0.15)", color: "var(--subtle)", label: "pending" },
         pipeline_running: { bg: "rgba(77,166,255,0.12)", color: "var(--blue)", label: "running" },
-        approved: { bg: "rgba(0,230,118,0.12)", color: "var(--green)", label: "Ready for Review" },
+        pipeline_passed: { bg: "rgba(0,230,118,0.12)", color: "var(--green)", label: "Ready for Review" },
+        approved: { bg: "rgba(0,230,118,0.12)", color: "var(--green)", label: "Approved" },
         rejected: { bg: "rgba(255,68,68,0.12)", color: "var(--red)", label: "rejected" },
         running: { bg: "rgba(77,166,255,0.12)", color: "var(--blue)", label: "running" },
         completed: { bg: "rgba(0,230,118,0.12)", color: "var(--green)", label: "completed" },
@@ -232,122 +233,6 @@ function StatusChip({ status }: { status: string }) {
     );
 }
 
-function ModelPicker({
-    taskId,
-    onClose,
-}: {
-    taskId: string;
-    onClose: () => void;
-}) {
-    const [models, setModels] = useState<ModelOption[]>([]);
-    const [selected, setSelected] = useState<ModelOption | null>(null);
-    const [loading, setLoading] = useState(false);
-    const [error, setError] = useState<string | null>(null);
-
-    useEffect(() => {
-        fetch("/api/models").then((r) => r.json()).then((m) => {
-            if (Array.isArray(m)) {
-                setModels(m);
-                setSelected(m.find((x: ModelOption) => x.provider === "ollama") ?? m[0] ?? null);
-            }
-        });
-    }, []);
-
-    const grouped = {
-        ollama: models.filter((m) => m.provider === "ollama"),
-        anthropic: models.filter((m) => m.provider === "anthropic"),
-        deepseek: models.filter((m) => m.provider === "deepseek"),
-    };
-
-    async function handleStart() {
-        if (!selected) return;
-        setLoading(true);
-        setError(null);
-        try {
-            const res = await fetch("/api/runs", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ taskId, agentConfig: { provider: selected.provider, modelId: selected.modelId } }),
-            });
-            if (!res.ok) {
-                const data = await res.json();
-                throw new Error(data.error ?? "Failed to start run");
-            }
-            onClose();
-        } catch (err: unknown) {
-            setError(err instanceof Error ? err.message : "Unknown error");
-            setLoading(false);
-        }
-    }
-
-    return (
-        <div
-            className="mx-5 mb-4 rounded-lg p-4 border"
-            style={{ background: "rgba(0,230,118,0.02)", borderColor: "rgba(0,230,118,0.2)" }}
-        >
-            <div className="section-label mb-3" style={{ color: "var(--green)" }}>Run against a model</div>
-            <div className="space-y-3 mb-4">
-                {(["ollama", "anthropic", "deepseek"] as const).map((provider) => {
-                    const mods = grouped[provider];
-                    if (mods.length === 0) return null;
-                    const color = PROVIDER_COLOR[provider];
-                    return (
-                        <div key={provider}>
-                            <p className="font-mono text-xs mb-1.5" style={{ color }}>
-                                {provider === "ollama" ? "Local · Ollama" : provider === "anthropic" ? "Anthropic" : "DeepSeek"}
-                            </p>
-                            <div className="grid grid-cols-2 gap-1.5">
-                                {mods.map((m) => {
-                                    const isSel = selected?.modelId === m.modelId && selected?.provider === m.provider;
-                                    return (
-                                        <button
-                                            key={m.modelId}
-                                            type="button"
-                                            onClick={() => setSelected(m)}
-                                            className="text-left px-3 py-2 rounded border transition-all"
-                                            style={{
-                                                background: isSel ? `${color}10` : "var(--surface)",
-                                                borderColor: isSel ? `${color}40` : "var(--border)",
-                                            }}
-                                        >
-                                            <div className="flex items-center gap-1.5">
-                                                {isSel && <Zap className="w-3 h-3" style={{ color }} />}
-                                                <span className="font-mono text-xs font-medium" style={{ color: isSel ? color : "var(--text)" }}>
-                                                    {m.label}
-                                                </span>
-                                            </div>
-                                            <div className="font-mono text-xs" style={{ color: "var(--subtle)" }}>{m.modelId}</div>
-                                        </button>
-                                    );
-                                })}
-                            </div>
-                        </div>
-                    );
-                })}
-            </div>
-            {error && (
-                <p className="font-mono text-xs mb-3" style={{ color: "var(--red)" }}>{error}</p>
-            )}
-            <div className="flex gap-2">
-                <button
-                    onClick={handleStart}
-                    disabled={loading || !selected}
-                    className="bench-btn-primary flex items-center gap-1.5 px-4 py-2 rounded text-xs disabled:opacity-40"
-                >
-                    {loading ? (
-                        <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Starting…</>
-                    ) : (
-                        <><Play className="w-3.5 h-3.5" /> Start Run</>
-                    )}
-                </button>
-                <button onClick={onClose} className="bench-btn-ghost px-4 py-2 rounded text-xs">
-                    Cancel
-                </button>
-            </div>
-        </div>
-    );
-}
-
 // ─── TaskRow (main export) ────────────────────────────────────────────────────
 
 export function TaskRow({ task, projectId, onDeleted }: {
@@ -356,7 +241,6 @@ export function TaskRow({ task, projectId, onDeleted }: {
     onDeleted: (taskId: string) => void;
 }) {
     const [open, setOpen] = useState(false);
-    const [showPicker, setShowPicker] = useState(false);
     const [deleting, setDeleting] = useState(false);
     const [approving, setApproving] = useState(false);
 
@@ -531,17 +415,7 @@ export function TaskRow({ task, projectId, onDeleted }: {
                                     </div>
                                 </div>
                             )}
-                            {!showPicker ? (
-                                <button
-                                    onClick={() => setShowPicker(true)}
-                                    className="bench-btn-primary inline-flex items-center gap-1.5 px-4 py-2 rounded text-xs"
-                                >
-                                    <Play className="w-3.5 h-3.5" />
-                                    Run Benchmark
-                                </button>
-                            ) : (
-                                <ModelPicker taskId={task.id} onClose={() => setShowPicker(false)} />
-                            )}
+                            
                         </div>
                     )}
 
