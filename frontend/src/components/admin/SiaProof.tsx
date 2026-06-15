@@ -97,7 +97,7 @@ function StepRow({ stepKey, log, state, isLast }: StepRowProps) {
           ) : state === "active" ? (
             <Loader2 className="w-4 h-4 animate-spin" style={{ color: "var(--blue)" }} />
           ) : (
-            <Icon className="w-3.5 h-3.5" style={{ color: "var(--subtle)" }} />
+            <Icon className="w-3.5 h-3.5" style={{ color: "var(--text-subtle)" }} />
           )}
         </div>
         {!isLast && (
@@ -119,12 +119,12 @@ function StepRow({ stepKey, log, state, isLast }: StepRowProps) {
         <div className="flex items-center gap-2 flex-wrap">
           <span
             className="font-mono text-xs font-semibold"
-            style={{ color: state === "pending" ? "var(--muted)" : "var(--text)" }}
+            style={{ color: state === "pending" ? "var(--text-muted)" : "var(--text)" }}
           >
             {meta.label}
           </span>
           {formattedTs && (
-            <span className="font-mono text-xs" style={{ color: "var(--muted)" }}>
+            <span className="font-mono text-xs" style={{ color: "var(--text-muted)" }}>
               {formattedTs}
             </span>
           )}
@@ -135,7 +135,7 @@ function StepRow({ stepKey, log, state, isLast }: StepRowProps) {
             />
           )}
         </div>
-        <p className="font-mono text-xs mt-0.5" style={{ color: "var(--muted)" }}>
+        <p className="font-mono text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>
           {log?.message || meta.description}
         </p>
         {/* Progress bar under completed / active steps */}
@@ -191,26 +191,39 @@ export function SiaProof({ siaHash, indexdKey, siaStatus, siaLogs }: Props) {
   const hasData = siaHash || indexdKey || logs.length > 0 || status !== "pending";
   if (!hasData) return null;
 
+  // Derive real upload state from data presence (more reliable than status alone)
+  const hasUploaded = !!siaHash;
+  const hasPinned = !!indexdKey;
+
   const logByStep = Object.fromEntries(logs.map((l) => [l.step, l]));
   const completedSteps = new Set(logs.filter((l) => l.passed === true).map((l) => l.step));
   const failedSteps = new Set(logs.filter((l) => l.passed === false).map((l) => l.step));
 
+  // Badge colour: prefer data-derived state over siaStatus field
   const headerColor =
-    status === "ready" ? "var(--green)"
-      : status === "failed" ? "var(--red)"
-        : status === "pending" ? "var(--amber)"
-          : "var(--blue)";
+    hasUploaded && hasPinned ? "var(--green)"
+      : hasUploaded ? "var(--blue)"
+        : status === "ready" ? "var(--green)"
+          : status === "failed" ? "var(--red)"
+            : status === "pending" ? "var(--amber)"
+              : "var(--blue)";
 
+  // Badge label: if siaHash exists the file is already on Sia — don't lie.
   const headerLabel =
-    status === "ready" ? "Ready"
-      : status === "failed" ? "Failed"
-        : status === "pending" ? "Awaiting upload"
-          : status === "queued" ? "Queued"
-            : status === "uploading" ? "Uploading…"
-              : status === "pinning" ? "Pinning…"
-                : "Uploading…";
+    hasUploaded && hasPinned ? "Ready"
+      : hasUploaded ? "Pinning…"
+        : status === "ready" ? "Ready"
+          : status === "failed" ? "Failed"
+            : status === "pending" ? "Awaiting upload"
+              : status === "queued" ? "Queued"
+                : status === "uploading" ? "Uploading…"
+                  : status === "pinning" ? "Pinning…"
+                    : "Uploading…";
 
-  const isActive = !["ready", "failed", "pending"].includes(status);
+  // Active (spinner) if the pipeline isn't in a terminal state or is partially done
+  const isActive =
+    status === "queued" || status === "uploading" || status === "pinning" ||
+    (hasUploaded && !hasPinned);
 
   return (
     <div>
@@ -255,7 +268,7 @@ export function SiaProof({ siaHash, indexdKey, siaStatus, siaLogs }: Props) {
             {siaHash && (
               <div className="flex items-start gap-2">
                 <span className="section-label w-24 flex-shrink-0 pt-0.5">Sia Object</span>
-                <span className="font-mono text-xs break-all" style={{ color: "var(--subtle)" }}>
+                <span className="font-mono text-xs break-all" style={{ color: "var(--text-muted)" }}>
                   {siaHash}
                 </span>
               </div>
@@ -263,7 +276,7 @@ export function SiaProof({ siaHash, indexdKey, siaStatus, siaLogs }: Props) {
             {indexdKey && (
               <div className="flex items-start gap-2">
                 <span className="section-label w-24 flex-shrink-0 pt-0.5">Indexd CID</span>
-                <span className="font-mono text-xs break-all flex items-center gap-1" style={{ color: "var(--subtle)" }}>
+                <span className="font-mono text-xs break-all flex items-center gap-1" style={{ color: "var(--text-muted)" }}>
                   {indexdKey}
                   <a
                     href={`https://indexd.example.com/${indexdKey}`}

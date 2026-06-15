@@ -16,6 +16,10 @@
   --red:      #ff4444;
   --blue:     #4da6ff;
   --cyan:     #00bcd4;
+
+  /* High-contrast text aliases — usable on --bg */
+  --text-muted:   #8e97a9;   /* ~6:1 against #0a0b0d — secondary text  */
+  --text-subtle:  #7a8396;   /* ~4.6:1 against #0a0b0d — tertiary text */
 }
 
 * {
