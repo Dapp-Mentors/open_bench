@@ -44,7 +44,7 @@ from app.services.agent_prompt import (
 MAX_STEPS       = 12   # max agent turns per run before giving up
 PARALLEL_RUNS   = 5    # how many independent attempts to launch
 AGENT_MAX_TOKENS = 2048
-SEQUENTIAL_DELAY = 1.0 # seconds between sequential fallback attempts
+SEQUENTIAL_DELAY = 15.0 # seconds between sequential fallback attempts (free-tier rate limits are ~1 req / 10-20s)
 
 # Easiness: task passes the prefilter if pass count is in [1, EASY_MAX_PASS]
 EASY_MAX_PASS = 4      # if ALL 5 pass → too easy; reject

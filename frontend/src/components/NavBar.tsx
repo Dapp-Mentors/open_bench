@@ -51,10 +51,11 @@ export function NavBar() {
     // Initial fetch
     fetchSiaStatus().then(setSia);
 
-    // Poll every 10 seconds to track mode changes
+    // Poll every 10 minutes to track connection changes
+    // (frontend only — the status rarely changes during a session)
     intervalRef.current = setInterval(() => {
       fetchSiaStatus().then(setSia);
-    }, 10_000);
+    }, 600_000);
 
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
