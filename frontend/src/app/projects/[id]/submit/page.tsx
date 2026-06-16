@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useState, useCallback } from "react";
+import { use, useState, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, Upload, FileArchive, X, CheckCircle, Loader2, AlertCircle } from "lucide-react";
@@ -267,6 +267,16 @@ export default function SubmitTaskPage({ params }: SubmitTaskPageProps) {
         }
     }
 
+    // ── Auto-redirect after successful submission ──────────────────────────────
+    useEffect(() => {
+        if (state === "success") {
+            const timer = setTimeout(() => {
+                router.push(`/projects/${id}`);
+            }, 3000);
+            return () => clearTimeout(timer);
+        }
+    }, [state, id, router]);
+
     // ── Success screen ──────────────────────────────────────────────────────────
     if (state === "success") {
         return (
@@ -282,6 +292,9 @@ export default function SubmitTaskPage({ params }: SubmitTaskPageProps) {
                 </h2>
                 <p className="font-mono text-sm mb-1" style={{ color: "var(--subtle)" }}>
                     The Harbor pipeline has been triggered.
+                </p>
+                <p className="font-mono text-xs mb-6" style={{ color: "var(--muted)" }}>
+                    Redirecting to project page in 3s…
                 </p>
                 {taskId && (
                     <p className="font-mono text-xs mb-6" style={{ color: "var(--muted)" }}>
