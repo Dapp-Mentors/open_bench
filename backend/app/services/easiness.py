@@ -44,6 +44,7 @@ from app.services.agent_prompt import (
 MAX_STEPS       = 12   # max agent turns per run before giving up
 PARALLEL_RUNS   = 5    # how many independent attempts to launch
 AGENT_MAX_TOKENS = 2048
+SEQUENTIAL_DELAY = 1.0 # seconds between sequential fallback attempts
 
 # Easiness: task passes the prefilter if pass count is in [1, EASY_MAX_PASS]
 EASY_MAX_PASS = 4      # if ALL 5 pass → too easy; reject
@@ -59,6 +60,20 @@ def _log(msg: str) -> None:
 
 
 # ── Single-agent loop ─────────────────────────────────────────────────────────
+
+def _is_transient_error(exc: Exception) -> bool:
+    """Return True if the exception represents a transient / retryable error."""
+    import httpx
+
+    # httpx.HTTPStatusError raised by chat_completion after retries are exhausted
+    if isinstance(exc, httpx.HTTPStatusError):
+        code = exc.response.status_code if exc.response is not None else None
+        return code == 429 or (code is not None and code >= 500)
+    # Network-level failures
+    if isinstance(exc, (httpx.ConnectError, httpx.ReadTimeout, httpx.WriteTimeout)):
+        return True
+    return False
+
 
 async def _run_agent_once(
     task_dir: Path,
@@ -79,6 +94,8 @@ async def _run_agent_once(
     We simulate a minimal terminal so the agent can track its own progress:
     each turn echoes the keystrokes the agent requested back as prompt lines.
     """
+    global _all_runs_hit_transient_error  # noqa: PLW0603
+
     initial_prompt = build_initial_user_prompt(task_dir)
 
     # conversation_log holds the raw back-and-forth for context injection
@@ -110,6 +127,8 @@ async def _run_agent_once(
             )
         except Exception as exc:
             _log(f"easiness run {run_index + 1}: LLM error at step {step}: {exc}")
+            if _is_transient_error(exc):
+                _all_runs_hit_transient_error = True
             return False
 
         char_count = len(raw) if raw else 0
@@ -190,14 +209,29 @@ async def _run_probe(
     n: int = PARALLEL_RUNS,
 ) -> tuple[int, list[bool]]:
     """
-    Launch `n` parallel agent attempts.
+    Launch `n` agent attempts.
+
+    Strategy:
+      1. Try all `n` attempts in parallel.
+      2. If every single attempt raised an exception (e.g. rate-limit 429 on
+         all of them), fall back to running them sequentially with a short
+         delay between each to avoid triggering rate-limits again.
+      3. If only some attempts failed (or all failed with non-exception
+         returns like empty LLM output), we keep the parallel results as-is
+         — those reflect real task difficulty, not infra issues.
+
     Returns (pass_count, per_run_results).
     """
+    global _all_runs_hit_transient_error  # noqa: PLW0603
+
+    _all_runs_hit_transient_error = False
+
     _log(f"easiness: launching {n} parallel agent attempts "
          f"(task={task_id}, model={provider}/{model_id}, working_dir=/app)")
 
     task_dir = _task_dir(storage_path)
 
+    # ── Phase 1: parallel ─────────────────────────────────────────────────
     results: list[bool] = await asyncio.gather(
         *[
             _run_agent_once(task_dir, i, model_id, provider)
@@ -207,11 +241,38 @@ async def _run_probe(
     )
 
     pass_count = sum(results)
+    all_failed = pass_count == 0
+
+    # ── Phase 2: sequential fallback ──────────────────────────────────────
+    # If every run returned False and every underlying LLM call hit a
+    # transient error (like 429), retry sequentially with delays.
+    if all_failed and _all_runs_hit_transient_error:
+        _log(
+            f"easiness: all {n} parallel runs failed with transient errors "
+            f"— falling back to sequential execution"
+        )
+        seq_results: list[bool] = []
+        for i in range(n):
+            result = await _run_agent_once(task_dir, i, model_id, provider)
+            seq_results.append(result)
+            if i < n - 1:
+                await asyncio.sleep(SEQUENTIAL_DELAY)
+
+        pass_count = sum(seq_results)
+        results = seq_results
 
     symbols = " ".join("✓" if r else "✗" for r in results)
     _log(f"easiness: {pass_count}/{n} passed [{symbols}] model={provider}/{model_id}")
 
     return pass_count, list(results)
+
+
+# ── Transient-error tracking ───────────────────────────────────────────────────
+# _all_runs_hit_transient_error is set to True by _run_agent_once when the
+# exception it caught was a retryable / transient error (429, 5xx, network).
+# It is reset at the start of each _run_probe call.
+
+_all_runs_hit_transient_error: bool = False
 
 
 def _per_run_detail(results: list[bool]) -> str:

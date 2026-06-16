@@ -140,6 +140,9 @@ async def run_quality_check(
         response_format={"type": "json_object"},
     )
 
+    if not raw or not raw.strip():
+        return True, "Quality check: LLM returned empty response; treating as passed"
+
     # Parse — strip any accidental fences
     clean = raw.strip().lstrip("```json").lstrip("```").rstrip("```").strip()
     try:

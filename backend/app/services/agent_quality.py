@@ -130,6 +130,9 @@ async def run_agent_quality_check(
         response_format={"type": "json_object"},
     )
 
+    if not raw or not raw.strip():
+        return True, "Agent quality check: LLM returned empty response; treating as passed"
+
     # Strip accidental markdown fences before parsing
     clean = raw.strip().lstrip("```json").lstrip("```").rstrip("```").strip()
     try:

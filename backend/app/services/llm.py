@@ -12,6 +12,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import sys
 from typing import Any
 
 import httpx
@@ -21,6 +23,10 @@ from app.core.config import settings
 _CONNECT_TIMEOUT = 10.0
 _CHAT_TIMEOUT    = 120.0
 _EMBED_TIMEOUT   = 30.0
+
+# Retry configuration for transient errors (429, 5xx)
+_MAX_RETRIES     = 3
+_RETRY_BASE_DELAY = 2.0  # seconds; doubles on each retry
 
 
 # ── Chat completion ───────────────────────────────────────────────────────────
@@ -34,12 +40,16 @@ async def chat_completion(
     temperature: float = 0.0,
     max_tokens: int = 1024,
     response_format: dict[str, Any] | None = None,
-) -> str:
+) -> str | None:
     """
     Call the configured chat/completions endpoint and return the assistant text.
 
     model_id  — the OpenRouter model slug (e.g. "anthropic/claude-sonnet-4-20250514")
     All other config comes from settings / .env.
+
+    Retries automatically on transient errors (429 Too Many Requests, 5xx)
+    with exponential back-off up to _MAX_RETRIES attempts.
+    Returns None if the response content is null/empty after all retries.
     """
     base_url = settings.llm_base_url(provider)
     api_key  = settings.llm_api_key(provider)
@@ -79,14 +89,56 @@ async def chat_completion(
 
     url = f"{base_url.rstrip('/')}/chat/completions"
 
-    async with httpx.AsyncClient(
-        timeout=httpx.Timeout(_CHAT_TIMEOUT, connect=_CONNECT_TIMEOUT)
-    ) as client:
-        resp = await client.post(url, headers=headers, json=payload)
-        resp.raise_for_status()
-        data = resp.json()
+    last_exc: Exception | None = None
+    for attempt in range(_MAX_RETRIES):
+        try:
+            async with httpx.AsyncClient(
+                timeout=httpx.Timeout(_CHAT_TIMEOUT, connect=_CONNECT_TIMEOUT)
+            ) as client:
+                resp = await client.post(url, headers=headers, json=payload)
+                resp.raise_for_status()
+                data = resp.json()
 
-    return data["choices"][0]["message"]["content"]
+            content = data.get("choices", [{}])[0].get("message", {}).get("content")
+            if content:
+                return content
+            # content is None/empty — not retryable, just return None
+            _llm_log(f"LLM returned empty content for model={model}")
+            return None
+
+        except (httpx.HTTPStatusError, httpx.RequestError) as exc:
+            last_exc = exc
+            status = getattr(exc, "response", None)
+            status_code = status.status_code if status is not None else None
+            retryable = (
+                status_code == 429
+                or (status_code is not None and status_code >= 500)
+                or isinstance(exc, httpx.RequestError)
+            )
+            if retryable and attempt < _MAX_RETRIES - 1:
+                delay = _RETRY_BASE_DELAY * (2 ** attempt)
+                # honour Retry-After header from 429 responses
+                if status_code == 429 and status is not None:
+                    retry_after = status.headers.get("Retry-After")
+                    if retry_after:
+                        try:
+                            delay = max(delay, float(retry_after))
+                        except (ValueError, TypeError):
+                            pass
+                _llm_log(
+                    f"LLM retry {attempt + 1}/{_MAX_RETRIES}: "
+                    f"status={status_code} model={model} — waiting {delay:.1f}s"
+                )
+                await asyncio.sleep(delay)
+            else:
+                raise
+
+    # Should not reach here, but safety net
+    raise last_exc  # type: ignore[misc]
+
+
+def _llm_log(msg: str) -> None:
+    print(f"[LLM] {msg}", file=sys.stderr, flush=True)
 
 
 # ── Embeddings via Ollama ─────────────────────────────────────────────────────
