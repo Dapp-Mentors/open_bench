@@ -102,3 +102,13 @@ class RunLog(Base):
     ts     = Column(DateTime(timezone=True))
 
     run = relationship("BenchmarkRun", back_populates="logs")
+
+
+class ModelConfig(Base):
+    __tablename__ = "ModelConfig"
+
+    id        = Column(String, primary_key=True)
+    key       = Column(String, unique=True, nullable=False)
+    modelId   = Column(String, nullable=False)
+    modelName = Column(String, default="")
+    updatedAt = Column(DateTime(timezone=True))

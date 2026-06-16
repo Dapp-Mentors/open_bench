@@ -49,6 +49,7 @@ export const PIPELINE_DEF = [
 ] as const;
 
 export const PROVIDER_COLOR: Record<string, string> = {
+    openrouter: "var(--green)",
     ollama: "var(--green)",
     anthropic: "var(--amber)",
     deepseek: "var(--blue)",

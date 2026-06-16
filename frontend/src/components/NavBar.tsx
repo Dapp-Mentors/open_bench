@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { Activity, FolderOpen, Plus, ShieldCheck, Wifi, WifiOff } from "lucide-react";
+import { Activity, FolderOpen, Plus, ShieldCheck, Settings2, Wifi, WifiOff } from "lucide-react";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -17,6 +17,7 @@ const NAV_ITEMS = [
   { href: "/dashboard", label: "Projects", icon: FolderOpen },
   { href: "/projects/new", label: "New Project", icon: Plus },
   { href: "/admin", label: "Admin", icon: ShieldCheck },
+  { href: "/admin/models", label: "Models", icon: Settings2 },
 ];
 
 // ── Helpers ──────────────────────────────────────────────────────────────────

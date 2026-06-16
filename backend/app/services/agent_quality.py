@@ -25,8 +25,10 @@ import json
 from pathlib import Path
 from typing import Tuple
 
+from sqlalchemy.ext.asyncio import AsyncSession
 from app.services.llm import chat_completion
 from app.services.pipeline import _task_dir
+from app.services.model_config import get_model_for_role
 
 AGENT_QUALITY_THRESHOLD = 0.7
 
@@ -106,6 +108,7 @@ def _build_user_prompt(task_dir: Path) -> str:
 async def run_agent_quality_check(
     task_id: str,
     storage_path: str,
+    db: AsyncSession,
 ) -> Tuple[bool, str]:
     """
     Returns (passed, message).
@@ -115,9 +118,13 @@ async def run_agent_quality_check(
     task_dir    = _task_dir(storage_path)
     user_prompt = _build_user_prompt(task_dir)
 
+    model_id, provider = await get_model_for_role("agent_quality_model", db)
+
     raw = await chat_completion(
         system=_SYSTEM_PROMPT,
         user=user_prompt,
+        provider=provider,
+        model_id=model_id,
         temperature=0.0,
         max_tokens=1000,
         response_format={"type": "json_object"},

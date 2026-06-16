@@ -1,4 +1,4 @@
-export type ModelProvider  = "ollama" | "anthropic" | "deepseek";
+export type ModelProvider  = "openrouter";
 export type ScoringType    = "passfail" | "diff" | "regex";
 export type EasinessResult = "too_easy" | "appropriate" | "too_hard";
 
@@ -45,6 +45,28 @@ export interface SiaLog {
 }
 
 export interface AgentConfig { provider: ModelProvider; modelId: string; }
+
+// ── Model Configuration (admin settings) ─────────────────────────────────────
+
+export type ModelConfigKey =
+  | "frontier_model"
+  | "easiness_model"
+  | "quality_model"
+  | "agent_quality_model";
+
+export interface ModelConfig {
+  key: ModelConfigKey;
+  modelId: string;
+  modelName: string;
+}
+
+export interface OpenRouterModel {
+  modelId: string;
+  modelName: string;
+  context: number;
+  pricing: "free" | "low" | "medium" | "high";
+  promptPrice?: number;
+}
 
 export interface TaskDef {
   id: string;

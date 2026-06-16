@@ -121,7 +121,7 @@ model BenchmarkRun {
   task       Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
   projectId  String   // denormalised for cheaper dashboard queries
 
-  provider   String   // ollama | anthropic | deepseek
+  provider   String   // openrouter
   modelId    String
 
   status     String   @default("running") // running | completed | failed
@@ -152,4 +152,18 @@ model RunLog {
   ts     DateTime @default(now())
 
   @@index([runId])
+}
+
+// ─── ModelConfig ──────────────────────────────────────────────────────────────
+
+// Stores which OpenRouter model is assigned to each pipeline role.
+// key = "frontier_model" | "easiness_model" | "quality_model" | "agent_quality_model"
+// Admin selects models from the UI — no backend manipulation needed.
+
+model ModelConfig {
+  id        String   @id @default(cuid())
+  key       String   @unique    // e.g. "frontier_model", "easiness_model"
+  modelId   String              // OpenRouter model slug, e.g. "anthropic/claude-opus-4-20250514"
+  modelName String   @default("") // human-readable label, e.g. "Claude Opus 4"
+  updatedAt DateTime @updatedAt
 }

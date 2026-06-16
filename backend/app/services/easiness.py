@@ -29,9 +29,10 @@ import sys
 from pathlib import Path
 from typing import Tuple
 
-from app.core.config import settings
+from sqlalchemy.ext.asyncio import AsyncSession
 from app.services.llm import chat_completion
 from app.services.pipeline import _task_dir
+from app.services.model_config import get_model_for_role
 from app.services.agent_prompt import (
     AGENT_SYSTEM_PROMPT,
     build_initial_user_prompt,
@@ -226,19 +227,19 @@ def _per_run_detail(results: list[bool]) -> str:
 async def run_easiness_prefilter(
     task_id: str,
     storage_path: str,
+    db: AsyncSession,
 ) -> Tuple[bool, str]:
     """
     Stage 6 — Easiness prefilter.
 
-    Uses DEFAULT_PROVIDER / DEFAULT_MODEL_ID (the fast "sonnet" model).
+    Uses the easiness_model from DB config (the fast model).
 
     Pass logic:
       - 0 / 5 pass   → TOO_HARD  → pipeline fails (task needs simplification)
       - 1–4 / 5 pass → ACCEPTABLE → pipeline passes
       - 5 / 5 pass   → TOO_EASY  → pipeline fails (task needs hardening)
     """
-    provider = settings.DEFAULT_PROVIDER
-    model_id = settings.DEFAULT_MODEL_ID
+    model_id, provider = await get_model_for_role("easiness_model", db)
 
     pass_count, results = await _run_probe(
         task_id=task_id,
@@ -258,11 +259,12 @@ async def run_easiness_prefilter(
         return False, msg
 
     if pass_count >= PARALLEL_RUNS:
+        frontier_id, _ = await get_model_for_role("frontier_model", db)
         msg = (
             f"pass@5: {pass_count} / {PARALLEL_RUNS} · TOO_EASY "
-            f"({pass_count}/{PARALLEL_RUNS} — Opus skipped)\n"
-            f"Task is too easy: {settings.DEFAULT_MODEL_ID} passed {pass_count}/{PARALLEL_RUNS} runs. "
-            f"Opus {settings.DIFFICULTY_MODEL_ID} difficulty probe skipped to save cost.\n"
+            f"({pass_count}/{PARALLEL_RUNS} — frontier skipped)\n"
+            f"Task is too easy: {model_id} passed {pass_count}/{PARALLEL_RUNS} runs. "
+            f"Frontier model {frontier_id} difficulty probe skipped to save cost.\n"
             f"PER-RUN EPISODES ({PARALLEL_RUNS})\n{detail}"
         )
         return False, msg
@@ -279,19 +281,19 @@ async def run_easiness_prefilter(
 async def run_difficulty_probe(
     task_id: str,
     storage_path: str,
+    db: AsyncSession,
 ) -> Tuple[bool, str]:
     """
     Stage 7 — Difficulty probe.
 
-    Uses DIFFICULTY_MODEL_ID (the frontier / Opus model).
+    Uses the frontier_model from DB config (the strong model).
 
     Pass logic:
-      - 0 / 5 pass        → too hard even for Opus → fail
+      - 0 / 5 pass        → too hard even for frontier → fail
       - 1–DIFF_MAX_PASS   → correct difficulty band → pass
-      - > DIFF_MAX_PASS   → too easy for Opus → fail
+      - > DIFF_MAX_PASS   → too easy for frontier → fail
     """
-    provider = settings.DEFAULT_PROVIDER
-    model_id = settings.DIFFICULTY_MODEL_ID
+    model_id, provider = await get_model_for_role("frontier_model", db)
 
     pass_count, results = await _run_probe(
         task_id=task_id,

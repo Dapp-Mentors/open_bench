@@ -4,8 +4,8 @@
 # All config (URLs, keys, model names) is read exclusively from `settings`,
 # which in turn reads from the .env file — nothing is hardcoded here.
 #
-# Chat:       any OpenAI-compatible /chat/completions endpoint
-#             (DeepSeek direct, OpenRouter, OpenAI — controlled by DEFAULT_PROVIDER)
+# Chat:       OpenRouter /chat/completions endpoint (sole LLM provider)
+#             Supports DeepSeek, Claude, GPT, Gemini, Llama, Mistral, etc.
 #
 # Embeddings: Ollama /api/embed using OLLAMA_BASE_URL + OLLAMA_EMBED_MODEL
 #             (nomic-embed-text:latest by default, no API key required)
@@ -38,19 +38,22 @@ async def chat_completion(
     """
     Call the configured chat/completions endpoint and return the assistant text.
 
-    provider  — overrides settings.DEFAULT_PROVIDER for this call
-    model_id  — overrides settings.DEFAULT_MODEL_ID for this call
+    model_id  — the OpenRouter model slug (e.g. "anthropic/claude-sonnet-4-20250514")
     All other config comes from settings / .env.
     """
     base_url = settings.llm_base_url(provider)
     api_key  = settings.llm_api_key(provider)
-    model    = model_id or settings.DEFAULT_MODEL_ID
+    model    = model_id
+
+    if not model:
+        raise RuntimeError(
+            "No model_id provided. Each LLM call must specify a model."
+        )
 
     if not api_key:
-        p = provider or settings.DEFAULT_PROVIDER
         raise RuntimeError(
-            f"No API key configured for provider '{p}'. "
-            f"Set the corresponding key in your .env file."
+            "No OPENROUTER_API_KEY configured. "
+            "Set OPENROUTER_API_KEY in your .env file."
         )
 
     messages = [
@@ -70,10 +73,9 @@ async def chat_completion(
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type":  "application/json",
+        "HTTP-Referer":  "https://openbench.internal",
+        "X-Title":       "OpenBench",
     }
-    # OpenRouter requires this header for routing / abuse detection
-    if (provider or settings.DEFAULT_PROVIDER).lower() == "openrouter":
-        headers["HTTP-Referer"] = "https://openbench.internal"
 
     url = f"{base_url.rstrip('/')}/chat/completions"
 
