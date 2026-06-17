@@ -103,3 +103,26 @@ class BenchmarkExecuteRequest(BaseModel):
     taskId: str
     storagePath: str
     agentConfig: dict           # {"provider": "openai", "modelId": "gpt-4o", ...}
+
+
+# ─────────────────────────────────────────
+# Model Configuration
+# ─────────────────────────────────────────
+
+class ModelConfigRead(BaseModel):
+    key: str
+    modelId: str
+    modelName: str
+
+    class Config:
+        from_attributes = True
+
+
+class ModelConfigUpdate(BaseModel):
+    key: str
+    modelId: str
+    modelName: str
+
+
+class OpenRouterModelsResponse(BaseModel):
+    models: list[dict]

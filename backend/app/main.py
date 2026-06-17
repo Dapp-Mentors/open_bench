@@ -9,7 +9,7 @@ from app.core.config import settings
 from app.core.database import get_db
 from fastapi.responses import StreamingResponse
 
-from app.routers import approve, pipeline, runs, sia, tasks
+from app.routers import approve, pipeline, runs, sia, tasks, model_config
 from app.services import sia_client
 from app.services.sse import sia_event_generator
 
@@ -69,6 +69,9 @@ app.include_router(approve.router, prefix="/api", tags=["approve"])
 
 # Sia connection status — used by the NavBar
 app.include_router(sia.router, prefix="/api/sia", tags=["sia"])
+
+# Model configuration — admin UI for selecting OpenRouter models per pipeline role
+app.include_router(model_config.router, prefix="/api/models", tags=["models"])
 
 # SSE endpoint for real-time Sia pipeline status
 @app.get("/api/sia/events", tags=["sse"])

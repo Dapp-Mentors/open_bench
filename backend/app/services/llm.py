@@ -4,14 +4,16 @@
 # All config (URLs, keys, model names) is read exclusively from `settings`,
 # which in turn reads from the .env file — nothing is hardcoded here.
 #
-# Chat:       any OpenAI-compatible /chat/completions endpoint
-#             (DeepSeek direct, OpenRouter, OpenAI — controlled by DEFAULT_PROVIDER)
+# Chat:       OpenRouter /chat/completions endpoint (sole LLM provider)
+#             Supports DeepSeek, Claude, GPT, Gemini, Llama, Mistral, etc.
 #
 # Embeddings: Ollama /api/embed using OLLAMA_BASE_URL + OLLAMA_EMBED_MODEL
 #             (nomic-embed-text:latest by default, no API key required)
 
 from __future__ import annotations
 
+import asyncio
+import sys
 from typing import Any
 
 import httpx
@@ -21,6 +23,10 @@ from app.core.config import settings
 _CONNECT_TIMEOUT = 10.0
 _CHAT_TIMEOUT    = 120.0
 _EMBED_TIMEOUT   = 30.0
+
+# Retry configuration for transient errors (429, 5xx)
+_MAX_RETRIES     = 3
+_RETRY_BASE_DELAY = 2.0  # seconds; doubles on each retry
 
 
 # ── Chat completion ───────────────────────────────────────────────────────────
@@ -34,23 +40,30 @@ async def chat_completion(
     temperature: float = 0.0,
     max_tokens: int = 1024,
     response_format: dict[str, Any] | None = None,
-) -> str:
+) -> str | None:
     """
     Call the configured chat/completions endpoint and return the assistant text.
 
-    provider  — overrides settings.DEFAULT_PROVIDER for this call
-    model_id  — overrides settings.DEFAULT_MODEL_ID for this call
+    model_id  — the OpenRouter model slug (e.g. "anthropic/claude-sonnet-4-20250514")
     All other config comes from settings / .env.
+
+    Retries automatically on transient errors (429 Too Many Requests, 5xx)
+    with exponential back-off up to _MAX_RETRIES attempts.
+    Returns None if the response content is null/empty after all retries.
     """
     base_url = settings.llm_base_url(provider)
     api_key  = settings.llm_api_key(provider)
-    model    = model_id or settings.DEFAULT_MODEL_ID
+    model    = model_id
+
+    if not model:
+        raise RuntimeError(
+            "No model_id provided. Each LLM call must specify a model."
+        )
 
     if not api_key:
-        p = provider or settings.DEFAULT_PROVIDER
         raise RuntimeError(
-            f"No API key configured for provider '{p}'. "
-            f"Set the corresponding key in your .env file."
+            "No OPENROUTER_API_KEY configured. "
+            "Set OPENROUTER_API_KEY in your .env file."
         )
 
     messages = [
@@ -70,21 +83,62 @@ async def chat_completion(
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type":  "application/json",
+        "HTTP-Referer":  "https://openbench.internal",
+        "X-Title":       "OpenBench",
     }
-    # OpenRouter requires this header for routing / abuse detection
-    if (provider or settings.DEFAULT_PROVIDER).lower() == "openrouter":
-        headers["HTTP-Referer"] = "https://openbench.internal"
 
     url = f"{base_url.rstrip('/')}/chat/completions"
 
-    async with httpx.AsyncClient(
-        timeout=httpx.Timeout(_CHAT_TIMEOUT, connect=_CONNECT_TIMEOUT)
-    ) as client:
-        resp = await client.post(url, headers=headers, json=payload)
-        resp.raise_for_status()
-        data = resp.json()
+    last_exc: Exception | None = None
+    for attempt in range(_MAX_RETRIES):
+        try:
+            async with httpx.AsyncClient(
+                timeout=httpx.Timeout(_CHAT_TIMEOUT, connect=_CONNECT_TIMEOUT)
+            ) as client:
+                resp = await client.post(url, headers=headers, json=payload)
+                resp.raise_for_status()
+                data = resp.json()
 
-    return data["choices"][0]["message"]["content"]
+            content = data.get("choices", [{}])[0].get("message", {}).get("content")
+            if content:
+                return content
+            # content is None/empty — not retryable, just return None
+            _llm_log(f"LLM returned empty content for model={model}")
+            return None
+
+        except (httpx.HTTPStatusError, httpx.RequestError) as exc:
+            last_exc = exc
+            status = getattr(exc, "response", None)
+            status_code = status.status_code if status is not None else None
+            retryable = (
+                status_code == 429
+                or (status_code is not None and status_code >= 500)
+                or isinstance(exc, httpx.RequestError)
+            )
+            if retryable and attempt < _MAX_RETRIES - 1:
+                delay = _RETRY_BASE_DELAY * (2 ** attempt)
+                # honour Retry-After header from 429 responses
+                if status_code == 429 and status is not None:
+                    retry_after = status.headers.get("Retry-After")
+                    if retry_after:
+                        try:
+                            delay = max(delay, float(retry_after))
+                        except (ValueError, TypeError):
+                            pass
+                _llm_log(
+                    f"LLM retry {attempt + 1}/{_MAX_RETRIES}: "
+                    f"status={status_code} model={model} — waiting {delay:.1f}s"
+                )
+                await asyncio.sleep(delay)
+            else:
+                raise
+
+    # Should not reach here, but safety net
+    raise last_exc  # type: ignore[misc]
+
+
+def _llm_log(msg: str) -> None:
+    print(f"[LLM] {msg}", file=sys.stderr, flush=True)
 
 
 # ── Embeddings via Ollama ─────────────────────────────────────────────────────

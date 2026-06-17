@@ -11,7 +11,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from cuid2 import Cuid
 
 from app.core.database import get_db
-from app.core.config import settings
 from app.models.orm import Task, PipelineLog, BenchmarkRun, RunLog
 from app.schemas.schemas import (
     PipelineStageRequest,
@@ -158,6 +157,7 @@ async def stage_quality(body: PipelineStageRequest, db: AsyncSession = Depends(g
     passed, message = await qual_svc.run_quality_check(
         task_id=body.taskId,
         storage_path=body.storagePath,
+        db=db,
     )
 
     _stage_result("quality", passed, message)
@@ -207,7 +207,7 @@ async def stage_oracle_nop(body: PipelineStageRequest, db: AsyncSession = Depend
 
 # ── Stage 6: Easiness prefilter ───────────────────────────────────────────────
 #
-# 5 parallel oracle runs using DEFAULT_MODEL_ID (fast model).
+# 5 parallel oracle runs using the easiness_model from DB config (fast model).
 # Passes only if exactly 1/5 succeed.
 
 @router.post("/easiness", response_model=PipelineStageResponse)
@@ -215,12 +215,13 @@ async def stage_easiness(body: PipelineStageRequest, db: AsyncSession = Depends(
     task = await _get_task_or_404(db, body.taskId)
     _diag(
         f"[easiness] taskId={body.taskId} "
-        f"model={settings.DEFAULT_PROVIDER}/{settings.DEFAULT_MODEL_ID}"
+        f"model=openrouter (from DB config)"
     )
 
     passed, message = await easiness_svc.run_easiness_prefilter(
         task_id=body.taskId,
         storage_path=body.storagePath,
+        db=db,
     )
 
     _stage_result("easiness", passed, message)
@@ -237,7 +238,7 @@ async def stage_easiness(body: PipelineStageRequest, db: AsyncSession = Depends(
 
 # ── Stage 7: Difficulty probe ─────────────────────────────────────────────────
 #
-# 5 parallel oracle runs using DIFFICULTY_MODEL_ID (frontier model).
+# 5 parallel oracle runs using the frontier_model from DB config.
 # Passes if 1–3/5 succeed.
 
 @router.post("/difficulty", response_model=PipelineStageResponse)
@@ -245,12 +246,13 @@ async def stage_difficulty(body: PipelineStageRequest, db: AsyncSession = Depend
     await _get_task_or_404(db, body.taskId)
     _diag(
         f"[difficulty] taskId={body.taskId} "
-        f"model={settings.DEFAULT_PROVIDER}/{settings.DIFFICULTY_MODEL_ID}"
+        f"model=openrouter (from DB config)"
     )
 
     passed, message = await easiness_svc.run_difficulty_probe(
         task_id=body.taskId,
         storage_path=body.storagePath,
+        db=db,
     )
 
     _stage_result("difficulty", passed, message)
@@ -273,6 +275,7 @@ async def stage_agent_quality(body: PipelineStageRequest, db: AsyncSession = Dep
     passed, message = await agent_quality_svc.run_agent_quality_check(
         task_id=body.taskId,
         storage_path=body.storagePath,
+        db=db,
     )
 
     _stage_result("agent-quality", passed, message)
