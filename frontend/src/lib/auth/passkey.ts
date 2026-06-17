@@ -1,7 +1,6 @@
 // src/lib/auth/passkey.ts
 //
 // WebAuthn / Passkey helpers using @simplewebauthn/server.
-// These run server-side only (API routes).
 
 import {
     generateAuthenticationOptions,
@@ -20,10 +19,8 @@ const RP_NAME = "OpenBench";
 const RP_ID = process.env.WEBAUTHN_RP_ID ?? "localhost";
 const ORIGIN = process.env.WEBAUTHN_ORIGIN ?? "http://localhost:3000";
 
-// In-memory challenge store (replace with Redis in production for multi-instance)
 const challengeStore = new Map<string, string>();
 
-// BufferSource-compatible credential descriptor helper
 function credentialDescriptor(id: string): { id: BufferSource; type: "public-key" } {
     return {
         id: Buffer.from(id, "base64url"),
@@ -31,9 +28,8 @@ function credentialDescriptor(id: string): { id: BufferSource; type: "public-key
     };
 }
 
-// ── Registration (adding a new passkey to an existing account) ────────────────
+// ── Registration flows (these already work) ─────────────────────────────────
 
-/** Generate registration options for a logged-in user. */
 export async function generatePasskeyRegistrationOptions(userId: string) {
     const user = await prisma.user.findUnique({
         where: { id: userId },
@@ -49,7 +45,6 @@ export async function generatePasskeyRegistrationOptions(userId: string) {
         userName: user.email ?? userId,
         userDisplayName: user.name ?? user.email ?? userId,
         attestationType: "none",
-        // Exclude already-registered credentials so the browser doesn't offer duplicates
         excludeCredentials: user.passkeys.map((pk) => credentialDescriptor(pk.credentialId)),
         authenticatorSelection: {
             residentKey: "preferred",
@@ -58,13 +53,10 @@ export async function generatePasskeyRegistrationOptions(userId: string) {
         },
     });
 
-    // Store challenge keyed by userId for verification
     challengeStore.set(`reg:${userId}`, options.challenge);
-
     return options;
 }
 
-/** Verify and save a new passkey credential. */
 export async function verifyPasskeyRegistration(
     userId: string,
     response: RegistrationResponseJSON,
@@ -92,7 +84,6 @@ export async function verifyPasskeyRegistration(
         data: {
             userId,
             credentialId: response.id,
-            // Use the verified credentialPublicKey from the registration response
             publicKey: Buffer.from(info.credentialPublicKey).toString("base64url"),
             counter: BigInt(info.counter),
             deviceType: info.credentialDeviceType,
@@ -107,12 +98,7 @@ export async function verifyPasskeyRegistration(
     return { verified: true };
 }
 
-// ── First-time fingerprint registration (no OAuth needed) ─────────────────────
-//
-// A new user can register their fingerprint directly on the login page.
-// This creates both a User record and a Passkey credential in one flow.
-
-/** Generate registration options for a brand-new user (no session required). */
+// First-time registration
 export async function generateFirstTimePasskeyOptions() {
     const tempId = createId();
 
@@ -131,14 +117,10 @@ export async function generateFirstTimePasskeyOptions() {
         },
     });
 
-    // Store challenge keyed by tempId for later verification
     challengeStore.set(`first-reg:${tempId}`, options.challenge);
-
-    // Return the tempId alongside the options so the client sends it back on verify
     return { options, tempId };
 }
 
-/** Verify a first-time fingerprint registration and create the user + passkey. */
 export async function verifyFirstTimePasskeyRegistration(
     tempId: string,
     response: RegistrationResponseJSON
@@ -161,9 +143,6 @@ export async function verifyFirstTimePasskeyRegistration(
 
     const info = verification.registrationInfo;
 
-    // Create a new user with a placeholder email (the authenticator stores
-    // the user handle via residentKey, so they can sign in later with just
-    // their fingerprint — no email needed).
     const user = await prisma.user.create({
         data: {
             name: "User",
@@ -190,40 +169,18 @@ export async function verifyFirstTimePasskeyRegistration(
     return { verified: true, user };
 }
 
-// ── Authentication (signing in with a passkey) ────────────────────────────────
-
-/** Generate authentication options (challenge) for passkey sign-in. */
-export async function generatePasskeyAuthOptions(email?: string) {
-    let allowCredentials: { id: string; type: "public-key" }[] = [];
-
-    if (email) {
-        const user = await prisma.user.findUnique({
-            where: { email },
-            include: { passkeys: true },
-        });
-        if (user?.passkeys.length) {
-            allowCredentials = user.passkeys.map((pk) => ({
-                id: pk.credentialId,
-                type: "public-key" as const,
-            }));
-        }
-    }
-
+// ── Authentication (fixed for fingerprint-first login) ──────────────────────
+export async function generatePasskeyAuthOptions() {
     const options = await generateAuthenticationOptions({
         rpID: RP_ID,
-        userVerification: "required",
-        allowCredentials: allowCredentials.length
-            ? allowCredentials.map((c) => credentialDescriptor(c.id))
-            : undefined,
+        userVerification: "required",           // Forces biometric prompt
+        allowCredentials: undefined,            // Allow discoverable (resident) credentials
     });
 
-    // Challenge keyed by a temporary key; returned in the options for the client to echo back
     challengeStore.set(`auth:${options.challenge}`, options.challenge);
-
     return options;
 }
 
-/** Verify passkey authentication and return the user if valid. */
 export async function verifyPasskeyAuth(response: AuthenticationResponseJSON) {
     const passkey = await prisma.passkey.findUnique({
         where: { credentialId: response.id },
@@ -247,9 +204,7 @@ export async function verifyPasskeyAuth(response: AuthenticationResponseJSON) {
             credentialID: Buffer.from(passkey.credentialId, "base64url"),
             credentialPublicKey: Buffer.from(passkey.publicKey, "base64url"),
             counter: Number(passkey.counter),
-            transports: passkey.transports
-                ? JSON.parse(passkey.transports)
-                : undefined,
+            transports: passkey.transports ? JSON.parse(passkey.transports) : undefined,
         },
     });
 
@@ -257,7 +212,6 @@ export async function verifyPasskeyAuth(response: AuthenticationResponseJSON) {
 
     challengeStore.delete(challengeKey);
 
-    // Update counter to prevent replay attacks
     await prisma.passkey.update({
         where: { id: passkey.id },
         data: {

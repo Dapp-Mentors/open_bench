@@ -59,8 +59,14 @@ export default function LoginPage() {
             if (!optRes.ok) throw new Error("Failed to get passkey challenge");
             const options = await optRes.json();
 
-            // Ask the browser/OS to verify fingerprint
-            const authResponse = await startAuthentication(options);
+            // Ask the browser/OS to verify fingerprint.
+            // preferImmediatelyAvailableCredentials: true prevents the browser from
+            // showing the cross-device / QR fallback if no local passkey is found —
+            // it rejects immediately instead, so our error handler can show the right message.
+            const authResponse = await startAuthentication({
+                ...options,
+                preferImmediatelyAvailableCredentials: true,
+            });
 
             // Send the signed response to the server
             const verifyRes = await fetch("/api/auth/passkey/authenticate", {
