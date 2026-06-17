@@ -1,39 +1,23 @@
 "use client";
 
 // src/app/projects/page.tsx
-//
-// Public projects listing — all authenticated users can view.
-// Admins (admin + super_admin) also see: New Project, Edit, Delete.
 
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
-import {
-    Plus,
-    RefreshCw,
-    FolderOpen,
-    ChevronRight,
-    Pencil,
-    Trash2,
-    X,
-    AlertTriangle,
-} from "lucide-react";
+import { Plus, RefreshCw, FolderOpen, AlertTriangle, X } from "lucide-react";
+import { ProjectCard, type ProjectSummary } from "@/components/ProjectCard";
 
-interface ProjectSummary {
-    id: string;
-    name: string;
-    description: string;
-    domain: string;
-    createdAt: string;
-    _count: {
-        tasks: number;
-        approvedTasks: number;
-        pendingTasks: number;
-        rejectedTasks: number;
-    };
-}
+const DOMAINS = [
+    "Software Engineering",
+    "Sys-Admin",
+    "Security",
+    "Scientific Computing",
+    "Finance",
+    "DevOps",
+];
 
-// ─── Delete confirmation modal ────────────────────────────────────────────────
+// ─── Delete modal ─────────────────────────────────────────────────────────────
 
 function DeleteModal({
     project,
@@ -55,29 +39,38 @@ function DeleteModal({
                 className="w-full max-w-md rounded-xl p-6"
                 style={{ background: "var(--surface)", border: "1px solid var(--border)" }}
             >
-                {/* Icon + heading */}
                 <div className="flex items-start gap-4 mb-5">
                     <div
                         className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0"
-                        style={{ background: "rgba(255,68,68,0.1)", border: "1px solid rgba(255,68,68,0.25)" }}
+                        style={{
+                            background: "rgba(255,68,68,0.1)",
+                            border: "1px solid rgba(255,68,68,0.25)",
+                        }}
                     >
                         <AlertTriangle className="w-5 h-5" style={{ color: "var(--red)" }} />
                     </div>
                     <div>
-                        <h2 className="font-mono text-sm font-semibold mb-1" style={{ color: "var(--text)" }}>
+                        <h2
+                            className="font-mono text-sm font-semibold mb-1"
+                            style={{ color: "var(--text)" }}
+                        >
                             Delete project
                         </h2>
-                        <p className="font-mono text-xs leading-relaxed" style={{ color: "var(--subtle)" }}>
+                        <p
+                            className="font-mono text-xs leading-relaxed"
+                            style={{ color: "var(--subtle)" }}
+                        >
                             This will permanently delete{" "}
-                            <span style={{ color: "var(--text)" }}>{project.name}</span> and all{" "}
+                            <span style={{ color: "var(--text)" }}>{project.name}</span> and
+                            all{" "}
                             <span style={{ color: "var(--red)" }}>
-                                {project._count.tasks} task{project._count.tasks !== 1 ? "s" : ""}
+                                {project._count.tasks} task
+                                {project._count.tasks !== 1 ? "s" : ""}
                             </span>{" "}
                             inside it. There's no undo.
                         </p>
                     </div>
                 </div>
-
                 <div className="flex items-center justify-end gap-2">
                     <button
                         onClick={onCancel}
@@ -102,10 +95,7 @@ function DeleteModal({
                                 Deleting…
                             </>
                         ) : (
-                            <>
-                                <Trash2 className="w-3.5 h-3.5" />
-                                Delete project
-                            </>
+                            "Delete project"
                         )}
                     </button>
                 </div>
@@ -115,15 +105,6 @@ function DeleteModal({
 }
 
 // ─── Edit modal ───────────────────────────────────────────────────────────────
-
-const DOMAINS = [
-    "Software Engineering",
-    "Sys-Admin",
-    "Security",
-    "Scientific Computing",
-    "Finance",
-    "DevOps",
-];
 
 function EditModal({
     project,
@@ -155,11 +136,13 @@ function EditModal({
                 className="w-full max-w-lg rounded-xl p-6"
                 style={{ background: "var(--surface)", border: "1px solid var(--border)" }}
             >
-                {/* Header */}
                 <div className="flex items-center justify-between mb-6">
                     <div>
                         <div className="section-label mb-1">Admin</div>
-                        <h2 className="font-mono text-sm font-semibold" style={{ color: "var(--text)" }}>
+                        <h2
+                            className="font-mono text-sm font-semibold"
+                            style={{ color: "var(--text)" }}
+                        >
                             Edit project
                         </h2>
                     </div>
@@ -175,7 +158,6 @@ function EditModal({
                 </div>
 
                 <div className="space-y-4">
-                    {/* Name */}
                     <div>
                         <label className="block section-label mb-2">Project Name</label>
                         <input
@@ -193,8 +175,6 @@ function EditModal({
                             onBlur={(e) => (e.target.style.borderColor = "var(--border)")}
                         />
                     </div>
-
-                    {/* Description */}
                     <div>
                         <label className="block section-label mb-2">Description</label>
                         <textarea
@@ -215,8 +195,6 @@ function EditModal({
                             {description.length}/300
                         </p>
                     </div>
-
-                    {/* Domain */}
                     <div>
                         <label className="block section-label mb-2">Domain</label>
                         <div className="flex flex-wrap gap-2">
@@ -272,7 +250,7 @@ function EditModal({
     );
 }
 
-// ─── Main page ────────────────────────────────────────────────────────────────
+// ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function ProjectsPage() {
     const { data: session } = useSession();
@@ -283,13 +261,13 @@ export default function ProjectsPage() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
-    // Modal state
     const [deleteTarget, setDeleteTarget] = useState<ProjectSummary | null>(null);
     const [deleting, setDeleting] = useState(false);
     const [editTarget, setEditTarget] = useState<ProjectSummary | null>(null);
     const [saving, setSaving] = useState(false);
 
     const fetchProjects = useCallback(async () => {
+        setLoading(true);
         setError(null);
         const data = await fetch("/api/projects")
             .then((r) => r.json())
@@ -300,15 +278,17 @@ export default function ProjectsPage() {
             setLoading(false);
             return;
         }
-        setProjects(data);
+
+        const sorted = [...data].sort(
+            (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        );
+        setProjects(sorted);
         setLoading(false);
     }, []);
 
     useEffect(() => {
         fetchProjects();
     }, [fetchProjects]);
-
-    // ── Delete ──────────────────────────────────────────────────────────────
 
     async function handleDelete() {
         if (!deleteTarget) return;
@@ -330,8 +310,6 @@ export default function ProjectsPage() {
             setDeleting(false);
         }
     }
-
-    // ── Edit / save ─────────────────────────────────────────────────────────
 
     async function handleSave(name: string, description: string, domain: string) {
         if (!editTarget) return;
@@ -360,16 +338,11 @@ export default function ProjectsPage() {
         }
     }
 
-    // ── Derived stats ───────────────────────────────────────────────────────
-
     const totalTasks = projects.reduce((s, p) => s + p._count.tasks, 0);
     const totalApproved = projects.reduce((s, p) => s + p._count.approvedTasks, 0);
 
-    // ── Render ──────────────────────────────────────────────────────────────
-
     return (
         <>
-            {/* Modals */}
             {deleteTarget && (
                 <DeleteModal
                     project={deleteTarget}
@@ -388,30 +361,19 @@ export default function ProjectsPage() {
             )}
 
             <div className="max-w-5xl mx-auto px-6 py-10">
-                {/* Header */}
                 <div className="flex items-start justify-between mb-8">
                     <div>
                         <div className="section-label mb-2">Platform</div>
-                        <h1
-                            className="font-mono text-2xl font-bold"
-                            style={{ color: "var(--text)" }}
-                        >
+                        <h1 className="font-mono text-2xl font-bold" style={{ color: "var(--text)" }}>
                             Projects
                         </h1>
-                        <p
-                            className="font-mono text-xs mt-1"
-                            style={{ color: "var(--subtle)" }}
-                        >
+                        <p className="font-mono text-xs mt-1" style={{ color: "var(--subtle)" }}>
                             All benchmark projects on the platform
                         </p>
                     </div>
-
                     <div className="flex items-center gap-2">
                         <button
-                            onClick={() => {
-                                setLoading(true);
-                                fetchProjects();
-                            }}
+                            onClick={fetchProjects}
                             className="bench-btn-ghost flex items-center gap-1.5 px-3 py-2 rounded text-xs"
                         >
                             <RefreshCw className="w-3.5 h-3.5" />
@@ -429,7 +391,6 @@ export default function ProjectsPage() {
                     </div>
                 </div>
 
-                {/* Stats */}
                 <div className="grid grid-cols-3 gap-3 mb-8">
                     {[
                         { label: "Total Projects", value: projects.length, color: "var(--text)" },
@@ -438,29 +399,19 @@ export default function ProjectsPage() {
                     ].map(({ label, value, color }) => (
                         <div key={label} className="bench-card rounded-lg px-4 py-3">
                             <div className="section-label mb-1">{label}</div>
-                            <div
-                                className="font-mono font-bold text-2xl"
-                                style={{ color }}
-                            >
+                            <div className="font-mono font-bold text-2xl" style={{ color }}>
                                 {loading ? "—" : value}
                             </div>
                         </div>
                     ))}
                 </div>
 
-                {/* Content */}
                 {loading ? (
-                    <div
-                        className="text-center py-12 font-mono text-sm"
-                        style={{ color: "var(--subtle)" }}
-                    >
+                    <div className="text-center py-12 font-mono text-sm" style={{ color: "var(--subtle)" }}>
                         Loading…
                     </div>
                 ) : error ? (
-                    <div
-                        className="text-center py-12 font-mono text-sm"
-                        style={{ color: "var(--red)" }}
-                    >
+                    <div className="text-center py-12 font-mono text-sm" style={{ color: "var(--red)" }}>
                         {error}
                     </div>
                 ) : projects.length === 0 ? (
@@ -468,25 +419,14 @@ export default function ProjectsPage() {
                         className="text-center py-20 border rounded-lg"
                         style={{ borderColor: "var(--border)", borderStyle: "dashed" }}
                     >
-                        <FolderOpen
-                            className="w-8 h-8 mx-auto mb-4"
-                            style={{ color: "var(--muted)" }}
-                        />
-                        <p
-                            className="font-mono text-sm mb-1"
-                            style={{ color: "var(--text)" }}
-                        >
+                        <FolderOpen className="w-8 h-8 mx-auto mb-4" style={{ color: "var(--muted)" }} />
+                        <p className="font-mono text-sm mb-1" style={{ color: "var(--text)" }}>
                             No projects yet
-                        </p>
-                        <p className="text-xs mb-5" style={{ color: "var(--subtle)" }}>
-                            {isAdmin
-                                ? "Create the first project to get started."
-                                : "No projects have been created on this platform yet."}
                         </p>
                         {isAdmin && (
                             <Link
                                 href="/projects/new"
-                                className="bench-btn-primary inline-flex items-center gap-2 px-4 py-2 rounded text-xs"
+                                className="bench-btn-primary inline-flex items-center gap-2 px-4 py-2 rounded text-xs mt-4"
                             >
                                 <Plus className="w-3.5 h-3.5" />
                                 Create first project
@@ -496,122 +436,13 @@ export default function ProjectsPage() {
                 ) : (
                     <div className="space-y-2">
                         {projects.map((p) => (
-                            <div
+                            <ProjectCard
                                 key={p.id}
-                                className="bench-card flex items-center justify-between px-5 py-4 rounded-lg group"
-                            >
-                                {/* Left: icon + name + description */}
-                                <Link
-                                    href={`/projects/${p.id}`}
-                                    className="flex items-center gap-4 min-w-0 flex-1"
-                                >
-                                    <div
-                                        className="w-8 h-8 rounded flex items-center justify-center flex-shrink-0"
-                                        style={{
-                                            background: "rgba(0,230,118,0.08)",
-                                            border: "1px solid rgba(0,230,118,0.2)",
-                                        }}
-                                    >
-                                        <FolderOpen
-                                            className="w-4 h-4"
-                                            style={{ color: "var(--green)" }}
-                                        />
-                                    </div>
-                                    <div className="min-w-0">
-                                        <p
-                                            className="font-mono font-medium text-sm mb-0.5 group-hover:text-white transition-colors"
-                                            style={{ color: "var(--text)" }}
-                                        >
-                                            {p.name}
-                                        </p>
-                                        <p
-                                            className="font-mono text-xs truncate max-w-sm"
-                                            style={{ color: "var(--subtle)" }}
-                                        >
-                                            {p.description}
-                                        </p>
-                                    </div>
-                                </Link>
-
-                                {/* Right: domain + counts + admin actions + chevron */}
-                                <div className="flex items-center gap-3 flex-shrink-0 ml-4">
-                                    {/* Domain badge */}
-                                    <span
-                                        className="font-mono text-xs px-2 py-0.5 rounded hidden md:inline"
-                                        style={{
-                                            background: "var(--muted)",
-                                            color: "var(--subtle)",
-                                            border: "1px solid var(--border)",
-                                        }}
-                                    >
-                                        {p.domain}
-                                    </span>
-
-                                    {/* Task counts */}
-                                    <div className="flex items-center gap-3 font-mono text-xs">
-                                        <span style={{ color: "var(--subtle)" }}>
-                                            {p._count.tasks} task{p._count.tasks !== 1 ? "s" : ""}
-                                        </span>
-                                        {p._count.approvedTasks > 0 && (
-                                            <span style={{ color: "var(--green)" }}>
-                                                {p._count.approvedTasks} approved
-                                            </span>
-                                        )}
-                                        {p._count.pendingTasks > 0 && (
-                                            <span style={{ color: "var(--blue)" }}>
-                                                {p._count.pendingTasks} running
-                                            </span>
-                                        )}
-                                    </div>
-
-                                    {/* Admin actions — only rendered for admin/super_admin */}
-                                    {isAdmin && (
-                                        <div className="flex items-center gap-1">
-                                            <button
-                                                onClick={(e) => {
-                                                    e.preventDefault();
-                                                    setEditTarget(p);
-                                                }}
-                                                title="Edit project"
-                                                className="p-1.5 rounded transition-all"
-                                                style={{ color: "var(--muted)" }}
-                                                onMouseEnter={(e) =>
-                                                    (e.currentTarget.style.color = "var(--blue)")
-                                                }
-                                                onMouseLeave={(e) =>
-                                                    (e.currentTarget.style.color = "var(--muted)")
-                                                }
-                                            >
-                                                <Pencil className="w-3.5 h-3.5" />
-                                            </button>
-                                            <button
-                                                onClick={(e) => {
-                                                    e.preventDefault();
-                                                    setDeleteTarget(p);
-                                                }}
-                                                title="Delete project"
-                                                className="p-1.5 rounded transition-all"
-                                                style={{ color: "var(--muted)" }}
-                                                onMouseEnter={(e) =>
-                                                    (e.currentTarget.style.color = "var(--red)")
-                                                }
-                                                onMouseLeave={(e) =>
-                                                    (e.currentTarget.style.color = "var(--muted)")
-                                                }
-                                            >
-                                                <Trash2 className="w-3.5 h-3.5" />
-                                            </button>
-                                        </div>
-                                    )}
-
-                                    <Link href={`/projects/${p.id}`}>
-                                        <ChevronRight
-                                            className="w-4 h-4"
-                                            style={{ color: "var(--muted)" }}
-                                        />
-                                    </Link>
-                                </div>
-                            </div>
+                                project={p}
+                                isAdmin={isAdmin}
+                                onEdit={setEditTarget}
+                                onDelete={setDeleteTarget}
+                            />
                         ))}
                     </div>
                 )}

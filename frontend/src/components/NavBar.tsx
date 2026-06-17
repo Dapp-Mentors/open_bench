@@ -2,28 +2,167 @@
 
 // src/components/NavBar.tsx
 //
-// Session-aware NavBar. Shows different nav items based on role:
-//   user       → Dashboard, Projects
-//   admin      → + Admin panel
-//   super_admin → + Models (within admin)
-// Shows user avatar + sign-out in top right.
+// Session-aware NavBar with Sia connection status.
+//
+// Role visibility:
+//   user        → Dashboard, Projects
+//   admin       → + Admin
+//   super_admin → + Admin, Models
 
 import { useSession, signOut } from "next-auth/react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, useRef, useEffect } from "react";
-import { LogOut, ChevronDown, User, Shield, Settings2 } from "lucide-react";
+import {
+  Activity,
+  LogOut,
+  ChevronDown,
+  User,
+  Shield,
+  Settings2,
+  FolderOpen,
+  LayoutDashboard,
+  Wifi,
+  WifiOff,
+} from "lucide-react";
+
+// ─── Sia status ───────────────────────────────────────────────────────────────
+
+interface SiaConnectionStatus {
+  connected: boolean;
+  mode: "live" | "demo";
+  reason: string | null;
+}
+
+async function fetchSiaStatus(): Promise<SiaConnectionStatus> {
+  try {
+    const res = await fetch("/api/sia/status");
+    if (!res.ok) return { connected: false, mode: "live", reason: `HTTP ${res.status}` };
+    return await res.json();
+  } catch {
+    return { connected: false, mode: "live", reason: "Backend unreachable" };
+  }
+}
+
+function SiaIndicator({ sia }: { sia: SiaConnectionStatus | null }) {
+  if (!sia) {
+    return (
+      <span
+        className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border font-mono text-xs"
+        style={{ color: "var(--subtle)", borderColor: "var(--border)", background: "transparent" }}
+      >
+        <span
+          className="w-1.5 h-1.5 rounded-full animate-pulse"
+          style={{ background: "var(--subtle)" }}
+        />
+        Checking…
+      </span>
+    );
+  }
+
+  if (sia.connected) {
+    return (
+      <span
+        className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border font-mono text-xs"
+        style={{
+          color: "var(--green)",
+          borderColor: "rgba(0,230,118,0.25)",
+          background: "rgba(0,230,118,0.06)",
+        }}
+      >
+        <Wifi className="w-3 h-3" />
+        Sia live
+      </span>
+    );
+  }
+
+  if (sia.mode === "demo") {
+    return (
+      <span
+        className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border font-mono text-xs"
+        style={{
+          color: "var(--amber)",
+          borderColor: "rgba(255,179,0,0.25)",
+          background: "rgba(255,179,0,0.06)",
+        }}
+      >
+        <WifiOff className="w-3 h-3" />
+        Demo mode
+      </span>
+    );
+  }
+
+  return (
+    <span
+      className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border font-mono text-xs"
+      style={{
+        color: "var(--red)",
+        borderColor: "rgba(255,68,68,0.25)",
+        background: "rgba(255,68,68,0.06)",
+      }}
+    >
+      <WifiOff className="w-3 h-3" />
+      {sia.reason ? `Offline` : "Offline"}
+    </span>
+  );
+}
+
+// ─── Nav link ─────────────────────────────────────────────────────────────────
+
+function NavLink({
+  href,
+  label,
+  icon: Icon,
+  isActive,
+  accent = "green",
+}: {
+  href: string;
+  label: string;
+  icon: React.ElementType;
+  isActive: boolean;
+  accent?: "green" | "amber";
+}) {
+  const activeColor = accent === "amber" ? "var(--amber)" : "var(--green)";
+  const activeBg =
+    accent === "amber" ? "rgba(255,179,0,0.08)" : "rgba(0,230,118,0.08)";
+  const activeBorder =
+    accent === "amber" ? "rgba(255,179,0,0.2)" : "rgba(0,230,118,0.2)";
+
+  return (
+    <Link
+      href={href}
+      className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-mono transition-all"
+      style={{
+        color: isActive ? activeColor : "var(--subtle)",
+        background: isActive ? activeBg : "transparent",
+        border: isActive
+          ? `1px solid ${activeBorder}`
+          : "1px solid transparent",
+      }}
+    >
+      <Icon className="w-3.5 h-3.5" />
+      {label}
+    </Link>
+  );
+}
+
+// ─── NavBar ───────────────────────────────────────────────────────────────────
 
 export function NavBar() {
   const { data: session, status } = useSession();
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
   const [avatarError, setAvatarError] = useState(false);
+  const [sia, setSia] = useState<SiaConnectionStatus | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const role = session?.user?.role;
   const isAdmin = role === "admin" || role === "super_admin";
   const isSuperAdmin = role === "super_admin";
+
+  const isActive = (href: string) =>
+    pathname === href || pathname.startsWith(href + "/");
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -36,68 +175,104 @@ export function NavBar() {
     return () => document.removeEventListener("mousedown", handleClick);
   }, []);
 
-  const isActive = (href: string) =>
-    pathname === href || pathname.startsWith(href + "/");
-
-  const navLinkStyle = (href: string) => ({
-    color: isActive(href) ? "var(--text)" : "var(--subtle)",
-    borderBottom: isActive(href) ? "1px solid var(--text)" : "1px solid transparent",
-    paddingBottom: "2px",
-  });
+  // Sia status — initial fetch + poll every 10 minutes
+  useEffect(() => {
+    fetchSiaStatus().then(setSia);
+    intervalRef.current = setInterval(() => fetchSiaStatus().then(setSia), 600_000);
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
+  }, []);
 
   if (status === "loading") {
     return (
       <header
-        className="sticky top-0 z-50 flex items-center justify-between px-6 h-12"
-        style={{ background: "var(--bg)", borderBottom: "1px solid var(--border)" }}
+        className="sticky top-0 z-50 flex items-center justify-between px-6 h-14"
+        style={{
+          background: "rgba(10,11,13,0.92)",
+          borderBottom: "1px solid var(--border)",
+          backdropFilter: "blur(12px)",
+        }}
       >
-        <span className="font-mono text-sm font-semibold" style={{ color: "var(--text)" }}>
-          OpenBench
-        </span>
+        <div className="flex items-center gap-2.5">
+          <div
+            className="w-7 h-7 flex items-center justify-center rounded"
+            style={{ background: "var(--green)", boxShadow: "0 0 12px rgba(0,230,118,0.4)" }}
+          >
+            <Activity className="w-4 h-4" style={{ color: "#0a0b0d" }} />
+          </div>
+          <span className="font-mono font-bold text-sm" style={{ color: "var(--text)" }}>
+            OPEN<span style={{ color: "var(--green)" }}>BENCH</span>
+          </span>
+        </div>
       </header>
     );
   }
 
   return (
     <header
-      className="sticky top-0 z-50 flex items-center justify-between px-6 h-12"
-      style={{ background: "var(--bg)", borderBottom: "1px solid var(--border)" }}
+      className="sticky top-0 z-50 flex items-center justify-between px-6 h-14"
+      style={{
+        background: "rgba(10,11,13,0.92)",
+        borderBottom: "1px solid var(--border)",
+        backdropFilter: "blur(12px)",
+      }}
     >
-      {/* Left: wordmark + nav links */}
+      {/* ── Left: logo + nav links ── */}
       <div className="flex items-center gap-6">
-        <Link href="/" className="font-mono text-sm font-semibold" style={{ color: "var(--text)" }}>
-          OpenBench
+        <Link href="/" className="flex items-center gap-2.5">
+          <div
+            className="w-7 h-7 flex items-center justify-center rounded"
+            style={{ background: "var(--green)", boxShadow: "0 0 12px rgba(0,230,118,0.4)" }}
+          >
+            <Activity className="w-4 h-4" style={{ color: "#0a0b0d" }} />
+          </div>
+          <span className="font-mono font-bold text-sm" style={{ color: "var(--text)" }}>
+            OPEN<span style={{ color: "var(--green)" }}>BENCH</span>
+          </span>
         </Link>
 
         {session?.user && (
-          <nav className="flex items-center gap-5">
-            <Link href="/dashboard" className="font-mono text-xs transition-colors" style={navLinkStyle("/dashboard")}>
-              Dashboard
-            </Link>
-            <Link href="/projects" className="font-mono text-xs transition-colors" style={navLinkStyle("/projects")}>
-              Projects
-            </Link>
+          <nav className="flex items-center gap-1">
+            <NavLink
+              href="/dashboard"
+              label="Dashboard"
+              icon={LayoutDashboard}
+              isActive={isActive("/dashboard")}
+            />
+            <NavLink
+              href="/projects"
+              label="Projects"
+              icon={FolderOpen}
+              isActive={isActive("/projects")}
+            />
             {isAdmin && (
-              <Link href="/admin" className="font-mono text-xs transition-colors" style={navLinkStyle("/admin")}>
-                Admin
-              </Link>
+              <NavLink
+                href="/admin"
+                label="Admin"
+                icon={Shield}
+                isActive={isActive("/admin")}
+                accent="amber"
+              />
             )}
             {isSuperAdmin && (
-              <Link
+              <NavLink
                 href="/admin/models"
-                className="font-mono text-xs flex items-center gap-1 transition-colors"
-                style={navLinkStyle("/admin/models")}
-              >
-                <Settings2 className="w-3 h-3" />
-                Models
-              </Link>
+                label="Models"
+                icon={Settings2}
+                isActive={isActive("/admin/models")}
+                accent="amber"
+              />
             )}
           </nav>
         )}
       </div>
 
-      {/* Right: user menu or sign-in link */}
+      {/* ── Right: Sia status + user menu ── */}
       <div className="flex items-center gap-3">
+        {/* Sia indicator — only shown when logged in */}
+        {session?.user && <SiaIndicator sia={sia} />}
+
         {session?.user ? (
           <div className="relative" ref={menuRef}>
             <button
@@ -109,7 +284,6 @@ export function NavBar() {
                 color: "var(--text)",
               }}
             >
-              {/* Avatar or fallback icon */}
               {session.user.image && !avatarError ? (
                 <img
                   src={session.user.image}
@@ -120,8 +294,9 @@ export function NavBar() {
               ) : (
                 <User className="w-4 h-4" style={{ color: "var(--subtle)" }} />
               )}
-              <span className="max-w-[120px] truncate">{session.user.name ?? session.user.email}</span>
-              {/* Role badge */}
+              <span className="max-w-[120px] truncate">
+                {session.user.name ?? session.user.email}
+              </span>
               {isSuperAdmin && (
                 <span
                   className="px-1.5 py-0.5 rounded text-[9px] font-mono uppercase tracking-wider"
@@ -133,7 +308,7 @@ export function NavBar() {
               {role === "admin" && (
                 <span
                   className="px-1.5 py-0.5 rounded text-[9px] font-mono uppercase tracking-wider"
-                  style={{ background: "rgba(77,166,255,0.1)", color: "var(--blue)" }}
+                  style={{ background: "rgba(255,179,0,0.1)", color: "var(--amber)" }}
                 >
                   admin
                 </span>
@@ -142,7 +317,7 @@ export function NavBar() {
                 className="w-3 h-3 transition-transform"
                 style={{
                   color: "var(--subtle)",
-                  transform: menuOpen ? "rotate(180deg)" : "rotate(0)",
+                  transform: menuOpen ? "rotate(180deg)" : "rotate(0deg)",
                 }}
               />
             </button>
@@ -150,19 +325,60 @@ export function NavBar() {
             {menuOpen && (
               <div
                 className="absolute right-0 top-full mt-1.5 w-52 rounded-lg overflow-hidden"
-                style={{ background: "var(--surface)", border: "1px solid var(--border)", zIndex: 100 }}
+                style={{
+                  background: "var(--surface)",
+                  border: "1px solid var(--border)",
+                  zIndex: 100,
+                }}
               >
                 {/* User info */}
-                <div className="px-4 py-3" style={{ borderBottom: "1px solid var(--border)" }}>
-                  <div className="font-mono text-xs font-medium truncate" style={{ color: "var(--text)" }}>
+                <div
+                  className="px-4 py-3"
+                  style={{ borderBottom: "1px solid var(--border)" }}
+                >
+                  <div
+                    className="font-mono text-xs font-medium truncate"
+                    style={{ color: "var(--text)" }}
+                  >
                     {session.user.name}
                   </div>
-                  <div className="font-mono text-[10px] truncate mt-0.5" style={{ color: "var(--subtle)" }}>
+                  <div
+                    className="font-mono text-[10px] truncate mt-0.5"
+                    style={{ color: "var(--subtle)" }}
+                  >
                     {session.user.email}
                   </div>
                 </div>
 
-                {/* Admin links (only in menu for cleaner mobile nav) */}
+                {/* Sia status in dropdown for full detail */}
+                {sia && (
+                  <div
+                    className="px-4 py-2.5 flex items-center gap-2 font-mono text-xs"
+                    style={{
+                      borderBottom: "1px solid var(--border)",
+                      color: sia.connected
+                        ? "var(--green)"
+                        : sia.mode === "demo"
+                          ? "var(--amber)"
+                          : "var(--red)",
+                    }}
+                  >
+                    {sia.connected ? (
+                      <Wifi className="w-3.5 h-3.5 flex-shrink-0" />
+                    ) : (
+                      <WifiOff className="w-3.5 h-3.5 flex-shrink-0" />
+                    )}
+                    <span className="truncate">
+                      {sia.connected
+                        ? "Sia Network connected"
+                        : sia.mode === "demo"
+                          ? "Running in demo mode"
+                          : `Sia offline — ${sia.reason ?? "unknown"}`}
+                    </span>
+                  </div>
+                )}
+
+                {/* Super admin: model settings */}
                 {isSuperAdmin && (
                   <Link
                     href="/admin/models"
@@ -172,12 +388,12 @@ export function NavBar() {
                     onMouseEnter={(e) => (e.currentTarget.style.color = "var(--text)")}
                     onMouseLeave={(e) => (e.currentTarget.style.color = "var(--subtle)")}
                   >
-                    <Shield className="w-3.5 h-3.5" />
+                    <Settings2 className="w-3.5 h-3.5" />
                     Model settings
                   </Link>
                 )}
 
-                {/* Manage passkeys */}
+                {/* Passkeys */}
                 <Link
                   href="/settings/passkeys"
                   onClick={() => setMenuOpen(false)}
@@ -196,7 +412,7 @@ export function NavBar() {
                     onClick={() => signOut({ callbackUrl: "/login" })}
                     className="w-full flex items-center gap-2.5 px-4 py-2.5 font-mono text-xs transition-colors text-left"
                     style={{ color: "var(--subtle)" }}
-                    onMouseEnter={(e) => (e.currentTarget.style.color = "var(--red, #ef4444)")}
+                    onMouseEnter={(e) => (e.currentTarget.style.color = "var(--red)")}
                     onMouseLeave={(e) => (e.currentTarget.style.color = "var(--subtle)")}
                   >
                     <LogOut className="w-3.5 h-3.5" />
