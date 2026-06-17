@@ -74,7 +74,7 @@ When the backend boots it eagerly initialises the Sia client. If Sia is unreacha
 cp backend/.env.example backend/.env
 
 # Frontend
-cp frontend/.env.local.example frontend/.env.local
+cp frontend/.env.example frontend/.env
 ```
 
 The defaults work out of the box. Key variables:
@@ -218,6 +218,7 @@ openbench/
 │       │   └── orm.py           # SQLAlchemy ORM models
 │       ├── routers/
 │       │   ├── approve.py       # Task approval + Sia upload
+│       │   ├── model_config.py  # Model provider configuration router
 │       │   ├── pipeline.py      # Pipeline stage endpoints
 │       │   ├── runs.py          # Benchmark run reads + log streaming
 │       │   ├── sia.py           # Sia connection status
@@ -229,6 +230,7 @@ openbench/
 │           ├── agent_quality.py # LLM-as-judge for instructions
 │           ├── easiness.py      # 5-run prefilter (target: 1/5 passes)
 │           ├── llm.py           # Unified LLM provider abstraction
+│           ├── model_config.py  # Provider configuration logic
 │           ├── pipeline.py      # Docker container execution (6 pipeline stages)
 │           ├── quality.py       # 11-criteria quality assessment
 │           ├── sia_client.py    # Sia SDK singleton + demo fallback
@@ -249,12 +251,15 @@ openbench/
 │       │   ├── layout.tsx       # Root layout with NavBar
 │       │   ├── page.tsx         # Landing page
 │       │   ├── admin/
-│       │   │   └── page.tsx     # Admin dashboard (benchmark cards)
+│       │   │   ├── page.tsx     # Admin dashboard (benchmark cards)
+│       │   │   └── models/
+│       │   │       └── page.tsx # Model provider configuration page
 │       │   ├── api/             # Next.js API routes
 │       │   │   ├── admin/       # Ready-tasks, stats
 │       │   │   ├── health/      # Health check
 │       │   │   ├── inngest/     # Inngest handler
-│       │   │   ├── models/      # Model provider config
+│       │   │   ├── models/      # Model provider listing
+│       │   │   │   └── config/  # Model provider config CRUD
 │       │   │   ├── projects/    # Project CRUD + task management
 │       │   │   │   └── [id]/tasks/[taskId]/
 │       │   │   │       ├── approve/
@@ -262,7 +267,9 @@ openbench/
 │       │   │   │       ├── revert/
 │       │   │   │       └── runs/
 │       │   │   ├── runs/        # Benchmark run state
-│       │   │   ├── sia/status/  # Sia connection status
+│       │   │   ├── sia/         # Sia connection status, events
+│       │   │   │   ├── status/
+│       │   │   │   └── events/
 │       │   │   └── tasks/       # Task CRUD
 │       │   ├── dashboard/
 │       │   │   └── page.tsx     # Main dashboard
@@ -276,7 +283,7 @@ openbench/
 │       │   ├── LogTerminal.tsx
 │       │   ├── PipelineStages.tsx
 │       │   ├── ScoreDisplay.tsx
-│       │   ├── SiaProof.tsx
+│       │   ├── SiaProof.tsx           # Sia upload proof visualisation
 │       │   ├── StatusBadge.tsx
 │       │   ├── TaskActions.tsx
 │       │   ├── TaskRow.tsx
@@ -289,8 +296,7 @@ openbench/
 │           ├── use-sia-sse.ts           # SSE hook for pipeline status
 │           ├── inngest/
 │           │   ├── client.ts            # Inngest client
-│           │   ├── pipeline-inngest.ts   # 8-stage curation pipeline
-│           │   └── sia-pipeline.ts       # Sia upload pipeline
+│           │   └── pipeline-inngest.ts   # 8-stage curation pipeline
 │           └── prisma/
 │               ├── client.ts
 │               ├── index.ts
