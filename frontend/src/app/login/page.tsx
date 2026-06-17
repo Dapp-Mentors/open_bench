@@ -9,7 +9,7 @@
 import { useState, useCallback } from "react";
 import { signIn } from "next-auth/react";
 import { useSearchParams } from "next/navigation";
-import { Loader2, Fingerprint, Chrome, KeyRound } from "lucide-react";
+import { Loader2, Fingerprint, Chrome, KeyRound, Info } from "lucide-react";
 
 // GitHub icon (lucide doesn't have one that matches)
 function GitHubIcon({ className }: { className?: string }) {
@@ -39,6 +39,7 @@ export default function LoginPage() {
 
     const [loading, setLoading] = useState<AuthMethod | null>(null);
     const [passkeyError, setPasskeyError] = useState<string | null>(null);
+    const [noPasskeyRegistered, setNoPasskeyRegistered] = useState(false);
 
     const handleOAuth = useCallback(async (provider: "google" | "github") => {
         setLoading(provider);
@@ -50,6 +51,7 @@ export default function LoginPage() {
     const handlePasskeySignIn = useCallback(async () => {
         setLoading("passkey");
         setPasskeyError(null);
+        setNoPasskeyRegistered(false);
 
         try {
             const { startAuthentication } = await import("@simplewebauthn/browser");
@@ -89,8 +91,8 @@ export default function LoginPage() {
                 err instanceof Error &&
                 err.message.toLowerCase().includes("not found")
             ) {
-                // No passkey registered yet — suggest registering
-                setPasskeyError("No fingerprint found. Register one below.");
+                // No passkey registered yet — show the dedicated guidance callout
+                setNoPasskeyRegistered(true);
             } else {
                 setPasskeyError(
                     err instanceof Error ? err.message : "Fingerprint authentication failed. Try again."
@@ -163,7 +165,42 @@ export default function LoginPage() {
                     </p>
                 </div>
 
-                {/* Error banner */}
+                {/* No passkey registered — guidance callout */}
+                {noPasskeyRegistered && (
+                    <div
+                        className="mb-6 px-4 py-4 rounded-lg font-mono text-xs space-y-2"
+                        style={{
+                            background: "rgba(234,179,8,0.07)",
+                            border: "1px solid rgba(234,179,8,0.25)",
+                            color: "var(--text)",
+                        }}
+                    >
+                        <div className="flex items-start gap-2">
+                            <Info className="w-3.5 h-3.5 mt-0.5 shrink-0" style={{ color: "rgba(234,179,8,0.9)" }} />
+                            <div className="space-y-1.5">
+                                <p className="font-semibold" style={{ color: "rgba(234,179,8,0.9)" }}>
+                                    No fingerprint found for this device
+                                </p>
+                                <p style={{ color: "var(--subtle)" }}>
+                                    This account doesn't have a passkey set up yet. To use fingerprint sign-in, you'll need to add one first.
+                                </p>
+                                <p style={{ color: "var(--subtle)" }}>
+                                    Sign in with Google or GitHub below, then go to{" "}
+                                    <a
+                                        href="/settings/passkeys"
+                                        className="underline underline-offset-2"
+                                        style={{ color: "rgba(234,179,8,0.9)" }}
+                                    >
+                                        Settings → Passkeys
+                                    </a>{" "}
+                                    to register your fingerprint.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* General error banner */}
                 {(errorMessage || passkeyError) && (
                     <div
                         className="mb-6 px-4 py-3 rounded-lg font-mono text-xs"
