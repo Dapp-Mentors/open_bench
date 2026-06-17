@@ -14,6 +14,7 @@ import type {
     RegistrationResponseJSON,
 } from "@simplewebauthn/types";
 import { prisma } from "@/lib/prisma/client";
+import { createId } from "@paralleldrive/cuid2";
 
 const RP_NAME = "OpenBench";
 const RP_ID = process.env.WEBAUTHN_RP_ID ?? "localhost";
@@ -52,7 +53,8 @@ export async function generatePasskeyRegistrationOptions(userId: string) {
         excludeCredentials: user.passkeys.map((pk) => credentialDescriptor(pk.credentialId)),
         authenticatorSelection: {
             residentKey: "preferred",
-            userVerification: "preferred",
+            userVerification: "required",
+            authenticatorAttachment: "platform",
         },
     });
 
@@ -105,6 +107,89 @@ export async function verifyPasskeyRegistration(
     return { verified: true };
 }
 
+// ── First-time fingerprint registration (no OAuth needed) ─────────────────────
+//
+// A new user can register their fingerprint directly on the login page.
+// This creates both a User record and a Passkey credential in one flow.
+
+/** Generate registration options for a brand-new user (no session required). */
+export async function generateFirstTimePasskeyOptions() {
+    const tempId = createId();
+
+    const options = await generateRegistrationOptions({
+        rpName: RP_NAME,
+        rpID: RP_ID,
+        userID: tempId,
+        userName: tempId,
+        userDisplayName: "User",
+        attestationType: "none",
+        excludeCredentials: [],
+        authenticatorSelection: {
+            residentKey: "required",
+            userVerification: "required",
+            authenticatorAttachment: "platform",
+        },
+    });
+
+    // Store challenge keyed by tempId for later verification
+    challengeStore.set(`first-reg:${tempId}`, options.challenge);
+
+    // Return the tempId alongside the options so the client sends it back on verify
+    return { options, tempId };
+}
+
+/** Verify a first-time fingerprint registration and create the user + passkey. */
+export async function verifyFirstTimePasskeyRegistration(
+    tempId: string,
+    response: RegistrationResponseJSON
+) {
+    const expectedChallenge = challengeStore.get(`first-reg:${tempId}`);
+    if (!expectedChallenge) throw new Error("No pending first-time registration challenge");
+
+    const verification = await verifyRegistrationResponse({
+        response,
+        expectedChallenge,
+        expectedOrigin: ORIGIN,
+        expectedRPID: RP_ID,
+    });
+
+    if (!verification.verified || !verification.registrationInfo) {
+        throw new Error("First-time passkey registration verification failed");
+    }
+
+    challengeStore.delete(`first-reg:${tempId}`);
+
+    const info = verification.registrationInfo;
+
+    // Create a new user with a placeholder email (the authenticator stores
+    // the user handle via residentKey, so they can sign in later with just
+    // their fingerprint — no email needed).
+    const user = await prisma.user.create({
+        data: {
+            name: "User",
+            email: `${createId()}@passkey.openbench.local`,
+            role: "user",
+        },
+    });
+
+    await prisma.passkey.create({
+        data: {
+            userId: user.id,
+            credentialId: response.id,
+            publicKey: Buffer.from(info.credentialPublicKey).toString("base64url"),
+            counter: BigInt(info.counter),
+            deviceType: info.credentialDeviceType,
+            backedUp: info.credentialBackedUp,
+            transports: response.response.transports
+                ? JSON.stringify(response.response.transports)
+                : null,
+            name: "My fingerprint",
+        },
+    });
+
+    return { verified: true, user };
+}
+
 // ── Authentication (signing in with a passkey) ────────────────────────────────
 
 /** Generate authentication options (challenge) for passkey sign-in. */
@@ -126,7 +211,7 @@ export async function generatePasskeyAuthOptions(email?: string) {
 
     const options = await generateAuthenticationOptions({
         rpID: RP_ID,
-        userVerification: "preferred",
+        userVerification: "required",
         allowCredentials: allowCredentials.length
             ? allowCredentials.map((c) => credentialDescriptor(c.id))
             : undefined,

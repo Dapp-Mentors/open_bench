@@ -2,13 +2,14 @@
 
 // src/app/login/page.tsx
 //
-// Login page — matches OpenBench's dark terminal aesthetic.
-// Supports: Google OAuth, GitHub OAuth, Passkey/fingerprint.
+// Login page — fingerprint/passkey-first authentication.
+// New users register their fingerprint directly here (no OAuth needed).
+// Returning users sign in with their fingerprint.
 
 import { useState, useCallback } from "react";
 import { signIn } from "next-auth/react";
 import { useSearchParams } from "next/navigation";
-import { Loader2, Fingerprint, Chrome } from "lucide-react";
+import { Loader2, Fingerprint, Chrome, KeyRound } from "lucide-react";
 
 // GitHub icon (lucide doesn't have one that matches)
 function GitHubIcon({ className }: { className?: string }) {
@@ -19,7 +20,7 @@ function GitHubIcon({ className }: { className?: string }) {
     );
 }
 
-type AuthMethod = "google" | "github" | "passkey";
+type AuthMethod = "google" | "github" | "passkey" | "register-passkey";
 
 const ERROR_MESSAGES: Record<string, string> = {
     OAuthSignin: "Failed to start sign-in. Try again.",
@@ -42,16 +43,15 @@ export default function LoginPage() {
     const handleOAuth = useCallback(async (provider: "google" | "github") => {
         setLoading(provider);
         await signIn(provider, { callbackUrl });
-        // signIn redirects, so setLoading won't be called again — but just in case:
         setLoading(null);
     }, [callbackUrl]);
 
-    const handlePasskey = useCallback(async () => {
+    // ── Fingerprint sign-in (returning user) ──────────────────────────────────
+    const handlePasskeySignIn = useCallback(async () => {
         setLoading("passkey");
         setPasskeyError(null);
 
         try {
-            // Dynamically import so this code only runs client-side
             const { startAuthentication } = await import("@simplewebauthn/browser");
 
             // Get a challenge from the server
@@ -59,7 +59,7 @@ export default function LoginPage() {
             if (!optRes.ok) throw new Error("Failed to get passkey challenge");
             const options = await optRes.json();
 
-            // Ask the browser/OS to sign the challenge
+            // Ask the browser/OS to verify fingerprint
             const authResponse = await startAuthentication(options);
 
             // Send the signed response to the server
@@ -78,10 +78,60 @@ export default function LoginPage() {
             window.location.href = callbackUrl;
         } catch (err) {
             if (err instanceof Error && err.name === "NotAllowedError") {
-                setPasskeyError("Passkey sign-in was cancelled.");
+                setPasskeyError("Fingerprint sign-in was cancelled.");
+            } else if (
+                err instanceof Error &&
+                err.message.toLowerCase().includes("not found")
+            ) {
+                // No passkey registered yet — suggest registering
+                setPasskeyError("No fingerprint found. Register one below.");
             } else {
                 setPasskeyError(
-                    err instanceof Error ? err.message : "Passkey authentication failed. Try again."
+                    err instanceof Error ? err.message : "Fingerprint authentication failed. Try again."
+                );
+            }
+            setLoading(null);
+        }
+    }, [callbackUrl]);
+
+    // ── Fingerprint registration (first-time user, no OAuth needed) ───────────
+    const handlePasskeyRegister = useCallback(async () => {
+        setLoading("register-passkey");
+        setPasskeyError(null);
+
+        try {
+            const { startRegistration } = await import("@simplewebauthn/browser");
+
+            // Get registration options + a tempId from the server
+            const optRes = await fetch("/api/auth/passkey/register-first");
+            if (!optRes.ok) throw new Error("Failed to get registration options");
+            const regOptions = await optRes.json();
+            const tempId = regOptions._tempId;
+            delete regOptions._tempId;
+
+            // Ask the browser/OS to create a fingerprint credential
+            const regResponse = await startRegistration(regOptions);
+
+            // Verify and save — the server creates the user + passkey + session
+            const verifyRes = await fetch("/api/auth/passkey/register-first", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ response: regResponse, tempId }),
+            });
+
+            if (!verifyRes.ok) {
+                const err = await verifyRes.json();
+                throw new Error(err.error ?? "Fingerprint registration failed");
+            }
+
+            // Session cookie is set — redirect
+            window.location.href = callbackUrl;
+        } catch (err) {
+            if (err instanceof Error && err.name === "NotAllowedError") {
+                setPasskeyError("Fingerprint registration was cancelled.");
+            } else {
+                setPasskeyError(
+                    err instanceof Error ? err.message : "Fingerprint registration failed. Try again."
                 );
             }
             setLoading(null);
@@ -126,7 +176,86 @@ export default function LoginPage() {
                     className="bench-card rounded-xl p-6 space-y-3"
                     style={{ border: "1px solid var(--border)" }}
                 >
-                    {/* Google */}
+                    {/* ── Fingerprint sign-in (returning users) ──────────────────── */}
+                    <button
+                        onClick={handlePasskeySignIn}
+                        disabled={loading !== null}
+                        className="w-full flex items-center justify-center gap-3 px-4 py-4 rounded-lg font-mono text-sm transition-all"
+                        style={{
+                            background: loading === "passkey" ? "rgba(0,230,118,0.1)" : "rgba(0,230,118,0.06)",
+                            border: `1px solid ${loading === "passkey" ? "rgba(0,230,118,0.4)" : "rgba(0,230,118,0.2)"}`,
+                            color: loading === "passkey" ? "var(--green)" : "var(--green)",
+                            opacity: loading !== null && loading !== "passkey" ? 0.4 : 1,
+                            cursor: loading !== null ? "not-allowed" : "pointer",
+                        }}
+                        onMouseEnter={(e) => {
+                            if (!loading) {
+                                e.currentTarget.style.background = "rgba(0,230,118,0.1)";
+                                e.currentTarget.style.borderColor = "rgba(0,230,118,0.4)";
+                            }
+                        }}
+                        onMouseLeave={(e) => {
+                            if (loading !== "passkey") {
+                                e.currentTarget.style.background = "rgba(0,230,118,0.06)";
+                                e.currentTarget.style.borderColor = "rgba(0,230,118,0.2)";
+                            }
+                        }}
+                    >
+                        {loading === "passkey" ? (
+                            <Loader2 className="w-5 h-5 animate-spin" />
+                        ) : (
+                            <Fingerprint className="w-5 h-5" />
+                        )}
+                        <span className="font-medium">
+                            {loading === "passkey" ? "Touch your fingerprint sensor…" : "Sign in with fingerprint"}
+                        </span>
+                    </button>
+
+                    {/* ── Register fingerprint (first-time, no OAuth needed) ────── */}
+                    <button
+                        onClick={handlePasskeyRegister}
+                        disabled={loading !== null}
+                        className="w-full flex items-center justify-center gap-3 px-4 py-3 rounded-lg font-mono text-xs transition-all"
+                        style={{
+                            background: loading === "register-passkey" ? "rgba(0,230,118,0.06)" : "transparent",
+                            border: `1px solid ${loading === "register-passkey" ? "rgba(0,230,118,0.3)" : "transparent"}`,
+                            color: loading === "register-passkey" ? "var(--green)" : "var(--subtle)",
+                            opacity: loading !== null && loading !== "register-passkey" ? 0.4 : 1,
+                            cursor: loading !== null ? "not-allowed" : "pointer",
+                        }}
+                        onMouseEnter={(e) => {
+                            if (!loading) {
+                                e.currentTarget.style.color = "var(--text)";
+                            }
+                        }}
+                        onMouseLeave={(e) => {
+                            if (loading !== "register-passkey") {
+                                e.currentTarget.style.color = "var(--subtle)";
+                            }
+                        }}
+                    >
+                        {loading === "register-passkey" ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                            <KeyRound className="w-3.5 h-3.5" />
+                        )}
+                        {loading === "register-passkey"
+                            ? "Registering your fingerprint…"
+                            : "First time? Register with fingerprint"}
+                    </button>
+
+                    {/* ── Divider ────────────────────────────────────────────────── */}
+                    <div className="relative py-2">
+                        <div style={{ borderTop: "1px solid var(--border)" }} />
+                        <span
+                            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 px-3 font-mono text-[10px] uppercase tracking-widest"
+                            style={{ background: "var(--card-bg, var(--surface))", color: "var(--subtle)" }}
+                        >
+                            or continue with
+                        </span>
+                    </div>
+
+                    {/* ── OAuth options ──────────────────────────────────────────── */}
                     <button
                         onClick={() => handleOAuth("google")}
                         disabled={loading !== null}
@@ -150,10 +279,9 @@ export default function LoginPage() {
                         ) : (
                             <Chrome className="w-4 h-4" style={{ color: "#4285F4" }} />
                         )}
-                        {loading === "google" ? "Signing in…" : "Continue with Google"}
+                        {loading === "google" ? "Signing in…" : "Google"}
                     </button>
 
-                    {/* GitHub (replaces Discord) */}
                     <button
                         onClick={() => handleOAuth("github")}
                         disabled={loading !== null}
@@ -177,59 +305,15 @@ export default function LoginPage() {
                         ) : (
                             <GitHubIcon className="w-4 h-4" />
                         )}
-                        {loading === "github" ? "Signing in…" : "Continue with GitHub"}
-                    </button>
-
-                    {/* Divider */}
-                    <div className="relative py-1">
-                        <div style={{ borderTop: "1px solid var(--border)" }} />
-                        <span
-                            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 px-3 font-mono text-[10px] uppercase tracking-widest"
-                            style={{ background: "var(--card-bg, var(--surface))", color: "var(--subtle)" }}
-                        >
-                            or
-                        </span>
-                    </div>
-
-                    {/* Passkey */}
-                    <button
-                        onClick={handlePasskey}
-                        disabled={loading !== null}
-                        className="w-full flex items-center justify-center gap-3 px-4 py-3 rounded-lg font-mono text-sm transition-all"
-                        style={{
-                            background: loading === "passkey" ? "rgba(0,230,118,0.06)" : "var(--surface)",
-                            border: `1px solid ${loading === "passkey" ? "rgba(0,230,118,0.3)" : "var(--border)"}`,
-                            color: loading === "passkey" ? "var(--green)" : "var(--text)",
-                            opacity: loading !== null && loading !== "passkey" ? 0.4 : 1,
-                            cursor: loading !== null ? "not-allowed" : "pointer",
-                        }}
-                        onMouseEnter={(e) => {
-                            if (!loading) {
-                                e.currentTarget.style.borderColor = "rgba(0,230,118,0.3)";
-                                e.currentTarget.style.color = "var(--green)";
-                            }
-                        }}
-                        onMouseLeave={(e) => {
-                            if (loading !== "passkey") {
-                                e.currentTarget.style.borderColor = "var(--border)";
-                                e.currentTarget.style.color = "var(--text)";
-                            }
-                        }}
-                    >
-                        {loading === "passkey" ? (
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                        ) : (
-                            <Fingerprint className="w-4 h-4" />
-                        )}
-                        {loading === "passkey" ? "Waiting for passkey…" : "Sign in with passkey / fingerprint"}
+                        {loading === "github" ? "Signing in…" : "GitHub"}
                     </button>
                 </div>
 
                 {/* Footer note */}
                 <p className="mt-6 text-center font-mono text-[11px]" style={{ color: "var(--subtle)" }}>
-                    New accounts are created automatically on first sign-in.
+                    Your fingerprint is stored securely on your device.
                     <br />
-                    Contact an admin to get elevated access.
+                    It is never sent to our servers.
                 </p>
             </div>
         </div>

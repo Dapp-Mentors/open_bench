@@ -18,6 +18,7 @@ export function NavBar() {
   const { data: session, status } = useSession();
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [avatarError, setAvatarError] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
   const role = session?.user?.role;
@@ -109,11 +110,12 @@ export function NavBar() {
               }}
             >
               {/* Avatar or fallback icon */}
-              {session.user.image ? (
+              {session.user.image && !avatarError ? (
                 <img
                   src={session.user.image}
                   alt={session.user.name ?? "avatar"}
                   className="w-5 h-5 rounded-full object-cover"
+                  onError={() => setAvatarError(true)}
                 />
               ) : (
                 <User className="w-4 h-4" style={{ color: "var(--subtle)" }} />

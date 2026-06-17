@@ -24,13 +24,21 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
             // Request the profile and email scopes — enough for our use case
             authorization: {
-                params: { scope: "openid email profile" },
+                params: {
+                    scope: "openid email profile",
+                    prompt: "select_account",  // always show account picker
+                },
             },
+            // Allow a single email to be linked to multiple OAuth providers
+            // (e.g. sign up with GitHub, then also sign in with Google)
+            allowDangerousEmailAccountLinking: true,
         }),
 
         GitHub({
             clientId: process.env.GITHUB_CLIENT_ID!,
             clientSecret: process.env.GITHUB_CLIENT_SECRET!,
+            // Allow a single email to be linked to multiple OAuth providers
+            allowDangerousEmailAccountLinking: true,
         }),
     ],
 
