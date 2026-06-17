@@ -30,7 +30,7 @@ export interface PipelineStageDetail {
     modelUsed?: string;
 }
 
-export interface ProjectTask extends Task {
+export interface ProjectTask extends Omit<Task, "runs"> {
     runs?: BenchmarkRun[];
     stageDetails?: PipelineStageDetail[];
 }

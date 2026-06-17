@@ -1,86 +1,28 @@
-export type ModelProvider  = "openrouter";
-export type ScoringType    = "passfail" | "diff" | "regex";
-export type EasinessResult = "too_easy" | "appropriate" | "too_hard";
-
-// Task status lifecycle:
-//   pending → pipeline_running → pipeline_passed → approved
-//                             ↘ rejected
+// src/lib/types.ts
 //
-// "pipeline_passed" is the new intermediate state — all automated checks
-// cleared, but a human reviewer hasn't signed off yet.
-// Admins POST /api/projects/[id]/tasks/[taskId]/approve to flip to "approved".
-// "approved" is the only state that allows benchmark runs.
-export type TaskStatus =
-  | "pending"
-  | "pipeline_running"
-  | "pipeline_passed"   // automated pipeline done, awaiting human review
-  | "approved"          // human-reviewed and accepted — runs allowed
-  | "rejected";
+// Shared types used across the frontend.
 
-// Sia push lifecycle (set after admin approval):
-//   pending → queued → uploading → pinning → ready
-//                                        ↘ failed
-export type SiaStatus =
-  | "pending"       // not yet triggered (task not approved yet)
-  | "queued"        // approval received, waiting to start upload
-  | "uploading"     // transferring encrypted shards to Sia
-  | "pinning"       // pinning object on indexer node
-  | "ready"         // fully pinned and downloadable
-  | "failed";       // any step errored
+import type { Role } from "@prisma/client";
 
-export const SIA_STEPS: SiaStatus[] = [
-  "queued",
-  "uploading",
-  "pinning",
-  "ready",
-];
+// ─── Auth type augmentation ───────────────────────────────────────────────────
 
-export interface SiaLog {
-  id: string;
-  taskId: string;
-  step: string;
-  passed: boolean | null;
-  message: string;
-  ts: string;
+declare module "next-auth" {
+  interface Session {
+    user: {
+      id: string;
+      name?: string | null;
+      email?: string | null;
+      image?: string | null;
+      role: Role;
+    };
+  }
+
+  interface User {
+    role: Role;
+  }
 }
 
-export interface AgentConfig { provider: ModelProvider; modelId: string; }
-
-// ── Model Configuration (admin settings) ─────────────────────────────────────
-
-export type ModelConfigKey =
-  | "frontier_model"
-  | "easiness_model"
-  | "quality_model"
-  | "agent_quality_model";
-
-export interface ModelConfig {
-  key: ModelConfigKey;
-  modelId: string;
-  modelName: string;
-}
-
-export interface OpenRouterModel {
-  modelId: string;
-  modelName: string;
-  context: number;
-  pricing: "free" | "low" | "medium" | "high";
-  promptPrice?: number;
-}
-
-export interface TaskDef {
-  id: string;
-  projectId: string;
-  title: string;
-  description: string;
-  domain: string;
-  language: string;
-  dockerImage: string;
-  timeoutMs: number;
-  scoringType: ScoringType;
-  expectedOutput?: string;
-  expectedPattern?: string;
-}
+// ─── Pipeline types ───────────────────────────────────────────────────────────
 
 export interface PipelineLog {
   id: string;
@@ -91,32 +33,19 @@ export interface PipelineLog {
   ts: string;
 }
 
-export interface Task extends TaskDef {
-  status: TaskStatus;
-  siaStatus: SiaStatus;
-  similarityScore?: number | null;
-  isDuplicate?: boolean | null;
-  ciPassed?: boolean | null;
-  qualityScore?: number | null;
-  qualityDetails?: string | null;
-  easinessResult?: EasinessResult | null;
-  agentQualityNote?: string | null;
-  siaHash?: string | null;
-  indexdKey?: string | null;
-  embeddingJson?: string | null;
-  createdAt: string;
-  updatedAt: string;
-  approvedAt?: string | null;
-  pipelineLogs?: PipelineLog[];
-  siaLogs?: SiaLog[];
-  runs?: BenchmarkRun[];
-  _count?: { runs: number };
+export interface SiaLog {
+  id: string;
+  taskId: string;
+  step: string;
+  passed: boolean | null;
+  message: string;
+  ts: string;
 }
 
 export interface RunLog {
   id: string;
   runId: string;
-  stream: "stdout" | "stderr";
+  stream: string;
   line: string;
   ts: string;
 }
@@ -125,48 +54,72 @@ export interface BenchmarkRun {
   id: string;
   taskId: string;
   projectId: string;
-  modelId: string;
   provider: string;
+  modelId: string;
   status: string;
-  score?: number | null;
-  runtimeMs?: number | null;
-  tokenUsage?: number | null;
-  siaHash?: string | null;
-  indexdKey?: string | null;
+  score: number | null;
+  runtimeMs: number | null;
+  tokenUsage: number | null;
+  siaHash: string | null;
+  indexdKey: string | null;
   createdAt: string;
   updatedAt: string;
   logs?: RunLog[];
 }
 
-export interface ModelOption {
-  provider: ModelProvider;
-  modelId: string;
-  label: string;
-  requiresKey: boolean;
-}
-
-// Project — top-level container
-export interface Project {
+export interface Task {
   id: string;
-  name: string;
+  projectId: string;
+  title: string;
   description: string;
   domain: string;
+  language: string;
+  storagePath: string;
+  dockerImage: string;
+  timeoutMs: number;
+  scoringType: string;
+  expectedOutput: string | null;
+  expectedPattern: string | null;
+  status: string;
+  similarityScore: number | null;
+  isDuplicate: boolean | null;
+  ciPassed: boolean | null;
+  qualityScore: number | null;
+  qualityDetails: string | null;
+  easinessResult: string | null;
+  agentQualityNote: string | null;
+  siaHash: string | null;
+  indexdKey: string | null;
+  embeddingJson: string | null;
+  siaStatus: string;
   createdAt: string;
   updatedAt: string;
-  tasks: Task[];
+  approvedAt: string | null;
+  pipelineLogs: PipelineLog[];
+  siaLogs: SiaLog[];
+  runs: BenchmarkRun[];
 }
 
-// Leaner version used on the dashboard list
-export interface ProjectSummary {
-  id: string;
-  name: string;
-  description: string;
-  domain: string;
-  createdAt: string;
-  _count: {
-    tasks: number;
-    approvedTasks: number;
-    pendingTasks: number;
-    rejectedTasks: number;
-  };
+export type ModelConfigKey =
+  | "frontier_model"
+  | "easiness_model"
+  | "quality_model"
+  | "agent_quality_model";
+
+export interface ModelConfig {
+  id?: string;
+  key: ModelConfigKey;
+  modelId: string;
+  modelName: string;
 }
+
+export interface OpenRouterModel {
+  modelId: string;
+  modelName: string;
+  context: number;
+  pricing: string;
+}
+
+export type SiaStatus = "pending" | "running" | "completed" | "failed" | "queued" | "ready";
+
+export { type Role };

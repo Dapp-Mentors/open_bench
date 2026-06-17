@@ -1,13 +1,99 @@
 // prisma/schema.prisma
 
 generator client {
-  provider        = "prisma-client-js"
+  provider      = "prisma-client-js"
   binaryTargets = ["native", "linux-musl-arm64-openssl-3.0.x"]
 }
 
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+}
+
+// ─── Auth (NextAuth v5 / Auth.js) ─────────────────────────────────────────────
+
+// Role hierarchy:
+//   user       → submit tasks to existing projects, view results
+//   admin      → everything user can + create projects, approve/reject tasks, run benchmarks
+//   super_admin → everything admin can + manage model configuration & system settings
+
+enum Role {
+  user
+  admin
+  super_admin
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime?
+  image         String?
+  role          Role      @default(user)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  accounts      Account[]
+  sessions      Session[]
+  passkeys      Passkey[]
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// Passkey / WebAuthn credentials (one user can have multiple devices)
+model Passkey {
+  id                   String   @id @default(cuid())
+  userId               String
+  credentialId         String   @unique   // base64url-encoded credential ID
+  publicKey            String   @db.Text  // base64url-encoded COSE public key
+  counter              BigInt   @default(0)
+  deviceType           String   @default("platform")  // platform | cross-platform
+  backedUp             Boolean  @default(false)
+  transports           String?  // JSON array of transport strings
+  name                 String   @default("Passkey")   // user-visible label
+  createdAt            DateTime @default(now())
+  lastUsedAt           DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 // ─── Project ──────────────────────────────────────────────────────────────────
@@ -24,61 +110,45 @@ model Project {
 
 // ─── Task ─────────────────────────────────────────────────────────────────────
 
-// Status lifecycle:
-//   pending → pipeline_running → pipeline_passed → approved
-//                              ↘ rejected
-//
-// pipeline_passed = all automated stages cleared, waiting for human approval
-// approved        = admin signed off, benchmark runs are now allowed
-//
-// Sia lifecycle (siaStatus):
-//   pending → queued → uploading → pinning → registering → ready
-//                                                        ↘ failed
-
 model Task {
-  id              String      @id @default(cuid())
-  projectId       String
-  project         Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  id               String         @id @default(cuid())
+  projectId        String
+  project          Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
-  title           String
-  description     String      @default("")
-  domain          String
-  language        String
-  storagePath     String      // path/URL to the uploaded .zip
+  title            String
+  description      String         @default("")
+  domain           String
+  language         String
+  storagePath      String
 
-  // Runtime config (read from task.toml during pipeline)
-  dockerImage     String      @default("")
-  timeoutMs       Int         @default(120000)
-  scoringType     String      @default("passfail") // passfail | diff | regex
-  expectedOutput  String?
-  expectedPattern String?
+  dockerImage      String         @default("")
+  timeoutMs        Int            @default(120000)
+  scoringType      String         @default("passfail")
+  expectedOutput   String?
+  expectedPattern  String?
 
-  // Pipeline result fields
-  status          String      @default("pending")
-  similarityScore Float?
-  isDuplicate     Boolean?
-  ciPassed        Boolean?
-  qualityScore    Float?
-  qualityDetails  String?     // JSON blob of per-criterion scores
-  easinessResult  String?     // too_easy | appropriate | too_hard
+  status           String         @default("pending")
+  similarityScore  Float?
+  isDuplicate      Boolean?
+  ciPassed         Boolean?
+  qualityScore     Float?
+  qualityDetails   String?
+  easinessResult   String?
   agentQualityNote String?
 
-  // Sia storage
-  siaHash         String?
-  indexdKey       String?
-  embeddingJson   String?     // stored for similarity search
+  siaHash          String?
+  indexdKey        String?
+  embeddingJson    String?
 
-  // Sia push pipeline status (set after human approval)
-  // pending | queued | uploading | pinning | registering | ready | failed
-  siaStatus       String      @default("pending")
+  siaStatus        String         @default("pending")
 
-  createdAt       DateTime    @default(now())
-  updatedAt       DateTime    @updatedAt
-  approvedAt      DateTime?   // set when admin approves
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  approvedAt       DateTime?
 
-  pipelineLogs    PipelineLog[]
-  siaLogs         SiaLog[]
-  runs            BenchmarkRun[]
+  pipelineLogs     PipelineLog[]
+  siaLogs          SiaLog[]
+  runs             BenchmarkRun[]
 }
 
 // ─── PipelineLog ──────────────────────────────────────────────────────────────
@@ -87,7 +157,7 @@ model PipelineLog {
   id      String   @id @default(cuid())
   taskId  String
   task    Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
-  stage   String   // similarity | ci | quality | preflight | oracle_nop | easiness | difficulty | agent_quality
+  stage   String
   passed  Boolean?
   message String   @default("")
   ts      DateTime @default(now())
@@ -97,15 +167,11 @@ model PipelineLog {
 
 // ─── SiaLog ───────────────────────────────────────────────────────────────────
 
-// Records each step of pushing an approved task's asset to the Sia network.
-// Steps: queued | uploading | pinning | registering | ready
-// One row is written per step as it completes (or fails).
-
 model SiaLog {
   id      String   @id @default(cuid())
   taskId  String
   task    Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
-  step    String   // queued | uploading | pinning | registering | ready
+  step    String
   passed  Boolean?
   message String   @default("")
   ts      DateTime @default(now())
@@ -119,12 +185,12 @@ model BenchmarkRun {
   id         String   @id @default(cuid())
   taskId     String
   task       Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
-  projectId  String   // denormalised for cheaper dashboard queries
+  projectId  String
 
-  provider   String   // openrouter
+  provider   String
   modelId    String
 
-  status     String   @default("running") // running | completed | failed
+  status     String   @default("running")
   score      Float?
   runtimeMs  Int?
   tokenUsage Int?
@@ -144,26 +210,22 @@ model BenchmarkRun {
 // ─── RunLog ───────────────────────────────────────────────────────────────────
 
 model RunLog {
-  id     String   @id @default(cuid())
+  id     String       @id @default(cuid())
   runId  String
   run    BenchmarkRun @relation(fields: [runId], references: [id], onDelete: Cascade)
-  stream String   // stdout | stderr
+  stream String
   line   String
-  ts     DateTime @default(now())
+  ts     DateTime     @default(now())
 
   @@index([runId])
 }
 
 // ─── ModelConfig ──────────────────────────────────────────────────────────────
 
-// Stores which OpenRouter model is assigned to each pipeline role.
-// key = "frontier_model" | "easiness_model" | "quality_model" | "agent_quality_model"
-// Admin selects models from the UI — no backend manipulation needed.
-
 model ModelConfig {
   id        String   @id @default(cuid())
-  key       String   @unique    // e.g. "frontier_model", "easiness_model"
-  modelId   String              // OpenRouter model slug, e.g. "anthropic/claude-opus-4-20250514"
-  modelName String   @default("") // human-readable label, e.g. "Claude Opus 4"
+  key       String   @unique
+  modelId   String
+  modelName String   @default("")
   updatedAt DateTime @updatedAt
 }
