@@ -189,15 +189,19 @@ export async function verifyPasskeyAuth(response: AuthenticationResponseJSON) {
 
     if (!passkey) throw new Error("Passkey not found");
 
-    const allChallenges = [...challengeStore.entries()];
-    const matchingEntry = allChallenges.find(([k]) => k.startsWith("auth:"));
-    if (!matchingEntry) throw new Error("No pending authentication challenge");
+    // Decode clientDataJSON to extract the challenge the browser actually used
+    const clientData = JSON.parse(
+        Buffer.from(response.response.clientDataJSON, "base64url").toString("utf-8")
+    );
+    const responseChallenge = clientData.challenge;
 
-    const [challengeKey, expectedChallengeValue] = matchingEntry;
+    // Look up the specific challenge that was sent to the browser
+    const storedChallenge = challengeStore.get(`auth:${responseChallenge}`);
+    if (!storedChallenge) throw new Error("No pending authentication challenge for this response");
 
     const verification = await verifyAuthenticationResponse({
         response,
-        expectedChallenge: expectedChallengeValue,
+        expectedChallenge: storedChallenge,
         expectedOrigin: ORIGIN,
         expectedRPID: RP_ID,
         authenticator: {
@@ -210,7 +214,7 @@ export async function verifyPasskeyAuth(response: AuthenticationResponseJSON) {
 
     if (!verification.verified) throw new Error("Passkey authentication failed");
 
-    challengeStore.delete(challengeKey);
+    challengeStore.delete(`auth:${responseChallenge}`);
 
     await prisma.passkey.update({
         where: { id: passkey.id },
