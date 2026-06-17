@@ -1,20 +1,3 @@
-// src/middleware.ts
-//
-// Route protection by role. Runs on every matched request before the page renders.
-// Uses NextAuth.js v5's auth() middleware wrapper.
-//
-// Role map:
-//   /login                  → public (redirect to /dashboard if already logged in)
-//   /unauthorized           → public
-//   /dashboard, /projects/* → requires: user (any authenticated user)
-//   /admin/*                → requires: admin
-//   /admin/models/*         → requires: super_admin
-//   /api/projects/*         → requires: admin  (project creation is admin-only)
-//   /api/models/*           → requires: super_admin
-//   /api/tasks/*/submit     → requires: user   (users can submit to existing projects)
-//   /api/admin/*            → requires: admin
-//   everything else         → requires: user (default authenticated)
-
 import { auth } from "@/lib/auth";
 import { NextResponse } from "next/server";
 import type { NextFetchEvent } from "next/server";
@@ -32,7 +15,7 @@ function hasRole(userRole: Role, required: Role): boolean {
 }
 
 // Routes fully open to the public (no auth required)
-const PUBLIC_PATHS = ["/login", "/unauthorized", "/api/auth"];
+const PUBLIC_PATHS = ["/", "/login", "/unauthorized", "/api/auth"];
 
 // Routes that require super_admin
 const SUPER_ADMIN_PATHS = [
