@@ -16,13 +16,16 @@ interface ProjectRow {
 
 export async function GET() {
   const session = await auth()
+  const role = session?.user?.role
+  const isAdmin = role === 'admin' || role === 'super_admin'
+
+  // Admins see all projects; regular users see only projects they're members of
+  const where = isAdmin
+    ? {}
+    : { members: { some: { userId: session?.user?.id } } }
 
   const projects: ProjectRow[] = await prisma.project.findMany({
-    where: {
-      members: {
-        some: { userId: session?.user?.id },
-      },
-    },
+    where,
     orderBy: { createdAt: 'desc' },
     include: {
       _count: { select: { tasks: true } },
@@ -52,6 +55,11 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  const session = await auth()
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
   const body = await req.json().catch(() => ({}))
   const { name, description, domain } = body
 
@@ -67,6 +75,12 @@ export async function POST(req: NextRequest) {
       name: name.trim(),
       description: description.trim(),
       domain: domain.trim(),
+      members: {
+        create: {
+          userId: session.user.id,
+          role: 'manager',
+        },
+      },
     },
   })
 
