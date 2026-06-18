@@ -59,12 +59,12 @@ export function TaskActions({ task, onApproved, onDeleted }: Props) {
     }
 
     return (
-        <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center gap-1 sm:gap-2" onClick={(e) => e.stopPropagation()}>
             {status === "pipeline_passed" && (
                 <button
                     disabled={busy}
                     onClick={handleApprove}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-mono transition-all"
+                    className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1.5 rounded text-xs font-mono transition-all"
                     style={{
                         background: "rgba(0,230,118,0.1)",
                         color: "var(--green)",
@@ -75,7 +75,7 @@ export function TaskActions({ task, onApproved, onDeleted }: Props) {
                     }}
                 >
                     <CheckCircle className="w-3.5 h-3.5" />
-                    {busy ? "Approving…" : "Approve"}
+                    <span className="hidden sm:inline">{busy ? "Approving…" : "Approve"}</span>
                 </button>
             )}
 
@@ -83,7 +83,7 @@ export function TaskActions({ task, onApproved, onDeleted }: Props) {
                 <button
                     disabled={busy}
                     onClick={handleDelete}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-mono transition-all"
+                    className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1.5 rounded text-xs font-mono transition-all"
                     style={{
                         background: "rgba(255,68,68,0.06)",
                         color: "var(--red)",
@@ -93,7 +93,7 @@ export function TaskActions({ task, onApproved, onDeleted }: Props) {
                     }}
                 >
                     <Trash2 className="w-3.5 h-3.5" />
-                    {busy ? "Deleting…" : "Delete"}
+                    <span className="hidden sm:inline">{busy ? "Deleting…" : "Delete"}</span>
                 </button>
             )}
         </div>

@@ -457,7 +457,7 @@ export default function SubmitTaskPage({ params }: SubmitTaskPageProps) {
                                     <span className="font-mono text-xs font-medium" style={{ color: "var(--text)" }}>
                                         {label}
                                     </span>
-                                    <span className="font-mono text-xs ml-2" style={{ color: "var(--muted)" }}>
+                                    <span className="font-mono text-xs sm:ml-2 block sm:inline mt-0.5 sm:mt-0" style={{ color: "var(--muted)" }}>
                                         · {desc}
                                     </span>
                                 </div>

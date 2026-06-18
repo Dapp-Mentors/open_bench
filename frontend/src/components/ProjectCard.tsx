@@ -68,10 +68,10 @@ export function ProjectCard({
             </Link>
 
             {/* Right: domain + task counts + (admin) actions + chevron */}
-            <div className="flex items-center gap-3 flex-shrink-0 ml-4">
-                {/* Domain badge */}
+            <div className="flex items-center gap-1 sm:gap-3 flex-shrink-0 ml-2 sm:ml-4">
+                {/* Domain badge — hidden on small screens */}
                 <span
-                    className="font-mono text-xs px-2 py-0.5 rounded hidden md:inline"
+                    className="font-mono text-xs px-2 py-0.5 rounded hidden sm:inline"
                     style={{
                         background: "var(--muted)",
                         color: "var(--subtle)",
@@ -81,18 +81,18 @@ export function ProjectCard({
                     {p.domain}
                 </span>
 
-                {/* Task counts */}
-                <div className="flex items-center gap-3 font-mono text-xs">
+                {/* Task counts — compact on mobile */}
+                <div className="flex items-center gap-1.5 sm:gap-3 font-mono text-xs">
                     <span style={{ color: "var(--subtle)" }}>
-                        {p._count.tasks} task{p._count.tasks !== 1 ? "s" : ""}
+                        {p._count.tasks}
                     </span>
                     {p._count.approvedTasks > 0 && (
-                        <span style={{ color: "var(--green)" }}>
+                        <span className="hidden sm:inline" style={{ color: "var(--green)" }}>
                             {p._count.approvedTasks} approved
                         </span>
                     )}
                     {p._count.pendingTasks > 0 && (
-                        <span style={{ color: "var(--blue)" }}>
+                        <span className="hidden sm:inline" style={{ color: "var(--blue)" }}>
                             {p._count.pendingTasks} running
                         </span>
                     )}

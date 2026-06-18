@@ -1,15 +1,11 @@
 "use client";
 
 // src/app/login/page.tsx
-//
-// Login page — fingerprint/passkey-first authentication.
-// New users register their fingerprint directly here (no OAuth needed).
-// Returning users sign in with their fingerprint.
 
 import { useState, useCallback } from "react";
 import { signIn } from "next-auth/react";
 import { useSearchParams } from "next/navigation";
-import { Loader2, Fingerprint, Chrome, KeyRound, Info, Github } from "lucide-react";
+import { Loader2, Fingerprint, Chrome, KeyRound, Info, Github, Activity } from "lucide-react";
 
 type AuthMethod = "google" | "github" | "passkey" | "register-passkey";
 
@@ -38,7 +34,6 @@ export default function LoginPage() {
         setLoading(null);
     }, [callbackUrl]);
 
-    // ── Fingerprint sign-in (returning user) ──────────────────────────────────
     const handlePasskeySignIn = useCallback(async () => {
         setLoading("passkey");
         setPasskeyError(null);
@@ -46,22 +41,15 @@ export default function LoginPage() {
 
         try {
             const { startAuthentication } = await import("@simplewebauthn/browser");
-
-            // Get a challenge from the server
             const optRes = await fetch("/api/auth/passkey/authenticate");
             if (!optRes.ok) throw new Error("Failed to get passkey challenge");
             const options = await optRes.json();
 
-            // Ask the browser/OS to verify fingerprint.
-            // preferImmediatelyAvailableCredentials: true prevents the browser from
-            // showing the cross-device / QR fallback if no local passkey is found —
-            // it rejects immediately instead, so our error handler can show the right message.
             const authResponse = await startAuthentication({
                 ...options,
                 preferImmediatelyAvailableCredentials: true,
             });
 
-            // Send the signed response to the server
             const verifyRes = await fetch("/api/auth/passkey/authenticate", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -73,16 +61,11 @@ export default function LoginPage() {
                 throw new Error(err.error ?? "Passkey authentication failed");
             }
 
-            // Session cookie is set — redirect
             window.location.href = callbackUrl;
         } catch (err) {
             if (err instanceof Error && err.name === "NotAllowedError") {
                 setPasskeyError("Fingerprint sign-in was cancelled.");
-            } else if (
-                err instanceof Error &&
-                err.message.toLowerCase().includes("not found")
-            ) {
-                // No passkey registered yet — show the dedicated guidance callout
+            } else if (err instanceof Error && err.message.toLowerCase().includes("not found")) {
                 setNoPasskeyRegistered(true);
             } else {
                 setPasskeyError(
@@ -93,7 +76,6 @@ export default function LoginPage() {
         }
     }, [callbackUrl]);
 
-    // ── Fingerprint registration (first-time user, no OAuth needed) ───────────
     const handlePasskeyRegister = useCallback(async () => {
         setLoading("register-passkey");
         setPasskeyError(null);
@@ -101,17 +83,14 @@ export default function LoginPage() {
         try {
             const { startRegistration } = await import("@simplewebauthn/browser");
 
-            // Get registration options + a tempId from the server
             const optRes = await fetch("/api/auth/passkey/register-first");
             if (!optRes.ok) throw new Error("Failed to get registration options");
             const regOptions = await optRes.json();
             const tempId = regOptions._tempId;
             delete regOptions._tempId;
 
-            // Ask the browser/OS to create a fingerprint credential
             const regResponse = await startRegistration(regOptions);
 
-            // Verify and save — the server creates the user + passkey + session
             const verifyRes = await fetch("/api/auth/passkey/register-first", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -123,7 +102,6 @@ export default function LoginPage() {
                 throw new Error(err.error ?? "Fingerprint registration failed");
             }
 
-            // Session cookie is set — redirect
             window.location.href = callbackUrl;
         } catch (err) {
             if (err instanceof Error && err.name === "NotAllowedError") {
@@ -143,17 +121,35 @@ export default function LoginPage() {
             style={{ background: "var(--bg)" }}
         >
             <div className="w-full max-w-sm">
-                {/* Wordmark */}
-                <div className="text-center mb-10">
-                    <div className="font-mono text-xs tracking-[0.3em] uppercase mb-3" style={{ color: "var(--subtle)" }}>
-                        OpenBench
+
+                {/* ── Header: icon → wordmark → tagline as one vertical stack ── */}
+                <div className="flex flex-col items-center mb-10 gap-3">
+                    {/* Icon: standalone, centered, larger */}
+                    <div
+                        className="w-14 h-14 flex items-center justify-center rounded-2xl"
+                        style={{
+                            background: "var(--green)",
+                            boxShadow: "0 0 28px rgba(0,230,118,0.45)",
+                        }}
+                    >
+                        <Activity className="w-7 h-7" style={{ color: "#0a0b0d" }} />
                     </div>
-                    <h1 className="font-mono text-2xl font-semibold" style={{ color: "var(--text)" }}>
-                        Sign in
-                    </h1>
-                    <p className="mt-2 text-sm font-mono" style={{ color: "var(--subtle)" }}>
-                        Open infrastructure for reproducible AI benchmarks
-                    </p>
+
+                    {/* Wordmark + heading: treated as one text block */}
+                    <div className="text-center">
+                        <div
+                            className="font-mono font-bold text-xs tracking-[0.2em] uppercase mb-1"
+                            style={{ color: "var(--subtle)" }}
+                        >
+                            OPEN<span style={{ color: "var(--green)" }}>BENCH</span>
+                        </div>
+                        <p
+                            className="mt-1.5 text-xs font-mono leading-relaxed"
+                            style={{ color: "var(--subtle)" }}
+                        >
+                            Open infrastructure for reproducible AI benchmarks
+                        </p>
+                    </div>
                 </div>
 
                 {/* No passkey registered — guidance callout */}
@@ -210,7 +206,7 @@ export default function LoginPage() {
                     className="bench-card rounded-xl p-6 space-y-3"
                     style={{ border: "1px solid var(--border)" }}
                 >
-                    {/* ── Fingerprint sign-in (returning users) ──────────────────── */}
+                    {/* Fingerprint sign-in */}
                     <button
                         onClick={handlePasskeySignIn}
                         disabled={loading !== null}
@@ -218,7 +214,7 @@ export default function LoginPage() {
                         style={{
                             background: loading === "passkey" ? "rgba(0,230,118,0.1)" : "rgba(0,230,118,0.06)",
                             border: `1px solid ${loading === "passkey" ? "rgba(0,230,118,0.4)" : "rgba(0,230,118,0.2)"}`,
-                            color: loading === "passkey" ? "var(--green)" : "var(--green)",
+                            color: "var(--green)",
                             opacity: loading !== null && loading !== "passkey" ? 0.4 : 1,
                             cursor: loading !== null ? "not-allowed" : "pointer",
                         }}
@@ -245,7 +241,7 @@ export default function LoginPage() {
                         </span>
                     </button>
 
-                    {/* ── Register fingerprint (first-time, no OAuth needed) ────── */}
+                    {/* Register fingerprint */}
                     <button
                         onClick={handlePasskeyRegister}
                         disabled={loading !== null}
@@ -258,14 +254,10 @@ export default function LoginPage() {
                             cursor: loading !== null ? "not-allowed" : "pointer",
                         }}
                         onMouseEnter={(e) => {
-                            if (!loading) {
-                                e.currentTarget.style.color = "var(--text)";
-                            }
+                            if (!loading) e.currentTarget.style.color = "var(--text)";
                         }}
                         onMouseLeave={(e) => {
-                            if (loading !== "register-passkey") {
-                                e.currentTarget.style.color = "var(--subtle)";
-                            }
+                            if (loading !== "register-passkey") e.currentTarget.style.color = "var(--subtle)";
                         }}
                     >
                         {loading === "register-passkey" ? (
@@ -278,7 +270,7 @@ export default function LoginPage() {
                             : "First time? Register with fingerprint"}
                     </button>
 
-                    {/* ── Divider ────────────────────────────────────────────────── */}
+                    {/* Divider */}
                     <div className="relative py-2">
                         <div style={{ borderTop: "1px solid var(--border)" }} />
                         <span
@@ -289,7 +281,7 @@ export default function LoginPage() {
                         </span>
                     </div>
 
-                    {/* ── OAuth options ──────────────────────────────────────────── */}
+                    {/* Google */}
                     <button
                         onClick={() => handleOAuth("google")}
                         disabled={loading !== null}
@@ -301,12 +293,8 @@ export default function LoginPage() {
                             opacity: loading !== null && loading !== "google" ? 0.4 : 1,
                             cursor: loading !== null ? "not-allowed" : "pointer",
                         }}
-                        onMouseEnter={(e) => {
-                            if (!loading) e.currentTarget.style.borderColor = "var(--subtle)";
-                        }}
-                        onMouseLeave={(e) => {
-                            e.currentTarget.style.borderColor = "var(--border)";
-                        }}
+                        onMouseEnter={(e) => { if (!loading) e.currentTarget.style.borderColor = "var(--subtle)"; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.borderColor = "var(--border)"; }}
                     >
                         {loading === "google" ? (
                             <Loader2 className="w-4 h-4 animate-spin" style={{ color: "var(--subtle)" }} />
@@ -316,6 +304,7 @@ export default function LoginPage() {
                         {loading === "google" ? "Signing in…" : "Google"}
                     </button>
 
+                    {/* GitHub */}
                     <button
                         onClick={() => handleOAuth("github")}
                         disabled={loading !== null}
@@ -327,12 +316,8 @@ export default function LoginPage() {
                             opacity: loading !== null && loading !== "github" ? 0.4 : 1,
                             cursor: loading !== null ? "not-allowed" : "pointer",
                         }}
-                        onMouseEnter={(e) => {
-                            if (!loading) e.currentTarget.style.borderColor = "var(--subtle)";
-                        }}
-                        onMouseLeave={(e) => {
-                            e.currentTarget.style.borderColor = "var(--border)";
-                        }}
+                        onMouseEnter={(e) => { if (!loading) e.currentTarget.style.borderColor = "var(--subtle)"; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.borderColor = "var(--border)"; }}
                     >
                         {loading === "github" ? (
                             <Loader2 className="w-4 h-4 animate-spin" style={{ color: "var(--subtle)" }} />

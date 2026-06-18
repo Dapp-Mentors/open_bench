@@ -127,7 +127,7 @@ export default function PasskeysPage() {
                 <h2 className="font-mono text-sm font-medium mb-3" style={{ color: "var(--text)" }}>
                     Add a passkey
                 </h2>
-                <div className="flex gap-3">
+                <div className="flex flex-col sm:flex-row gap-3">
                     <input
                         type="text"
                         placeholder='Give it a name, e.g. "MacBook Touch ID"'

@@ -48,14 +48,14 @@ function SiaIndicator({ sia }: { sia: SiaConnectionStatus | null }) {
   if (!sia) {
     return (
       <span
-        className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border font-mono text-xs"
+        className="flex items-center gap-2 px-3 py-1.5 rounded-full border font-mono text-xs font-medium"
         style={{ color: "var(--subtle)", borderColor: "var(--border)", background: "transparent" }}
       >
         <span
-          className="w-1.5 h-1.5 rounded-full animate-pulse"
+          className="w-2 h-2 rounded-full animate-pulse"
           style={{ background: "var(--subtle)" }}
         />
-        Checking…
+        <span className="hidden sm:inline">Checking…</span>
       </span>
     );
   }
@@ -63,15 +63,15 @@ function SiaIndicator({ sia }: { sia: SiaConnectionStatus | null }) {
   if (sia.connected) {
     return (
       <span
-        className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border font-mono text-xs"
+        className="flex items-center gap-2 px-3 py-1.5 rounded-full border font-mono text-xs font-medium"
         style={{
           color: "var(--green)",
-          borderColor: "rgba(0,230,118,0.25)",
-          background: "rgba(0,230,118,0.06)",
+          borderColor: "rgba(0,230,118,0.3)",
+          background: "rgba(0,230,118,0.07)",
         }}
       >
-        <Wifi className="w-3 h-3" />
-        Sia live
+        <Wifi className="w-3.5 h-3.5" />
+        <span className="hidden sm:inline">Sia live</span>
       </span>
     );
   }
@@ -79,30 +79,30 @@ function SiaIndicator({ sia }: { sia: SiaConnectionStatus | null }) {
   if (sia.mode === "demo") {
     return (
       <span
-        className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border font-mono text-xs"
+        className="flex items-center gap-2 px-3 py-1.5 rounded-full border font-mono text-xs font-medium"
         style={{
           color: "var(--amber)",
-          borderColor: "rgba(255,179,0,0.25)",
-          background: "rgba(255,179,0,0.06)",
+          borderColor: "rgba(255,179,0,0.3)",
+          background: "rgba(255,179,0,0.07)",
         }}
       >
-        <WifiOff className="w-3 h-3" />
-        Demo mode
+        <WifiOff className="w-3.5 h-3.5" />
+        <span className="hidden sm:inline">Demo mode</span>
       </span>
     );
   }
 
   return (
     <span
-      className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border font-mono text-xs"
+      className="flex items-center gap-2 px-3 py-1.5 rounded-full border font-mono text-xs font-medium"
       style={{
         color: "var(--red)",
-        borderColor: "rgba(255,68,68,0.25)",
-        background: "rgba(255,68,68,0.06)",
+        borderColor: "rgba(255,68,68,0.3)",
+        background: "rgba(255,68,68,0.07)",
       }}
     >
-      <WifiOff className="w-3 h-3" />
-      {sia.reason ? `Offline` : "Offline"}
+      <WifiOff className="w-3.5 h-3.5" />
+      <span className="hidden sm:inline">Offline</span>
     </span>
   );
 }
@@ -131,7 +131,7 @@ function NavLink({
   return (
     <Link
       href={href}
-      className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-mono transition-all"
+      className="flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg text-[13px] font-mono font-medium transition-all flex-shrink-0"
       style={{
         color: isActive ? activeColor : "var(--subtle)",
         background: isActive ? activeBg : "transparent",
@@ -140,9 +140,20 @@ function NavLink({
           : "1px solid transparent",
       }}
     >
-      <Icon className="w-3.5 h-3.5" />
-      {label}
+      <Icon className="w-4 h-4" />
+      <span className="hidden sm:inline">{label}</span>
     </Link>
+  );
+}
+
+// ─── Divider ──────────────────────────────────────────────────────────────────
+
+function NavDivider() {
+  return (
+    <div
+      className="hidden sm:block w-px h-5 mx-1 flex-shrink-0"
+      style={{ background: "var(--border)" }}
+    />
   );
 }
 
@@ -187,23 +198,25 @@ export function NavBar() {
   if (status === "loading") {
     return (
       <header
-        className="sticky top-0 z-50 flex items-center justify-between px-6 h-14"
+        className="sticky top-0 z-50 flex items-center justify-center px-4 sm:px-7 h-16"
         style={{
-          background: "rgba(10,11,13,0.92)",
+          background: "rgba(10,11,13,0.95)",
           borderBottom: "1px solid var(--border)",
           backdropFilter: "blur(12px)",
         }}
       >
-        <div className="flex items-center gap-2.5">
-          <div
-            className="w-7 h-7 flex items-center justify-center rounded"
-            style={{ background: "var(--green)", boxShadow: "0 0 12px rgba(0,230,118,0.4)" }}
-          >
-            <Activity className="w-4 h-4" style={{ color: "#0a0b0d" }} />
+        <div className="flex items-center justify-between w-full max-w-7xl mx-auto">
+          <div className="flex items-center gap-3">
+            <div
+              className="w-8 h-8 flex items-center justify-center rounded-lg"
+              style={{ background: "var(--green)", boxShadow: "0 0 16px rgba(0,230,118,0.45)" }}
+            >
+              <Activity className="w-4 h-4" style={{ color: "#0a0b0d" }} />
+            </div>
+            <span className="font-mono font-bold text-sm tracking-wide" style={{ color: "var(--text)" }}>
+              OPEN<span style={{ color: "var(--green)" }}>BENCH</span>
+            </span>
           </div>
-          <span className="font-mono font-bold text-sm" style={{ color: "var(--text)" }}>
-            OPEN<span style={{ color: "var(--green)" }}>BENCH</span>
-          </span>
         </div>
       </header>
     );
@@ -211,232 +224,247 @@ export function NavBar() {
 
   return (
     <header
-      className="sticky top-0 z-50 flex items-center justify-between px-6 h-14"
+      className="sticky top-0 z-50 flex items-center justify-center px-4 sm:px-7 h-16"
       style={{
-        background: "rgba(10,11,13,0.92)",
+        background: "rgba(10,11,13,0.95)",
         borderBottom: "1px solid var(--border)",
         backdropFilter: "blur(12px)",
       }}
     >
-      {/* ── Left: logo + nav links ── */}
-      <div className="flex items-center gap-6">
-        <Link href="/" className="flex items-center gap-2.5">
-          <div
-            className="w-7 h-7 flex items-center justify-center rounded"
-            style={{ background: "var(--green)", boxShadow: "0 0 12px rgba(0,230,118,0.4)" }}
-          >
-            <Activity className="w-4 h-4" style={{ color: "#0a0b0d" }} />
-          </div>
-          <span className="font-mono font-bold text-sm" style={{ color: "var(--text)" }}>
-            OPEN<span style={{ color: "var(--green)" }}>BENCH</span>
-          </span>
-        </Link>
-
-        {session?.user && (
-          <nav className="flex items-center gap-1">
-            <NavLink
-              href="/dashboard"
-              label="Dashboard"
-              icon={LayoutDashboard}
-              isActive={isActive("/dashboard")}
-            />
-            {isAdmin && (
-              <>
-                <NavLink
-                  href="/projects"
-                  label="Projects"
-                  icon={FolderOpen}
-                  isActive={isActive("/projects")}
-                />
-                <NavLink
-                  href="/admin"
-                  label="Admin"
-                  icon={Shield}
-                  isActive={isActive("/admin")}
-                  accent="amber"
-                />
-              </>
-            )}
-            {isSuperAdmin && (
-              <NavLink
-                href="/admin/models"
-                label="Models"
-                icon={Settings2}
-                isActive={isActive("/admin/models")}
-                accent="amber"
-              />
-            )}
-          </nav>
-        )}
-      </div>
-
-      {/* ── Right: Sia status + user menu ── */}
-      <div className="flex items-center gap-3">
-        {/* Sia indicator — only shown when logged in */}
-        {session?.user && <SiaIndicator sia={sia} />}
-
-        {session?.user ? (
-          <div className="relative" ref={menuRef}>
-            <button
-              onClick={() => setMenuOpen((o) => !o)}
-              className="flex items-center gap-2 px-3 py-1.5 rounded-lg font-mono text-xs transition-all"
-              style={{
-                background: menuOpen ? "var(--surface)" : "transparent",
-                border: `1px solid ${menuOpen ? "var(--border)" : "transparent"}`,
-                color: "var(--text)",
-              }}
+      <div className="flex items-center justify-between w-full max-w-7xl mx-auto">
+        {/* ── Left: logo + divider + nav links ── */}
+        <div className="flex items-center gap-2 sm:gap-5 min-w-0 flex-1">
+          <Link href="/" className="flex items-center gap-2.5 flex-shrink-0">
+            <div
+              className="w-8 h-8 flex items-center justify-center rounded-lg"
+              style={{ background: "var(--green)", boxShadow: "0 0 16px rgba(0,230,118,0.45)" }}
             >
-              {session.user.image && !avatarError ? (
-                <img
-                  src={session.user.image}
-                  alt={session.user.name ?? "avatar"}
-                  className="w-5 h-5 rounded-full object-cover"
-                  onError={() => setAvatarError(true)}
-                />
-              ) : (
-                <User className="w-4 h-4" style={{ color: "var(--subtle)" }} />
-              )}
-              <span className="max-w-[120px] truncate">
-                {session.user.name ?? session.user.email}
-              </span>
-              {isSuperAdmin && (
-                <span
-                  className="px-1.5 py-0.5 rounded text-[9px] font-mono uppercase tracking-wider"
-                  style={{ background: "rgba(0,230,118,0.1)", color: "var(--green)" }}
-                >
-                  super
-                </span>
-              )}
-              {role === "admin" && (
-                <span
-                  className="px-1.5 py-0.5 rounded text-[9px] font-mono uppercase tracking-wider"
-                  style={{ background: "rgba(255,179,0,0.1)", color: "var(--amber)" }}
-                >
-                  admin
-                </span>
-              )}
-              <ChevronDown
-                className="w-3 h-3 transition-transform"
-                style={{
-                  color: "var(--subtle)",
-                  transform: menuOpen ? "rotate(180deg)" : "rotate(0deg)",
-                }}
-              />
-            </button>
+              <Activity className="w-4 h-4" style={{ color: "#0a0b0d" }} />
+            </div>
+            <span className="font-mono font-bold text-sm tracking-wide" style={{ color: "var(--text)" }}>
+              OPEN<span style={{ color: "var(--green)" }}>BENCH</span>
+            </span>
+          </Link>
 
-            {menuOpen && (
-              <div
-                className="absolute right-0 top-full mt-1.5 w-52 rounded-lg overflow-hidden"
+          {session?.user && (
+            <>
+              <NavDivider />
+              <nav className="flex items-center gap-0.5 sm:gap-1 overflow-x-auto scrollbar-none">
+                <NavLink
+                  href="/dashboard"
+                  label="Dashboard"
+                  icon={LayoutDashboard}
+                  isActive={isActive("/dashboard")}
+                />
+                {isAdmin && (
+                  <>
+                    <NavLink
+                      href="/projects"
+                      label="Projects"
+                      icon={FolderOpen}
+                      isActive={isActive("/projects")}
+                    />
+                    <NavLink
+                      href="/admin"
+                      label="Admin"
+                      icon={Shield}
+                      isActive={isActive("/admin")}
+                      accent="amber"
+                    />
+                  </>
+                )}
+                {isSuperAdmin && (
+                  <NavLink
+                    href="/admin/models"
+                    label="Models"
+                    icon={Settings2}
+                    isActive={isActive("/admin/models")}
+                    accent="amber"
+                  />
+                )}
+              </nav>
+            </>
+          )}
+        </div>
+
+        {/* ── Right: Sia status + user menu ── */}
+        <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
+          {/* Sia indicator */}
+          {session?.user && (
+            <div className="hidden sm:block">
+              <SiaIndicator sia={sia} />
+            </div>
+          )}
+
+          {session?.user ? (
+            <div className="relative" ref={menuRef}>
+              <button
+                onClick={() => setMenuOpen((o) => !o)}
+                className="flex items-center gap-2 sm:gap-2.5 px-2 sm:px-3.5 py-2 rounded-lg font-mono text-[13px] font-medium transition-all"
                 style={{
-                  background: "var(--surface)",
-                  border: "1px solid var(--border)",
-                  zIndex: 100,
+                  background: menuOpen ? "var(--surface)" : "rgba(255,255,255,0.03)",
+                  border: `1px solid ${menuOpen ? "var(--border)" : "rgba(255,255,255,0.07)"}`,
+                  color: "var(--text)",
                 }}
               >
-                {/* User info */}
-                <div
-                  className="px-4 py-3"
-                  style={{ borderBottom: "1px solid var(--border)" }}
-                >
+                {session.user.image && !avatarError ? (
+                  <img
+                    src={session.user.image}
+                    alt={session.user.name ?? "avatar"}
+                    className="w-6 h-6 rounded-full object-cover flex-shrink-0"
+                    onError={() => setAvatarError(true)}
+                  />
+                ) : (
                   <div
-                    className="font-mono text-xs font-medium truncate"
-                    style={{ color: "var(--text)" }}
+                    className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0"
+                    style={{ background: "rgba(0,230,118,0.15)", color: "var(--green)" }}
                   >
-                    {session.user.name}
-                  </div>
-                  <div
-                    className="font-mono text-[10px] truncate mt-0.5"
-                    style={{ color: "var(--subtle)" }}
-                  >
-                    {session.user.email}
-                  </div>
-                </div>
-
-                {/* Sia status in dropdown for full detail */}
-                {sia && (
-                  <div
-                    className="px-4 py-2.5 flex items-center gap-2 font-mono text-xs"
-                    style={{
-                      borderBottom: "1px solid var(--border)",
-                      color: sia.connected
-                        ? "var(--green)"
-                        : sia.mode === "demo"
-                          ? "var(--amber)"
-                          : "var(--red)",
-                    }}
-                  >
-                    {sia.connected ? (
-                      <Wifi className="w-3.5 h-3.5 flex-shrink-0" />
-                    ) : (
-                      <WifiOff className="w-3.5 h-3.5 flex-shrink-0" />
-                    )}
-                    <span className="truncate">
-                      {sia.connected
-                        ? "Sia Network connected"
-                        : sia.mode === "demo"
-                          ? "Running in demo mode"
-                          : `Sia offline — ${sia.reason ?? "unknown"}`}
-                    </span>
+                    {(session.user.name ?? session.user.email ?? "?")[0].toUpperCase()}
                   </div>
                 )}
-
-                {/* Super admin: model settings */}
+                <span className="hidden sm:inline max-w-[140px] truncate">
+                  {session.user.name ?? session.user.email}
+                </span>
                 {isSuperAdmin && (
+                  <span
+                    className="hidden sm:inline px-1.5 py-0.5 rounded text-[9px] font-mono uppercase tracking-wider"
+                    style={{ background: "rgba(0,230,118,0.1)", color: "var(--green)" }}
+                  >
+                    super
+                  </span>
+                )}
+                {role === "admin" && (
+                  <span
+                    className="hidden sm:inline px-1.5 py-0.5 rounded text-[9px] font-mono uppercase tracking-wider"
+                    style={{ background: "rgba(255,179,0,0.1)", color: "var(--amber)" }}
+                  >
+                    admin
+                  </span>
+                )}
+                <ChevronDown
+                  className="hidden sm:block w-3.5 h-3.5 transition-transform"
+                  style={{
+                    color: "var(--subtle)",
+                    transform: menuOpen ? "rotate(180deg)" : "rotate(0deg)",
+                  }}
+                />
+              </button>
+
+              {menuOpen && (
+                <div
+                  className="absolute right-0 top-full mt-2 w-52 sm:w-56 rounded-xl overflow-hidden"
+                  style={{
+                    background: "var(--surface)",
+                    border: "1px solid var(--border)",
+                    boxShadow: "0 8px 32px rgba(0,0,0,0.4)",
+                    zIndex: 100,
+                  }}
+                >
+                  {/* User info */}
+                  <div
+                    className="px-4 py-3.5"
+                    style={{ borderBottom: "1px solid var(--border)" }}
+                  >
+                    <div
+                      className="font-mono text-[13px] font-semibold truncate"
+                      style={{ color: "var(--text)" }}
+                    >
+                      {session.user.name}
+                    </div>
+                    <div
+                      className="font-mono text-[11px] truncate mt-0.5"
+                      style={{ color: "var(--subtle)" }}
+                    >
+                      {session.user.email}
+                    </div>
+                  </div>
+
+                  {/* Sia status in dropdown on mobile */}
+                  {sia && (
+                    <div
+                      className="px-4 py-3 flex items-center gap-2.5 font-mono text-[12px] sm:hidden"
+                      style={{
+                        borderBottom: "1px solid var(--border)",
+                        color: sia.connected
+                          ? "var(--green)"
+                          : sia.mode === "demo"
+                            ? "var(--amber)"
+                            : "var(--red)",
+                      }}
+                    >
+                      {sia.connected ? (
+                        <Wifi className="w-4 h-4 flex-shrink-0" />
+                      ) : (
+                        <WifiOff className="w-4 h-4 flex-shrink-0" />
+                      )}
+                      <span className="truncate">
+                        {sia.connected
+                          ? "Sia Network connected"
+                          : sia.mode === "demo"
+                            ? "Running in demo mode"
+                            : `Sia offline — ${sia.reason ?? "unknown"}`}
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Super admin: model settings */}
+                  {isSuperAdmin && (
+                    <Link
+                      href="/admin/models"
+                      onClick={() => setMenuOpen(false)}
+                      className="flex items-center gap-3 px-4 py-3 font-mono text-[12px] transition-colors"
+                      style={{ color: "var(--subtle)" }}
+                      onMouseEnter={(e) => (e.currentTarget.style.color = "var(--text)")}
+                      onMouseLeave={(e) => (e.currentTarget.style.color = "var(--subtle)")}
+                    >
+                      <Settings2 className="w-4 h-4" />
+                      Model settings
+                    </Link>
+                  )}
+
+                  {/* Passkeys */}
                   <Link
-                    href="/admin/models"
+                    href="/settings/passkeys"
                     onClick={() => setMenuOpen(false)}
-                    className="flex items-center gap-2.5 px-4 py-2.5 font-mono text-xs transition-colors"
+                    className="flex items-center gap-3 px-4 py-3 font-mono text-[12px] transition-colors"
                     style={{ color: "var(--subtle)" }}
                     onMouseEnter={(e) => (e.currentTarget.style.color = "var(--text)")}
                     onMouseLeave={(e) => (e.currentTarget.style.color = "var(--subtle)")}
                   >
-                    <Settings2 className="w-3.5 h-3.5" />
-                    Model settings
+                    <User className="w-4 h-4" />
+                    Passkeys
                   </Link>
-                )}
 
-                {/* Passkeys */}
-                <Link
-                  href="/settings/passkeys"
-                  onClick={() => setMenuOpen(false)}
-                  className="flex items-center gap-2.5 px-4 py-2.5 font-mono text-xs transition-colors"
-                  style={{ color: "var(--subtle)" }}
-                  onMouseEnter={(e) => (e.currentTarget.style.color = "var(--text)")}
-                  onMouseLeave={(e) => (e.currentTarget.style.color = "var(--subtle)")}
-                >
-                  <User className="w-3.5 h-3.5" />
-                  Passkeys
-                </Link>
-
-                {/* Sign out */}
-                <div style={{ borderTop: "1px solid var(--border)" }}>
-                  <button
-                    onClick={() => signOut({ callbackUrl: "/login" })}
-                    className="w-full flex items-center gap-2.5 px-4 py-2.5 font-mono text-xs transition-colors text-left"
-                    style={{ color: "var(--subtle)" }}
-                    onMouseEnter={(e) => (e.currentTarget.style.color = "var(--red)")}
-                    onMouseLeave={(e) => (e.currentTarget.style.color = "var(--subtle)")}
-                  >
-                    <LogOut className="w-3.5 h-3.5" />
-                    Sign out
-                  </button>
+                  {/* Sign out */}
+                  <div style={{ borderTop: "1px solid var(--border)" }}>
+                    <button
+                      onClick={() => signOut({ callbackUrl: "/login" })}
+                      className="w-full flex items-center gap-3 px-4 py-3 font-mono text-[12px] transition-colors text-left"
+                      style={{ color: "var(--subtle)" }}
+                      onMouseEnter={(e) => (e.currentTarget.style.color = "var(--red)")}
+                      onMouseLeave={(e) => (e.currentTarget.style.color = "var(--subtle)")}
+                    >
+                      <LogOut className="w-4 h-4" />
+                      Sign out
+                    </button>
+                  </div>
                 </div>
-              </div>
-            )}
-          </div>
-        ) : (
-          <Link
-            href="/login"
-            className="px-3 py-1.5 rounded-lg font-mono text-xs transition-all"
-            style={{
-              background: "var(--surface)",
-              border: "1px solid var(--border)",
-              color: "var(--text)",
-            }}
-          >
-            Sign in
-          </Link>
-        )}
+              )}
+            </div>
+          ) : (
+            <Link
+              href="/login"
+              className="px-4 py-2 rounded-lg font-mono text-[13px] font-medium transition-all"
+              style={{
+                background: "var(--surface)",
+                border: "1px solid var(--border)",
+                color: "var(--text)",
+              }}
+            >
+              Sign in
+            </Link>
+          )}
+        </div>
       </div>
     </header>
   );

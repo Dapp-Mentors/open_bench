@@ -44,6 +44,7 @@ Every stage is a durable Inngest function that survives crashes and restarts. Fa
 | Metadata | Sia Indexd |
 | Containerization | Docker (sibling containers on host daemon) |
 | ORM | Prisma (frontend-owned schema) |
+| Auth | NextAuth.js with Passkey (WebAuthn) support |
 
 ---
 
@@ -203,86 +204,120 @@ task-name/
 
 ```
 openbench/
-├── docker-compose.yml           # 6-service orchestration
-├── Note.txt                     # Dev commands reference
+├── .env.example                  # Root environment variables
+├── .gitignore
+├── docker-compose.yml            # 6-service orchestration
+├── Note.txt                      # Dev commands reference
+├── README.md
 ├── backend/
 │   ├── Dockerfile
 │   ├── requirements.txt
 │   ├── .env.example
 │   └── app/
-│       ├── main.py              # FastAPI server with lifespan Sia init
+│       ├── main.py               # FastAPI server with lifespan Sia init
 │       ├── core/
-│       │   ├── config.py        # Pydantic settings (env-based)
-│       │   └── database.py      # Async SQLAlchemy session
+│       │   ├── config.py         # Pydantic settings (env-based)
+│       │   └── database.py       # Async SQLAlchemy session
 │       ├── models/
-│       │   └── orm.py           # SQLAlchemy ORM models
+│       │   └── orm.py            # SQLAlchemy ORM models
 │       ├── routers/
-│       │   ├── approve.py       # Task approval + Sia upload
-│       │   ├── model_config.py  # Model provider configuration router
-│       │   ├── pipeline.py      # Pipeline stage endpoints
-│       │   ├── runs.py          # Benchmark run reads + log streaming
-│       │   ├── sia.py           # Sia connection status
-│       │   └── tasks.py         # Task reads (debugging)
+│       │   ├── approve.py        # Task approval + Sia upload
+│       │   ├── model_config.py   # Model provider configuration router
+│       │   ├── pipeline.py       # Pipeline stage endpoints
+│       │   ├── runs.py           # Benchmark run reads + log streaming
+│       │   ├── sia.py            # Sia connection status
+│       │   └── tasks.py          # Task reads (debugging)
 │       ├── schemas/
-│       │   └── schemas.py       # Pydantic request/response models
+│       │   └── schemas.py        # Pydantic request/response models
 │       └── services/
-│           ├── agent_prompt.py  # LLM prompt building
-│           ├── agent_quality.py # LLM-as-judge for instructions
-│           ├── easiness.py      # 5-run prefilter (target: 1/5 passes)
-│           ├── llm.py           # Unified LLM provider abstraction
-│           ├── model_config.py  # Provider configuration logic
-│           ├── pipeline.py      # Docker container execution (6 pipeline stages)
-│           ├── quality.py       # 11-criteria quality assessment
-│           ├── sia_client.py    # Sia SDK singleton + demo fallback
-│           ├── sia.py           # Sia upload orchestration
-│           ├── similarity.py    # Embedding-based similarity check
-│           └── sse.py           # Server-sent events for live pipeline status
+│           ├── agent_prompt.py   # LLM prompt building
+│           ├── agent_quality.py  # LLM-as-judge for instructions
+│           ├── easiness.py       # 5-run prefilter (target: 1/5 passes)
+│           ├── llm.py            # Unified LLM provider abstraction
+│           ├── model_config.py   # Provider configuration logic
+│           ├── pipeline.py       # Docker container execution (6 pipeline stages)
+│           ├── quality.py        # 11-criteria quality assessment
+│           ├── runner.py         # Agent runner (oracle/NOP execution)
+│           ├── sia_client.py     # Sia SDK singleton + demo fallback
+│           ├── sia.py            # Sia upload orchestration
+│           ├── similarity.py     # Embedding-based similarity check
+│           └── sse.py            # Server-sent events for live pipeline status
 ├── frontend/
 │   ├── Dockerfile
 │   ├── .env.example
 │   ├── next.config.ts
+│   ├── next-env.d.ts
 │   ├── tailwind.config.ts
 │   ├── tsconfig.json
 │   ├── package.json
 │   ├── postcss.config.js
+│   ├── middleware.ts                # Next.js middleware (auth redirects)
 │   └── src/
+│       ├── middleware.ts            # Route protection middleware
 │       ├── app/
-│       │   ├── globals.css      # Global styles
-│       │   ├── layout.tsx       # Root layout with NavBar
-│       │   ├── page.tsx         # Landing page
-│       │   ├── admin/
-│       │   │   ├── page.tsx     # Admin dashboard (benchmark cards)
-│       │   │   └── models/
-│       │   │       └── page.tsx # Model provider configuration page
-│       │   ├── api/             # Next.js API routes
-│       │   │   ├── admin/       # Ready-tasks, stats
-│       │   │   ├── health/      # Health check
-│       │   │   ├── inngest/     # Inngest handler
-│       │   │   ├── models/      # Model provider listing
-│       │   │   │   └── config/  # Model provider config CRUD
-│       │   │   ├── projects/    # Project CRUD + task management
-│       │   │   │   └── [id]/tasks/[taskId]/
-│       │   │   │       ├── approve/
-│       │   │   │       ├── reject/
-│       │   │   │       ├── revert/
-│       │   │   │       └── runs/
-│       │   │   ├── runs/        # Benchmark run state
-│       │   │   ├── sia/         # Sia connection status, events
-│       │   │   │   ├── status/
-│       │   │   │   └── events/
-│       │   │   └── tasks/       # Task CRUD
+│       │   ├── globals.css          # Global styles
+│       │   ├── layout.tsx           # Root layout with NavBar
+│       │   ├── page.tsx             # Landing page
+│       │   ├── login/
+│       │   │   └── page.tsx         # Login page (passkey authentication)
 │       │   ├── dashboard/
-│       │   │   └── page.tsx     # Main dashboard
-│       │   └── projects/
-│       │       ├── [id]/
-│       │       │   ├── page.tsx        # Project detail
-│       │       │   └── submit/page.tsx # Task submission
-│       │       └── new/page.tsx        # Create project
+│       │   │   └── page.tsx         # Main dashboard
+│       │   ├── unauthorized/
+│       │   │   └── page.tsx         # Unauthorized access page
+│       │   ├── projects/
+│       │   │   ├── page.tsx         # Project listing
+│       │   │   ├── new/
+│       │   │   │   └── page.tsx     # Create new project
+│       │   │   └── [id]/
+│       │   │       ├── page.tsx     # Project detail
+│       │   │       └── submit/
+│       │   │           └── page.tsx # Task submission
+│       │   ├── admin/
+│       │   │   ├── page.tsx         # Admin dashboard (benchmark cards)
+│       │   │   └── models/
+│       │   │       └── page.tsx     # Model provider configuration page
+│       │   ├── settings/
+│       │   │   └── passkeys/
+│       │   │       └── page.tsx     # Passkey management
+│       │   ├── api/             # Next.js API routes
+│       │   │   ├── admin/
+│       │   │   │   ├── ready-tasks/ # Tasks ready for approval
+│       │   │   │   ├── stats/       # Dashboard statistics
+│       │   │   │   └── users/       # User listing (admin)
+│       │   │   ├── auth/
+│       │   │   │   ├── [...nextauth]/ # NextAuth.js handler
+│       │   │   │   └── passkey/
+│       │   │   │       ├── authenticate/ # Passkey authentication
+│       │   │   │       ├── register/     # Passkey registration
+│       │   │   │       └── register-first/ # First-time passkey setup
+│       │   │   ├── health/       # Health check
+│       │   │   ├── inngest/      # Inngest handler
+│       │   │   ├── models/       # Model provider listing
+│       │   │   │   └── config/   # Model provider config CRUD
+│       │   │   ├── projects/     # Project CRUD + task management
+│       │   │   │   └── [id]/tasks/[taskId]/
+│       │   │   │       ├── approve/ # Approve task
+│       │   │   │       ├── reject/  # Reject task
+│       │   │   │       ├── revert/  # Revert task to previous stage
+│       │   │   │       └── runs/    # Task benchmark runs
+│       │   │   ├── runs/         # Benchmark run state
+│       │   │   │   └── [id]/     # Individual run detail
+│       │   │   ├── settings/
+│       │   │   │   └── passkeys/ # User passkey CRUD
+│       │   │   │       └── [id]/ # Individual passkey operations
+│       │   │   ├── sia/
+│       │   │   │   ├── status/   # Sia connection status
+│       │   │   │   └── events/   # Sia SSE event stream
+│       │   │   └── tasks/        # Task CRUD
+│       │   │       └── [id]/     # Single task operations
+│       │   └── … (error routes, loading states)
 │       ├── components/
 │       │   ├── NavBar.tsx
+│       │   ├── ProjectCard.tsx
 │       │   ├── LogTerminal.tsx
 │       │   ├── PipelineStages.tsx
 │       │   ├── ScoreDisplay.tsx
+│       │   ├── SessionProviderWrapper.tsx
 │       │   ├── SiaProof.tsx           # Sia upload proof visualisation
 │       │   ├── StatusBadge.tsx
 │       │   ├── TaskActions.tsx
@@ -294,6 +329,10 @@ openbench/
 │           ├── admin-context.tsx
 │           ├── types.ts
 │           ├── use-sia-sse.ts           # SSE hook for pipeline status
+│           ├── auth/
+│           │   ├── guards.ts            # Auth guards (isAdmin, isAuthenticated)
+│           │   ├── index.ts             # Auth utilities
+│           │   └── passkey.ts           # WebAuthn passkey helpers
 │           ├── inngest/
 │           │   ├── client.ts            # Inngest client
 │           │   └── pipeline-inngest.ts   # 8-stage curation pipeline
@@ -329,6 +368,13 @@ Each pipeline function receives `(taskId, storagePath)` and returns `(passed: bo
 3. An Inngest event (`pipeline/task.submitted`) triggers the 8-stage curation pipeline.
 4. Each stage calls the backend API, which reads the ZIP from the shared volume.
 5. After all 8 stages pass, a human reviews and approves the task for the registry.
+
+### Authentication
+
+- **Passkey-first:** Uses WebAuthn for passwordless authentication via passkeys (Touch ID, Face ID, security keys).
+- **NextAuth.js:** Session management with JWT strategies, passkey credentials stored in the database.
+- **Middleware:** Route protection via `middleware.ts` — unauthenticated users are redirected to `/login`, non-admin users to `/unauthorized`.
+- **Edge cases:** First-time passkey registration flow via dedicated endpoints, passkey management in user settings.
 
 ---
 
