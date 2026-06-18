@@ -15,7 +15,7 @@ function hasRole(userRole: Role, required: Role): boolean {
 }
 
 // Routes fully open to the public (no auth required)
-const PUBLIC_PATHS = ["/", "/login", "/unauthorized", "/api/auth"];
+const PUBLIC_PATHS = ["/", "/login", "/unauthorized", "/api/auth", "/api/inngest"];
 
 // Routes that require super_admin
 const SUPER_ADMIN_PATHS = [
@@ -26,13 +26,22 @@ const SUPER_ADMIN_PATHS = [
 // Routes that require admin
 const ADMIN_PATHS = [
   "/admin",
-  "/projects",
   "/api/admin",
-  "/api/projects",  // project creation/deletion
+];
+
+// Admin-only page routes — exact match only so /projects/[id] is open to members
+const ADMIN_PAGE_PATHS = [
+  "/projects",
+  "/projects/new",
 ];
 
 function matchesAny(pathname: string, patterns: string[]): boolean {
   return patterns.some((p) => pathname === p || pathname.startsWith(p + "/") || pathname.startsWith(p + "?"));
+}
+
+// Match only exactly this path, not its sub-paths
+function matchesExact(pathname: string, patterns: string[]): boolean {
+  return patterns.some((p) => pathname === p);
 }
 
 export default auth(function middleware(req: NextAuthRequest, _event: NextFetchEvent) {
@@ -65,8 +74,16 @@ export default auth(function middleware(req: NextAuthRequest, _event: NextFetchE
     return NextResponse.next();
   }
 
-  // Admin-only paths
+  // Admin-only API routes
   if (matchesAny(pathname, ADMIN_PATHS)) {
+    if (!hasRole(userRole, "admin")) {
+      return NextResponse.redirect(new URL("/unauthorized", req.url));
+    }
+    return NextResponse.next();
+  }
+
+  // Admin-only pages (exact match — /projects/[id] is open to members)
+  if (matchesExact(pathname, ADMIN_PAGE_PATHS)) {
     if (!hasRole(userRole, "admin")) {
       return NextResponse.redirect(new URL("/unauthorized", req.url));
     }

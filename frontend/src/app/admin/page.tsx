@@ -230,37 +230,22 @@ function AdminPageInner() {
 
                                         <StatusBadge status={task.status} />
 
-                                        {/* Sia upload in-progress badge */}
-                                        {task.status === "pipeline_passed" && task.siaStatus && task.siaStatus !== "pending" && (
+                                        {/* Sia status badge (only show if failed) */}
+                                        {task.status === "pipeline_passed" && task.siaStatus === "failed" && (
                                             <div className="flex items-center gap-1.5 hidden sm:flex" onClick={(e) => e.stopPropagation()}>
-                                                {task.siaStatus === "failed" ? (
-                                                    <span
-                                                        className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-mono"
-                                                        style={{
-                                                            background: "rgba(255,68,68,0.08)",
-                                                            border: "1px solid rgba(255,68,68,0.2)",
-                                                            color: "var(--red)",
-                                                        }}
-                                                    >
-                                                        <XCircle className="w-3 h-3" />
-                                                        Sia failed
-                                                    </span>
-                                                ) : task.siaStatus === "queued" || task.siaStatus === "uploading" || task.siaStatus === "pinning" ? (
-                                                    <span
-                                                        className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-mono"
-                                                        style={{
-                                                            background: "rgba(77,166,255,0.08)",
-                                                            border: "1px solid rgba(77,166,255,0.2)",
-                                                            color: "var(--blue)",
-                                                        }}
-                                                    >
-                                                        <Loader2 className="w-3 h-3 animate-spin" />
-                                                        Sia {task.siaStatus}
-                                                    </span>
-                                                ) : null}
+                                                <span
+                                                    className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-mono"
+                                                    style={{
+                                                        background: "rgba(255,68,68,0.08)",
+                                                        border: "1px solid rgba(255,68,68,0.2)",
+                                                        color: "var(--red)",
+                                                    }}
+                                                >
+                                                    <XCircle className="w-3 h-3" />
+                                                    Sia failed
+                                                </span>
                                             </div>
                                         )}
-
                                         {/* Revert button — approved/rejected tasks */}
                                         {(task.status === "approved" || task.status === "rejected") && (
                                             <div className="flex items-center gap-1 sm:gap-2" onClick={(e) => e.stopPropagation()}>
@@ -301,15 +286,15 @@ function AdminPageInner() {
                                                     <span className="hidden sm:inline">Reject</span>
                                                 </button>
                                                 <button
-                                                    disabled={isActing || task.siaStatus === "queued" || task.siaStatus === "uploading" || task.siaStatus === "pinning"}
+                                                    disabled={isActing}
                                                     onClick={() => approveTask(task)}
                                                     className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1.5 rounded text-xs font-mono transition-all"
                                                     style={{
                                                         background: "rgba(0,230,118,0.1)",
                                                         color: "var(--green)",
                                                         border: "1px solid rgba(0,230,118,0.25)",
-                                                        opacity: (isActing || task.siaStatus === "queued" || task.siaStatus === "uploading" || task.siaStatus === "pinning") ? 0.5 : 1,
-                                                        cursor: (isActing || task.siaStatus === "queued" || task.siaStatus === "uploading" || task.siaStatus === "pinning") ? "not-allowed" : "pointer",
+                                                        opacity: isActing ? 0.5 : 1,
+                                                        cursor: isActing ? "not-allowed" : "pointer",
                                                         boxShadow: isActing ? "none" : "0 0 8px rgba(0,230,118,0.1)",
                                                     }}
                                                 >
@@ -473,14 +458,14 @@ function AdminPageInner() {
                                                     Reject Task
                                                 </button>
                                                 <button
-                                                    disabled={isActing || task.siaStatus === "queued" || task.siaStatus === "uploading" || task.siaStatus === "pinning"}
+                                                    disabled={isActing}
                                                     onClick={() => approveTask(task)}
                                                     className="flex items-center gap-1.5 px-4 py-2 rounded text-xs font-mono transition-all"
                                                     style={{
                                                         background: "rgba(0,230,118,0.1)",
                                                         color: "var(--green)",
                                                         border: "1px solid rgba(0,230,118,0.25)",
-                                                        opacity: (isActing || task.siaStatus === "queued" || task.siaStatus === "uploading" || task.siaStatus === "pinning") ? 0.5 : 1,
+                                                        opacity: isActing ? 0.5 : 1,
                                                         boxShadow: isActing ? "none" : "0 0 12px rgba(0,230,118,0.15)",
                                                     }}
                                                 >

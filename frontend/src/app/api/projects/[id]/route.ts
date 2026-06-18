@@ -9,6 +9,10 @@ type Params = { params: Promise<{ id: string }> };
 // ─── GET /api/projects/[id] ───────────────────────────────────────────────────
 
 export async function GET(_: Request, { params }: Params) {
+  const session = await auth();
+  const role = session?.user?.role;
+  const isAdmin = role === "admin" || role === "super_admin";
+
   const { id } = await params;
 
   const project = await prisma.project.findUnique({
@@ -29,6 +33,13 @@ export async function GET(_: Request, { params }: Params) {
 
   if (!project) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+
+  // Non-admin users only see tasks they submitted
+  if (!isAdmin && session?.user?.id) {
+    project.tasks = project.tasks.filter(
+      (t) => t.submittedById === session.user.id
+    );
   }
 
   return NextResponse.json(project);
@@ -52,17 +63,23 @@ export async function PATCH(req: Request, { params }: Params) {
     return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
   }
 
-  const { name, description, domain } = body as {
+  const { name, description, domain, projectType, rules, tags } = body as {
     name?: string;
     description?: string;
     domain?: string;
+    projectType?: string;
+    rules?: string;
+    tags?: string[];
   };
 
   // Only update fields that were actually sent
-  const data: Record<string, string> = {};
+  const data: Record<string, string | string[]> = {};
   if (typeof name === "string" && name.trim()) data.name = name.trim();
   if (typeof description === "string") data.description = description.trim();
   if (typeof domain === "string" && domain.trim()) data.domain = domain.trim();
+  if (typeof projectType === "string" && projectType.trim()) data.projectType = projectType.trim();
+  if (typeof rules === "string") data.rules = rules.trim();
+  if (Array.isArray(tags)) data.tags = tags;
 
   if (Object.keys(data).length === 0) {
     return NextResponse.json({ error: "Nothing to update" }, { status: 400 });

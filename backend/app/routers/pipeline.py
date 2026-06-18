@@ -22,6 +22,7 @@ from app.services import similarity as sim_svc
 from app.services import quality as qual_svc
 from app.services import easiness as easiness_svc
 from app.services import agent_quality as agent_quality_svc
+from app.services import sia as sia_svc
 
 _cuid = Cuid()
 
@@ -286,6 +287,48 @@ async def stage_agent_quality(body: PipelineStageRequest, db: AsyncSession = Dep
 
     await _write_log(db, body.taskId, "agent_quality", passed, message.split("\n")[0])
     return PipelineStageResponse(passed=passed, message=message)
+
+
+# ── Stage 9: Sia Network upload ──────────────────────────────────────────────
+#
+# Uploads the task to the Sia decentralized storage network and pins it.
+# This runs as part of the main pipeline so every task that passes all
+# previous stages is automatically shipped to Sia.
+
+@router.post("/sia-upload", response_model=PipelineStageResponse)
+async def stage_sia_upload(body: PipelineStageRequest, db: AsyncSession = Depends(get_db)):
+    task = await _get_task_or_404(db, body.taskId)
+    _diag(f"[sia-upload] taskId={body.taskId} storagePath={body.storagePath}")
+
+    try:
+        sia_object_id = await sia_svc.upload_task(
+            task_id=body.taskId,
+            storage_path=body.storagePath,
+            extra_meta={
+                "projectId": task.projectId,
+                "domain": task.domain,
+                "language": task.language,
+                "title": task.title,
+            },
+        )
+
+        task.siaHash = sia_object_id
+        task.siaStatus = "ready"
+        task.updatedAt = datetime.now(timezone.utc)
+        await db.commit()
+
+        _stage_result("sia-upload", True, f"Sia upload complete, objectId={sia_object_id}")
+        await _write_log(db, body.taskId, "sia_upload", True, f"Sia upload complete, objectId={sia_object_id}")
+        return PipelineStageResponse(passed=True, message=f"Sia upload complete, objectId={sia_object_id}")
+
+    except Exception as exc:
+        task.siaStatus = "failed"
+        task.updatedAt = datetime.now(timezone.utc)
+        await db.commit()
+
+        _stage_result("sia-upload", False, f"Sia upload failed: {exc}")
+        await _write_log(db, body.taskId, "sia_upload", False, f"Sia upload failed: {exc}")
+        return PipelineStageResponse(passed=False, message=f"Sia upload failed: {exc}")
 
 
 # ── Benchmark execution ───────────────────────────────────────────────────────

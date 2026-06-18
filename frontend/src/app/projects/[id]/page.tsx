@@ -3,9 +3,48 @@
 import { useEffect, useState, useCallback, use } from "react";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
-import { ArrowLeft, Plus, Upload, Pencil, Trash2, AlertTriangle, X } from "lucide-react";
+import { ArrowLeft, Plus, Upload, Pencil, Trash2, AlertTriangle, X, Tag, BookOpen, Code } from "lucide-react";
 import { TaskRow, PIPELINE_DEF } from "@/components/TaskRow";
 import type { ProjectTask } from "@/components/TaskRow";
+import { MarkdownEditor } from "@/components/MarkdownEditor";
+import { ProjectTypeSelector, PROJECT_TYPES } from "@/components/ProjectTypeSelector";
+import { TagInput } from "@/components/TagInput";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+
+// ─── Markdown preview styles (shared with MarkdownEditor) ────────────────────
+// Injected once into <head>. Avoids needing @tailwindcss/typography.
+const MD_PREVIEW_STYLES = `
+.md-preview h1,.md-preview h2,.md-preview h3,.md-preview h4,.md-preview h5,.md-preview h6{font-family:var(--font-mono,monospace);font-weight:600;color:var(--text);margin-top:1rem;margin-bottom:.35rem;line-height:1.3}
+.md-preview h1{font-size:1.15rem}.md-preview h2{font-size:1.05rem}.md-preview h3{font-size:.95rem}.md-preview h4,.md-preview h5,.md-preview h6{font-size:.875rem}
+.md-preview p{color:var(--subtle);margin:.4rem 0;line-height:1.65}
+.md-preview ul{list-style-type:disc;padding-left:1.4rem;margin:.4rem 0}
+.md-preview ol{list-style-type:decimal;padding-left:1.4rem;margin:.4rem 0}
+.md-preview li{color:var(--subtle);margin:.2rem 0;line-height:1.6}
+.md-preview li>ul,.md-preview li>ol{margin:.15rem 0}
+.md-preview strong{font-weight:600;color:var(--text)}
+.md-preview em{font-style:italic;color:var(--subtle)}
+.md-preview code{font-family:var(--font-mono,monospace);font-size:.8rem;color:var(--green);background:rgba(0,230,118,.08);padding:.1rem .35rem;border-radius:.25rem}
+.md-preview pre{background:var(--bg);border:1px solid var(--border);border-radius:.4rem;padding:.75rem;margin:.5rem 0;overflow-x:auto}
+.md-preview pre code{background:transparent;padding:0;color:var(--text)}
+.md-preview blockquote{border-left:2px solid var(--green);padding-left:.75rem;margin:.5rem 0;color:var(--muted)}
+.md-preview a{color:var(--green);text-decoration:none}.md-preview a:hover{text-decoration:underline}
+.md-preview hr{border:none;border-top:1px solid var(--border);margin:.75rem 0}
+.md-preview table{width:100%;border-collapse:collapse;font-size:.8rem;margin:.5rem 0}
+.md-preview th{font-family:var(--font-mono,monospace);font-weight:600;color:var(--text);text-align:left;padding:.4rem .6rem;border-bottom:1px solid var(--border)}
+.md-preview td{color:var(--subtle);padding:.35rem .6rem;border-bottom:1px solid var(--border)}
+`;
+
+function useInjectMdStyles() {
+  useEffect(() => {
+    const id = "md-preview-styles";
+    if (document.getElementById(id)) return;
+    const style = document.createElement("style");
+    style.id = id;
+    style.textContent = MD_PREVIEW_STYLES;
+    document.head.appendChild(style);
+  }, []);
+}
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -14,6 +53,9 @@ interface Project {
   name: string;
   description: string;
   domain: string;
+  projectType: string;
+  rules: string;
+  tags: string[];
   createdAt: string;
   tasks: ProjectTask[];
 }
@@ -21,240 +63,255 @@ interface Project {
 // ─── Domains ──────────────────────────────────────────────────────────────────
 
 const DOMAINS = [
-    "Software Engineering",
-    "Sys-Admin",
-    "Security",
-    "Scientific Computing",
-    "Finance",
-    "DevOps",
+  "Software Engineering",
+  "Sys-Admin",
+  "Security",
+  "Scientific Computing",
+  "Finance",
+  "DevOps",
 ];
 
 // ─── Delete modal ─────────────────────────────────────────────────────────────
 
 function DeleteModal({
-    projectName,
-    onConfirm,
-    onCancel,
-    deleting,
+  projectName,
+  onConfirm,
+  onCancel,
+  deleting,
 }: {
-    projectName: string;
-    onConfirm: () => void;
-    onCancel: () => void;
-    deleting: boolean;
+  projectName: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+  deleting: boolean;
 }) {
-    return (
-        <div
-            className="fixed inset-0 z-50 flex items-center justify-center px-4"
-            style={{ background: "rgba(0,0,0,0.7)" }}
-        >
-            <div
-                className="w-full max-w-md rounded-xl p-6"
-                style={{ background: "var(--surface)", border: "1px solid var(--border)" }}
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center px-4"
+      style={{ background: "rgba(0,0,0,0.7)" }}
+    >
+      <div
+        className="w-full max-w-md rounded-xl p-6"
+        style={{ background: "var(--surface)", border: "1px solid var(--border)" }}
+      >
+        <div className="flex items-start gap-4 mb-5">
+          <div
+            className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0"
+            style={{
+              background: "rgba(255,68,68,0.1)",
+              border: "1px solid rgba(255,68,68,0.25)",
+            }}
+          >
+            <AlertTriangle className="w-5 h-5" style={{ color: "var(--red)" }} />
+          </div>
+          <div>
+            <h2
+              className="font-mono text-sm font-semibold mb-1"
+              style={{ color: "var(--text)" }}
             >
-                <div className="flex items-start gap-4 mb-5">
-                    <div
-                        className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0"
-                        style={{
-                            background: "rgba(255,68,68,0.1)",
-                            border: "1px solid rgba(255,68,68,0.25)",
-                        }}
-                    >
-                        <AlertTriangle className="w-5 h-5" style={{ color: "var(--red)" }} />
-                    </div>
-                    <div>
-                        <h2
-                            className="font-mono text-sm font-semibold mb-1"
-                            style={{ color: "var(--text)" }}
-                        >
-                            Delete project
-                        </h2>
-                        <p
-                            className="font-mono text-xs leading-relaxed"
-                            style={{ color: "var(--subtle)" }}
-                        >
-                            This will permanently delete{" "}
-                            <span style={{ color: "var(--text)" }}>{projectName}</span> and
-                            all tasks inside it. There's no undo.
-                        </p>
-                    </div>
-                </div>
-                <div className="flex items-center justify-end gap-2">
-                    <button
-                        onClick={onCancel}
-                        disabled={deleting}
-                        className="bench-btn-ghost px-4 py-2 rounded text-xs font-mono disabled:opacity-40"
-                    >
-                        Cancel
-                    </button>
-                    <button
-                        onClick={onConfirm}
-                        disabled={deleting}
-                        className="flex items-center gap-2 px-4 py-2 rounded text-xs font-mono transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-                        style={{
-                            background: "rgba(255,68,68,0.1)",
-                            border: "1px solid rgba(255,68,68,0.3)",
-                            color: "var(--red)",
-                        }}
-                    >
-                        {deleting ? (
-                            <>
-                                <span className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                                Deleting…
-                            </>
-                        ) : (
-                            "Delete project"
-                        )}
-                    </button>
-                </div>
-            </div>
+              Delete project
+            </h2>
+            <p
+              className="font-mono text-xs leading-relaxed"
+              style={{ color: "var(--subtle)" }}
+            >
+              This will permanently delete{" "}
+              <span style={{ color: "var(--text)" }}>{projectName}</span> and
+              all tasks inside it. There's no undo.
+            </p>
+          </div>
         </div>
-    );
+        <div className="flex items-center justify-end gap-2">
+          <button
+            onClick={onCancel}
+            disabled={deleting}
+            className="bench-btn-ghost px-4 py-2 rounded text-xs font-mono disabled:opacity-40"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            disabled={deleting}
+            className="flex items-center gap-2 px-4 py-2 rounded text-xs font-mono transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+            style={{
+              background: "rgba(255,68,68,0.1)",
+              border: "1px solid rgba(255,68,68,0.3)",
+              color: "var(--red)",
+            }}
+          >
+            {deleting ? (
+              <>
+                <span className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                Deleting…
+              </>
+            ) : (
+              "Delete project"
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 // ─── Edit modal ───────────────────────────────────────────────────────────────
 
 function EditModal({
-    project,
-    onSave,
-    onCancel,
-    saving,
+  project,
+  onSave,
+  onCancel,
+  saving,
 }: {
-    project: { name: string; description: string; domain: string };
-    onSave: (name: string, description: string, domain: string) => void;
-    onCancel: () => void;
-    saving: boolean;
+  project: { name: string; description: string; domain: string; projectType: string; rules: string; tags: string[] };
+  onSave: (name: string, description: string, domain: string, projectType: string, rules: string, tags: string[]) => void;
+  onCancel: () => void;
+  saving: boolean;
 }) {
-    const [name, setName] = useState(project.name);
-    const [description, setDescription] = useState(project.description);
-    const [domain, setDomain] = useState(project.domain);
+  const [name, setName] = useState(project.name);
+  const [description, setDescription] = useState(project.description);
+  const [domain, setDomain] = useState(project.domain);
+  const [projectType, setProjectType] = useState(project.projectType);
+  const [rules, setRules] = useState(project.rules);
+  const [tags, setTags] = useState<string[]>(project.tags);
 
-    const canSave =
-        name.trim().length > 0 &&
-        description.trim().length > 0 &&
-        domain.length > 0 &&
-        !saving;
+  const canSave =
+    name.trim().length > 0 &&
+    description.trim().length > 0 &&
+    domain.length > 0 &&
+    !saving;
 
-    return (
-        <div
-            className="fixed inset-0 z-50 flex items-center justify-center px-4"
-            style={{ background: "rgba(0,0,0,0.7)" }}
-        >
-            <div
-                className="w-full max-w-lg rounded-xl p-6"
-                style={{ background: "var(--surface)", border: "1px solid var(--border)" }}
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-start justify-center px-4 py-10 overflow-y-auto"
+      style={{ background: "rgba(0,0,0,0.7)" }}
+    >
+      <div
+        className="w-full max-w-4xl rounded-xl p-6 my-auto"
+        style={{ background: "var(--surface)", border: "1px solid var(--border)" }}
+      >
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <div className="section-label mb-1">Admin</div>
+            <h2
+              className="font-mono text-sm font-semibold"
+              style={{ color: "var(--text)" }}
             >
-                <div className="flex items-center justify-between mb-6">
-                    <div>
-                        <div className="section-label mb-1">Admin</div>
-                        <h2
-                            className="font-mono text-sm font-semibold"
-                            style={{ color: "var(--text)" }}
-                        >
-                            Edit project
-                        </h2>
-                    </div>
-                    <button
-                        onClick={onCancel}
-                        className="p-1.5 rounded transition-colors"
-                        style={{ color: "var(--subtle)" }}
-                        onMouseEnter={(e) => (e.currentTarget.style.color = "var(--text)")}
-                        onMouseLeave={(e) => (e.currentTarget.style.color = "var(--subtle)")}
-                    >
-                        <X className="w-4 h-4" />
-                    </button>
-                </div>
-
-                <div className="space-y-4">
-                    <div>
-                        <label className="block section-label mb-2">Project Name</label>
-                        <input
-                            type="text"
-                            value={name}
-                            onChange={(e) => setName(e.target.value)}
-                            maxLength={80}
-                            className="w-full px-3 py-2.5 rounded text-sm font-mono outline-none"
-                            style={{
-                                background: "var(--bg)",
-                                border: "1px solid var(--border)",
-                                color: "var(--text)",
-                            }}
-                            onFocus={(e) => (e.target.style.borderColor = "rgba(0,230,118,0.4)")}
-                            onBlur={(e) => (e.target.style.borderColor = "var(--border)")}
-                        />
-                    </div>
-                    <div>
-                        <label className="block section-label mb-2">Description</label>
-                        <textarea
-                            value={description}
-                            onChange={(e) => setDescription(e.target.value)}
-                            maxLength={300}
-                            rows={3}
-                            className="w-full px-3 py-2.5 rounded text-sm font-mono outline-none resize-none"
-                            style={{
-                                background: "var(--bg)",
-                                border: "1px solid var(--border)",
-                                color: "var(--text)",
-                            }}
-                            onFocus={(e) => (e.target.style.borderColor = "rgba(0,230,118,0.4)")}
-                            onBlur={(e) => (e.target.style.borderColor = "var(--border)")}
-                        />
-                        <p className="mt-1 text-xs font-mono" style={{ color: "var(--muted)" }}>
-                            {description.length}/300
-                        </p>
-                    </div>
-                    <div>
-                        <label className="block section-label mb-2">Domain</label>
-                        <div className="flex flex-wrap gap-2">
-                            {DOMAINS.map((d) => {
-                                const active = domain === d;
-                                return (
-                                    <button
-                                        key={d}
-                                        type="button"
-                                        onClick={() => setDomain(d)}
-                                        className="px-3 py-1.5 rounded text-xs font-mono transition-all"
-                                        style={{
-                                            background: active ? "rgba(0,230,118,0.1)" : "var(--bg)",
-                                            border: active
-                                                ? "1px solid rgba(0,230,118,0.4)"
-                                                : "1px solid var(--border)",
-                                            color: active ? "var(--green)" : "var(--subtle)",
-                                        }}
-                                    >
-                                        {d}
-                                    </button>
-                                );
-                            })}
-                        </div>
-                    </div>
-                </div>
-
-                <div className="flex items-center justify-end gap-2 mt-6">
-                    <button
-                        onClick={onCancel}
-                        disabled={saving}
-                        className="bench-btn-ghost px-4 py-2 rounded text-xs font-mono disabled:opacity-40"
-                    >
-                        Cancel
-                    </button>
-                    <button
-                        onClick={() => onSave(name.trim(), description.trim(), domain)}
-                        disabled={!canSave}
-                        className="bench-btn-primary flex items-center gap-2 px-4 py-2 rounded text-xs font-mono disabled:opacity-40 disabled:cursor-not-allowed"
-                    >
-                        {saving ? (
-                            <>
-                                <span className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                                Saving…
-                            </>
-                        ) : (
-                            "Save changes"
-                        )}
-                    </button>
-                </div>
-            </div>
+              Edit project
+            </h2>
+          </div>
+          <button
+            onClick={onCancel}
+            className="p-1.5 rounded transition-colors"
+            style={{ color: "var(--subtle)" }}
+            onMouseEnter={(e) => (e.currentTarget.style.color = "var(--text)")}
+            onMouseLeave={(e) => (e.currentTarget.style.color = "var(--subtle)")}
+          >
+            <X className="w-4 h-4" />
+          </button>
         </div>
-    );
+
+        <div className="space-y-5">
+          <div>
+            <label className="block section-label mb-2">Project Name</label>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              maxLength={80}
+              className="w-full px-3 py-2.5 rounded text-sm font-mono outline-none"
+              style={{
+                background: "var(--bg)",
+                border: "1px solid var(--border)",
+                color: "var(--text)",
+              }}
+              onFocus={(e) => (e.target.style.borderColor = "rgba(0,230,118,0.4)")}
+              onBlur={(e) => (e.target.style.borderColor = "var(--border)")}
+            />
+          </div>
+
+          <div>
+            <ProjectTypeSelector value={projectType} onChange={setProjectType} />
+          </div>
+
+          <div>
+            <MarkdownEditor
+              label="Description"
+              value={description}
+              onChange={setDescription}
+              minHeight={200}
+            />
+          </div>
+
+          <div>
+            <label className="block section-label mb-2">Domain</label>
+            <div className="flex flex-wrap gap-2">
+              {DOMAINS.map((d) => {
+                const active = domain === d;
+                return (
+                  <button
+                    key={d}
+                    type="button"
+                    onClick={() => setDomain(d)}
+                    className="px-3 py-1.5 rounded text-xs font-mono transition-all"
+                    style={{
+                      background: active ? "rgba(0,230,118,0.1)" : "var(--bg)",
+                      border: active
+                        ? "1px solid rgba(0,230,118,0.4)"
+                        : "1px solid var(--border)",
+                      color: active ? "var(--green)" : "var(--subtle)",
+                    }}
+                  >
+                    {d}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div>
+            <MarkdownEditor
+              label="Rules"
+              value={rules}
+              onChange={setRules}
+              minHeight={200}
+            />
+          </div>
+
+          <div>
+            <TagInput
+              label="Tags"
+              tags={tags}
+              onChange={setTags}
+              placeholder="Add tags…"
+            />
+          </div>
+        </div>
+
+        <div className="flex items-center justify-end gap-2 mt-6">
+          <button
+            onClick={onCancel}
+            disabled={saving}
+            className="bench-btn-ghost px-4 py-2 rounded text-xs font-mono disabled:opacity-40"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={() => onSave(name.trim(), description.trim(), domain, projectType, rules.trim(), tags)}
+            disabled={!canSave}
+            className="bench-btn-primary flex items-center gap-2 px-4 py-2 rounded text-xs font-mono disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            {saving ? (
+              <>
+                <span className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                Saving…
+              </>
+            ) : (
+              "Save changes"
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 // ─── Main page ────────────────────────────────────────────────────────────────
@@ -264,6 +321,8 @@ export default function ProjectDetail({ params }: { params: Promise<{ id: string
   const role = session?.user?.role;
   const isAdmin = role === "admin" || role === "super_admin";
 
+  useInjectMdStyles();
+
   const { id } = use(params);
   const [project, setProject] = useState<Project | null>(null);
   const [loading, setLoading] = useState(true);
@@ -271,6 +330,7 @@ export default function ProjectDetail({ params }: { params: Promise<{ id: string
   const [showDelete, setShowDelete] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [activeTab, setActiveTab] = useState<"tasks" | "description" | "rules">("tasks");
 
   const fetchProject = useCallback(async () => {
     const res = await fetch(`/api/projects/${id}`);
@@ -313,17 +373,17 @@ export default function ProjectDetail({ params }: { params: Promise<{ id: string
     }
   }
 
-  async function handleSave(name: string, description: string, domain: string) {
+  async function handleSave(name: string, description: string, domain: string, projectType: string, rules: string, tags: string[]) {
     if (!project) return;
     setSaving(true);
     try {
       const res = await fetch(`/api/projects/${project.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, description, domain }),
+        body: JSON.stringify({ name, description, domain, projectType, rules, tags }),
       });
       if (res.ok) {
-        setProject((prev) => prev ? { ...prev, name, description, domain } : prev);
+        setProject((prev) => prev ? { ...prev, name, description, domain, projectType, rules, tags } : prev);
         setShowEdit(false);
       } else {
         const d = await res.json().catch(() => ({}));
@@ -348,6 +408,10 @@ export default function ProjectDetail({ params }: { params: Promise<{ id: string
     (t) => t.status === "pending" || t.status === "pipeline_running"
   ).length ?? 0;
   const rejectedCount = project?.tasks.filter((t) => t.status === "rejected").length ?? 0;
+
+  // Find the project type label
+  const projectTypeInfo = PROJECT_TYPES.find((pt) => pt.id === project?.projectType);
+  const projectTypeLabel = projectTypeInfo?.label ?? project?.projectType ?? "Unknown";
 
   if (loading) {
     return (
@@ -402,8 +466,8 @@ export default function ProjectDetail({ params }: { params: Promise<{ id: string
             <h1 className="font-display text-2xl font-bold mb-1" style={{ color: "var(--text)" }}>
               {project.name}
             </h1>
-            <p className="text-sm" style={{ color: "var(--subtle)", maxWidth: "520px", lineHeight: 1.6 }}>
-              {project.description}
+            <p className="text-sm font-mono" style={{ color: "var(--muted)" }}>
+              {project.domain} · {projectTypeLabel}
             </p>
           </div>
           <div className="flex gap-2 flex-shrink-0 w-full sm:w-auto">
@@ -442,18 +506,40 @@ export default function ProjectDetail({ params }: { params: Promise<{ id: string
           </div>
         </div>
 
-        {/* Domain tag */}
-        <div className="mb-6">
+        {/* Badges row: domain, project type, tags */}
+        <div className="flex flex-wrap items-center gap-2 mb-6">
+          {/* Domain */}
           <span
             className="font-mono text-xs px-2 py-1 rounded"
             style={{ background: "var(--muted)", color: "var(--subtle)", border: "1px solid var(--border)" }}
           >
             {project.domain}
           </span>
+
+          {/* Project Type */}
+          <span
+            className="inline-flex items-center gap-1 font-mono text-xs px-2 py-1 rounded"
+            style={{ background: "rgba(99,102,241,0.08)", color: "#818cf8", border: "1px solid rgba(99,102,241,0.2)" }}
+          >
+            <Code className="w-3 h-3" />
+            {projectTypeLabel}
+          </span>
+
+          {/* Tags */}
+          {project.tags.map((tag) => (
+            <span
+              key={tag}
+              className="inline-flex items-center gap-1 font-mono text-xs px-2 py-1 rounded"
+              style={{ background: "rgba(0,230,118,0.08)", color: "var(--green)", border: "1px solid rgba(0,230,118,0.2)" }}
+            >
+              <Tag className="w-3 h-3" />
+              {tag}
+            </span>
+          ))}
         </div>
 
         {/* Stats */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
           {[
             { label: "Total Tasks", value: project.tasks.length, color: "var(--text)" },
             { label: "Approved", value: approvedCount, color: "var(--green)" },
@@ -469,34 +555,117 @@ export default function ProjectDetail({ params }: { params: Promise<{ id: string
           ))}
         </div>
 
-        {/* Tasks */}
-        <div className="section-label mb-3">Tasks</div>
-        {project.tasks.length === 0 ? (
+        {/* Tab bar */}
+        <div
+          className="flex items-center gap-1 mb-6 border-b"
+          style={{ borderColor: "var(--border)" }}
+        >
+          {(
+            [
+              { id: "tasks", label: "Tasks" },
+              { id: "description", label: "Description" },
+              ...(project.rules ? [{ id: "rules", label: "Rules" }] : []),
+            ] as { id: "tasks" | "description" | "rules"; label: string }[]
+          ).map((tab) => {
+            const active = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setActiveTab(tab.id)}
+                className="px-4 py-2 text-xs font-mono transition-all relative"
+                style={{
+                  color: active ? "var(--text)" : "var(--muted)",
+                  borderBottom: active ? "2px solid var(--green)" : "2px solid transparent",
+                  marginBottom: "-1px",
+                }}
+              >
+                {tab.label}
+                {tab.id === "tasks" && (
+                  <span
+                    className="ml-1.5 px-1.5 py-0.5 rounded-full text-[10px]"
+                    style={{
+                      background: active ? "rgba(0,230,118,0.12)" : "var(--surface)",
+                      color: active ? "var(--green)" : "var(--muted)",
+                    }}
+                  >
+                    {project.tasks.length}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Tab: Tasks */}
+        {activeTab === "tasks" && (
+          <>
+            {project.tasks.length === 0 ? (
+              <div
+                className="text-center py-16 border rounded-lg"
+                style={{ borderColor: "var(--border)", borderStyle: "dashed" }}
+              >
+                <p className="font-mono text-sm mb-3" style={{ color: "var(--subtle)" }}>
+                  No tasks yet. Submit a .zip built to the Harbor spec.
+                </p>
+                <Link
+                  href={`/projects/${project.id}/submit`}
+                  className="bench-btn-primary inline-flex items-center gap-2 px-4 py-2 rounded text-xs"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  Submit first task
+                </Link>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {project.tasks.map((task) => (
+                  <TaskRow
+                    key={task.id}
+                    task={task}
+                    projectId={project.id}
+                    onDeleted={handleTaskDeleted}
+                  />
+                ))}
+              </div>
+            )}
+          </>
+        )}
+
+        {/* Tab: Description */}
+        {activeTab === "description" && (
           <div
-            className="text-center py-16 border rounded-lg"
-            style={{ borderColor: "var(--border)", borderStyle: "dashed" }}
+            className="p-5 rounded-lg border"
+            style={{ background: "var(--surface)", borderColor: "var(--border)" }}
           >
-            <p className="font-mono text-sm mb-3" style={{ color: "var(--subtle)" }}>
-              No tasks yet. Submit a .zip built to the Harbor spec.
-            </p>
-            <Link
-              href={`/projects/${project.id}/submit`}
-              className="bench-btn-primary inline-flex items-center gap-2 px-4 py-2 rounded text-xs"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              Submit first task
-            </Link>
+            {project.description ? (
+              <div className="md-preview text-sm">
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                  {project.description}
+                </ReactMarkdown>
+              </div>
+            ) : (
+              <p className="font-mono text-sm" style={{ color: "var(--muted)" }}>
+                No description provided.
+              </p>
+            )}
           </div>
-        ) : (
-          <div className="space-y-3">
-            {project.tasks.map((task) => (
-              <TaskRow
-                key={task.id}
-                task={task}
-                projectId={project.id}
-                onDeleted={handleTaskDeleted}
-              />
-            ))}
+        )}
+
+        {/* Tab: Rules */}
+        {activeTab === "rules" && project.rules && (
+          <div
+            className="p-5 rounded-lg border"
+            style={{ background: "rgba(0,230,118,0.02)", borderColor: "rgba(0,230,118,0.1)" }}
+          >
+            <div className="flex items-center gap-1.5 mb-4">
+              <BookOpen className="w-3.5 h-3.5" style={{ color: "var(--green)" }} />
+              <span className="section-label" style={{ color: "var(--green)" }}>Rules</span>
+            </div>
+            <div className="md-preview text-sm">
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                {project.rules}
+              </ReactMarkdown>
+            </div>
           </div>
         )}
       </div>

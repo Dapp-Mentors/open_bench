@@ -2,7 +2,7 @@
 //
 // User management endpoints — super_admin only.
 //
-// GET  /api/admin/users              → list all users
+// GET  /api/admin/users              → list all users (with task counts & memberships)
 // GET  /api/admin/users?id=xyz       → get a single user
 // PATCH /api/admin/users             → update a user's role
 
@@ -11,6 +11,7 @@ import { checkSuperAdmin } from "@/lib/auth/guards";
 import { prisma } from "@/lib/prisma/client";
 import type { Role } from "@prisma/client";
 
+const ASSIGNABLE_ROLES: Role[] = ["user", "admin"];
 const VALID_ROLES: Role[] = ["user", "admin", "super_admin"];
 
 export async function GET(request: Request) {
@@ -25,7 +26,23 @@ export async function GET(request: Request) {
     if (id) {
         const user = await prisma.user.findUnique({
             where: { id },
-            select: { id: true, name: true, email: true, image: true, role: true, createdAt: true },
+            select: {
+                id: true,
+                name: true,
+                email: true,
+                image: true,
+                role: true,
+                createdAt: true,
+                _count: { select: { tasks: true, passkeys: true, accounts: true } },
+                memberships: {
+                    select: {
+                        id: true,
+                        role: true,
+                        createdAt: true,
+                        project: { select: { id: true, name: true, domain: true } },
+                    },
+                },
+            },
         });
         if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
         return NextResponse.json(user);
@@ -39,12 +56,48 @@ export async function GET(request: Request) {
             image: true,
             role: true,
             createdAt: true,
-            _count: { select: { passkeys: true, accounts: true } },
+            _count: {
+                select: {
+                    passkeys: true,
+                    accounts: true,
+                    tasks: true,
+                },
+            },
+            memberships: {
+                select: {
+                    id: true,
+                    role: true,
+                    projectId: true,
+                    project: { select: { id: true, name: true, domain: true } },
+                },
+            },
         },
         orderBy: { createdAt: "asc" },
     });
 
-    return NextResponse.json(users);
+    // Attach per-status task counts for each user
+    const usersWithCounts = await Promise.all(
+        users.map(async (user) => {
+            const statusCounts = await prisma.task.groupBy({
+                by: ["status"],
+                where: { submittedById: user.id },
+                _count: { status: true },
+            });
+
+            const taskCounts: Record<string, number> = {};
+            for (const s of statusCounts) {
+                taskCounts[s.status] = s._count.status;
+            }
+
+            return {
+                ...user,
+                taskCounts,
+                totalTasks: user._count.tasks,
+            };
+        })
+    );
+
+    return NextResponse.json(usersWithCounts);
 }
 
 export async function PATCH(request: Request) {
@@ -64,6 +117,14 @@ export async function PATCH(request: Request) {
         return NextResponse.json(
             { error: `Invalid role. Must be one of: ${VALID_ROLES.join(", ")}` },
             { status: 400 }
+        );
+    }
+
+    // Prevent assigning super_admin — only user and admin are assignable
+    if (!ASSIGNABLE_ROLES.includes(role as Role)) {
+        return NextResponse.json(
+            { error: `Cannot assign role "${role}". Only user and admin roles are assignable.` },
+            { status: 403 }
         );
     }
 

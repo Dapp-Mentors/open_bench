@@ -1,17 +1,10 @@
 // src/app/api/projects/[projectId]/tasks/[taskId]/approve/route.ts
 //
-// POST — trigger Sia upload for a pipeline_passed task.
+// POST — approve a pipeline-passed task.
 //
-// ⚠️ The task is NOT immediately marked as "approved".
-//    Sia upload runs first (queued → uploading → pinning → ready).
-//    Only when siaStatus reaches "ready" does the backend flip
-//    task.status to "approved".
-//
-// This ensures the asset is shipped to Sia before being considered approved.
-//
-// The frontend subscribes to SSE at http://localhost:8000/api/sia/events
-// for real-time status updates. When siaStatus="ready" is received, the
-// admin-context triggers a data refresh so the UI updates.
+// Simplified: Sia upload is now part of the pipeline (stage 9), so approval
+// just flips the task status to "approved" directly without waiting for
+// any background Sia process.
 
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
@@ -32,22 +25,20 @@ export async function POST(
   // Look up the task to get its storagePath
   const task = await prisma.task.findFirst({
     where: { id: taskId, projectId },
-    select: { id: true, status: true, siaStatus: true, storagePath: true },
+    select: { id: true, status: true, siaStatus: true, siaHash: true },
   });
 
   if (!task) {
     return NextResponse.json({ error: "Task not found" }, { status: 404 });
   }
 
-  // Allow: pipeline_passed (first-time upload) or
-  //        pipeline_passed + siaStatus=failed (retry)
-  if (task.status === "approved" && task.siaStatus === "ready") {
+  if (task.status === "approved") {
     return NextResponse.json({
       ok: true,
       taskId,
-      siaHash: null,
-      siaStatus: "ready",
-      message: "Already approved and uploaded to Sia",
+      siaHash: task.siaHash,
+      siaStatus: task.siaStatus ?? "pending",
+      message: "Already approved",
     });
   }
 
@@ -58,13 +49,12 @@ export async function POST(
     );
   }
 
-  // Call the Python backend — it marks siaStatus="queued" + starts upload
-  // in background. The response returns right away.
+  // Call the Python backend to mark as approved (no Sia upload — that's done)
   const backendUrl = resolveBackendUrl();
   const res = await fetch(`${backendUrl}/api/approve`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ taskId, storagePath: task.storagePath }),
+    body: JSON.stringify({ taskId }),
   });
 
   if (!res.ok) {
@@ -82,6 +72,6 @@ export async function POST(
     ok: true,
     taskId: data.taskId,
     siaHash: data.siaHash ?? null,
-    siaStatus: data.siaStatus ?? "queued",
+    siaStatus: data.siaStatus ?? "pending",
   });
 }
