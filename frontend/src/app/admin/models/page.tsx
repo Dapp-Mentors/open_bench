@@ -274,7 +274,7 @@ export default function ModelSettingsPage() {
               style={{ border: `1px solid ${isDirty ? role.borderColor : "var(--border)"}` }}
             >
               {/* Role header */}
-              <div className="px-5 py-4 flex items-center justify-between">
+              <div className="px-5 py-4 flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-0 justify-between">
                 <div className="flex items-center gap-3">
                   <div
                     className="w-9 h-9 rounded flex items-center justify-center flex-shrink-0"
@@ -292,19 +292,19 @@ export default function ModelSettingsPage() {
                   </div>
                 </div>
 
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2 sm:gap-3 flex-wrap w-full sm:w-auto">
                   {/* Current model badge */}
                   {config && (
                     <div
-                      className="px-3 py-1.5 rounded font-mono text-xs"
+                      className="px-3 py-1.5 rounded font-mono text-xs max-w-[160px] sm:max-w-none truncate"
                       style={{
                         background: "var(--surface)",
                         border: "1px solid var(--border)",
                         color: "var(--text)",
                       }}
                     >
-                      {config.modelName}
-                      <span className="ml-1.5" style={{ color: "var(--subtle)" }}>
+                      <span className="truncate">{config.modelName}</span>
+                      <span className="ml-1.5 hidden sm:inline" style={{ color: "var(--subtle)" }}>
                         ({config.modelId})
                       </span>
                     </div>
@@ -313,7 +313,7 @@ export default function ModelSettingsPage() {
                   {/* Select button */}
                   <button
                     onClick={() => setExpandedRole(isExpanded ? null : role.key)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-mono transition-all"
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-mono transition-all flex-shrink-0"
                     style={{
                       background: isExpanded ? role.bgColor : "var(--surface)",
                       color: isExpanded ? role.color : "var(--subtle)",
@@ -332,7 +332,7 @@ export default function ModelSettingsPage() {
                     <button
                       onClick={() => saveConfig(role.key)}
                       disabled={isSaving}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-mono transition-all"
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-mono transition-all flex-shrink-0"
                       style={{
                         background: role.bgColor,
                         color: role.color,

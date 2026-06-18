@@ -37,7 +37,8 @@ import React, {
   useRef,
   useState,
 } from "react";
-import type { Task, SiaStatus } from "@/lib/types";
+import type { Task } from "@/lib/types";
+import type { SiaStatus } from "@/lib/types";
 import type { BenchmarkStats } from "@/components/admin/BenchmarkCards";
 import { useSiaSSE } from "@/lib/use-sia-sse";
 

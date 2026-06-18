@@ -1,7 +1,11 @@
+// src/app/api/models/config/route.ts
+//
+// Model configuration — super_admin only for writes, admin+ for reads.
+// Drop this in place of the existing route.ts.
+
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma/client";
-
-// ── Default model assignments (used when DB has no config yet) ────────────────
+import { checkApiAuth, checkSuperAdmin } from "@/lib/auth/guards";
 
 const DEFAULTS: Record<string, { modelId: string; modelName: string }> = {
   frontier_model: {
@@ -22,17 +26,21 @@ const DEFAULTS: Record<string, { modelId: string; modelName: string }> = {
   },
 };
 
+// Any admin can read the current model config
 export async function GET() {
+  const authResult = await checkApiAuth("admin");
+  if (!authResult.ok) {
+    return NextResponse.json({ error: authResult.message }, { status: authResult.status });
+  }
+
   try {
     const rows = await prisma.modelConfig.findMany();
-
     const configs = rows.map((row) => ({
       key: row.key,
       modelId: row.modelId,
       modelName: row.modelName,
     }));
 
-    // Fill in defaults for any missing keys
     for (const [key, defaultVal] of Object.entries(DEFAULTS)) {
       if (!configs.find((c) => c.key === key)) {
         configs.push({ key, ...defaultVal });
@@ -42,16 +50,18 @@ export async function GET() {
     return NextResponse.json(configs);
   } catch (error) {
     console.error("[MODEL-CONFIG] GET error:", error);
-    // Return defaults if DB is unreachable
-    const defaults = Object.entries(DEFAULTS).map(([key, val]) => ({
-      key,
-      ...val,
-    }));
+    const defaults = Object.entries(DEFAULTS).map(([key, val]) => ({ key, ...val }));
     return NextResponse.json(defaults);
   }
 }
 
+// Only super_admin can change model assignments
 export async function POST(request: Request) {
+  const authResult = await checkSuperAdmin();
+  if (!authResult.ok) {
+    return NextResponse.json({ error: authResult.message }, { status: authResult.status });
+  }
+
   try {
     const body = await request.json();
     const { key, modelId, modelName } = body;
@@ -63,13 +73,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const validKeys = new Set([
-      "frontier_model",
-      "easiness_model",
-      "quality_model",
-      "agent_quality_model",
-    ]);
-
+    const validKeys = new Set(Object.keys(DEFAULTS));
     if (!validKeys.has(key)) {
       return NextResponse.json(
         { error: `Invalid key '${key}'. Must be one of: ${[...validKeys].sort().join(", ")}` },
@@ -77,27 +81,17 @@ export async function POST(request: Request) {
       );
     }
 
-    // Upsert: update if exists, create if not
     const row = await prisma.modelConfig.upsert({
       where: { key },
-      update: {
-        modelId,
-        modelName: modelName || "",
-        updatedAt: new Date(),
-      },
-      create: {
-        key,
-        modelId,
-        modelName: modelName || "",
-        updatedAt: new Date(),
-      },
+      update: { modelId, modelName: modelName || "", updatedAt: new Date() },
+      create: { key, modelId, modelName: modelName || "", updatedAt: new Date() },
     });
 
     return NextResponse.json({
       key: row.key,
       modelId: row.modelId,
       modelName: row.modelName,
-      updatedAt: row.updatedAt?.toISOString() || null,
+      updatedAt: row.updatedAt?.toISOString() ?? null,
     });
   } catch (error) {
     console.error("[MODEL-CONFIG] POST error:", error);

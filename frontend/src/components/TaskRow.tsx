@@ -30,7 +30,7 @@ export interface PipelineStageDetail {
     modelUsed?: string;
 }
 
-export interface ProjectTask extends Task {
+export interface ProjectTask extends Omit<Task, "runs"> {
     runs?: BenchmarkRun[];
     stageDetails?: PipelineStageDetail[];
 }
@@ -276,44 +276,44 @@ export function TaskRow({ task, projectId, onDeleted }: {
             style={{ borderColor: isRejected ? "rgba(255,68,68,0.2)" : isApproved ? "rgba(0,230,118,0.2)" : "var(--border)" }}
         >
             {/* Row header */}
-            <div
-                className="flex items-center gap-3 px-5 py-4 cursor-pointer select-none"
-                style={{ background: "var(--surface)" }}
-                onClick={() => setOpen((o) => !o)}
-            >
-                <div style={{ color: "var(--muted)" }}>
-                    {open ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-                </div>
-                <div className="flex items-center gap-2 flex-1 min-w-0">
-                    <span className="text-base" style={{ color: "var(--subtle)" }}>📄</span>
-                    <div className="min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                            <span className="font-mono text-sm font-medium" style={{ color: "var(--text)" }}>
-                                {task.title}.zip
-                            </span>
-                            {task.description && (
-                                <span
-                                    className="font-mono text-xs px-2 py-0.5 rounded"
-                                    style={{ background: "var(--muted)", color: "var(--subtle)", border: "1px solid var(--border)" }}
-                                >
-                                    {task.description.slice(0, 40)}
+                <div
+                    className="flex items-center gap-3 px-5 py-4 cursor-pointer select-none"
+                    style={{ background: "var(--surface)" }}
+                    onClick={() => setOpen((o) => !o)}
+                >
+                    <div style={{ color: "var(--muted)" }}>
+                        {open ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                    </div>
+                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                        <span className="text-base flex-shrink-0" style={{ color: "var(--subtle)" }}>📄</span>
+                        <div className="min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                                <span className="font-mono text-sm font-medium truncate max-w-[200px] sm:max-w-none" style={{ color: "var(--text)" }}>
+                                    {task.title}.zip
                                 </span>
-                            )}
+                                {task.description && (
+                                    <span
+                                        className="font-mono text-xs px-2 py-0.5 rounded truncate max-w-[120px] sm:max-w-none hidden sm:inline"
+                                        style={{ background: "var(--muted)", color: "var(--subtle)", border: "1px solid var(--border)" }}
+                                    >
+                                        {task.description.slice(0, 40)}
+                                    </span>
+                                )}
+                            </div>
+                            <p className="font-mono text-xs mt-0.5" style={{ color: "var(--muted)" }}>
+                                Submitted: {new Date(task.createdAt).toLocaleString()}
+                            </p>
                         </div>
-                        <p className="font-mono text-xs mt-0.5" style={{ color: "var(--muted)" }}>
-                            Submitted: {new Date(task.createdAt).toLocaleString()}
-                        </p>
+                    </div>
+                    <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
+                        {isRunning && (
+                            <span className="font-mono text-xs hidden sm:inline" style={{ color: "var(--blue)" }}>
+                                {passedStages}/{PIPELINE_DEF.length} stages
+                            </span>
+                        )}
+                        <StatusChip status={task.status} />
                     </div>
                 </div>
-                <div className="flex items-center gap-3 flex-shrink-0">
-                    {isRunning && (
-                        <span className="font-mono text-xs" style={{ color: "var(--blue)" }}>
-                            {passedStages}/{PIPELINE_DEF.length} stages
-                        </span>
-                    )}
-                    <StatusChip status={task.status} />
-                </div>
-            </div>
 
             {/* Expanded body */}
             {open && (
@@ -374,20 +374,20 @@ export function TaskRow({ task, projectId, onDeleted }: {
                                                 className="flex items-center justify-between px-4 py-2.5 rounded border"
                                                 style={{ background: "var(--surface)", borderColor: "var(--border)" }}
                                             >
-                                                <div className="flex items-center gap-2">
-                                                    <span
-                                                        className="font-mono text-xs px-1.5 py-0.5 rounded"
-                                                        style={{
-                                                            background: `${PROVIDER_COLOR[r.provider] ?? "var(--text)"}15`,
-                                                            color: PROVIDER_COLOR[r.provider] ?? "var(--text)",
-                                                            border: `1px solid ${PROVIDER_COLOR[r.provider] ?? "var(--text)"}30`,
-                                                        }}
-                                                    >
-                                                        {r.provider}
-                                                    </span>
-                                                    <span className="font-mono text-sm" style={{ color: "var(--text)" }}>{r.modelId}</span>
-                                                </div>
-                                                <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-2 min-w-0">
+                            <span
+                                className="font-mono text-xs px-1.5 py-0.5 rounded flex-shrink-0"
+                                style={{
+                                    background: `${PROVIDER_COLOR[r.provider] ?? "var(--text)"}15`,
+                                    color: PROVIDER_COLOR[r.provider] ?? "var(--text)",
+                                    border: `1px solid ${PROVIDER_COLOR[r.provider] ?? "var(--text)"}30`,
+                                }}
+                            >
+                                {r.provider}
+                            </span>
+                            <span className="font-mono text-sm truncate" style={{ color: "var(--text)" }}>{r.modelId}</span>
+                        </div>
+                        <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
                                                     {r.score != null && (
                                                         <span
                                                             className="font-mono text-sm font-bold"

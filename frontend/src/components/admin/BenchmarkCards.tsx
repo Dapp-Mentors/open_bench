@@ -167,7 +167,7 @@ export function BenchmarkCards({ stats }: { stats: BenchmarkStats }) {
     return (
         <div>
             {/* ── Eyebrow ── */}
-            <div className="flex items-center gap-3 mb-3">
+            <div className="flex items-center gap-3 mb-3 flex-wrap">
                 <span className="section-label">Platform Overview</span>
                 {inPipeline > 0 && (
                     <span

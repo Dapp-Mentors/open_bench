@@ -33,11 +33,11 @@ function AdminPageInner() {
     return (
         <div className="max-w-5xl mx-auto px-6 py-10">
             {/* Header */}
-            <div className="flex items-start justify-between mb-8">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-8">
                 <div>
                     <div className="section-label mb-2">Admin</div>
-                    <h1 className="font-display text-2xl font-bold flex items-center gap-2.5" style={{ color: "var(--text)" }}>
-                        <ShieldCheck className="w-6 h-6" style={{ color: "var(--green)" }} />
+                    <h1 className="font-display text-2xl font-bold flex items-center gap-2" style={{ color: "var(--text)" }}>
+                        <ShieldCheck className="w-5 h-5 flex-shrink-0" style={{ color: "var(--green)" }} />
                         Task Review Queue
                     </h1>
                     <p className="text-xs mt-1.5" style={{ color: "var(--subtle)" }}>
@@ -45,7 +45,7 @@ function AdminPageInner() {
                     </p>
                 </div>
 
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 flex-shrink-0">
                     {/* SSE connection status indicator */}
                     <div
                         className="flex items-center gap-1.5 px-2.5 py-1.5 rounded text-xs font-mono"
@@ -87,12 +87,12 @@ function AdminPageInner() {
 
             {/* Tabs */}
             <div className="mb-6">
-                <div className="flex items-center gap-1 mb-3">
+                <div className="flex items-center gap-1 mb-3 flex-wrap">
                     <ListFilter className="w-3.5 h-3.5" style={{ color: "var(--subtle)" }} />
                     <span className="section-label ml-1">Filter</span>
                 </div>
                 <div
-                    className="inline-flex rounded-lg p-1 gap-1"
+                    className="flex flex-wrap rounded-lg p-1 gap-1"
                     style={{ background: "var(--surface)", border: "1px solid var(--border)" }}
                 >
                     {TABS.map((tab) => {
@@ -201,7 +201,7 @@ function AdminPageInner() {
                                             <p className="font-medium text-sm mb-0.5" style={{ color: "var(--text)" }}>
                                                 {task.title}
                                             </p>
-                                            <div className="flex items-center gap-3 text-xs font-mono" style={{ color: "var(--subtle)" }}>
+                                            <div className="flex flex-wrap items-center gap-3 text-xs font-mono" style={{ color: "var(--subtle)" }}>
                                                 <span
                                                     className="px-2 py-0.5 rounded"
                                                     style={{ background: "var(--muted)", border: "1px solid var(--border)" }}
@@ -222,8 +222,8 @@ function AdminPageInner() {
                                     </div>
 
                                     {/* Right side */}
-                                    <div className="flex items-center gap-4 flex-shrink-0">
-                                        <div className="text-right">
+                                    <div className="flex items-center gap-2 sm:gap-4 flex-shrink-0">
+                                        <div className="text-right hidden sm:block">
                                             <div className="section-label mb-0.5">Quality</div>
                                             <ScoreDisplay score={task.qualityScore} size="sm" />
                                         </div>
@@ -232,7 +232,7 @@ function AdminPageInner() {
 
                                         {/* Sia upload in-progress badge */}
                                         {task.status === "pipeline_passed" && task.siaStatus && task.siaStatus !== "pending" && (
-                                            <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                                            <div className="flex items-center gap-1.5 hidden sm:flex" onClick={(e) => e.stopPropagation()}>
                                                 {task.siaStatus === "failed" ? (
                                                     <span
                                                         className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-mono"
@@ -263,11 +263,11 @@ function AdminPageInner() {
 
                                         {/* Revert button — approved/rejected tasks */}
                                         {(task.status === "approved" || task.status === "rejected") && (
-                                            <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                                            <div className="flex items-center gap-1 sm:gap-2" onClick={(e) => e.stopPropagation()}>
                                                 <button
                                                     disabled={isActing}
                                                     onClick={() => revertTask(task)}
-                                                    className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-mono transition-all"
+                                                    className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1.5 rounded text-xs font-mono transition-all"
                                                     style={{
                                                         background: "rgba(140,148,168,0.08)",
                                                         color: "var(--subtle)",
@@ -277,18 +277,18 @@ function AdminPageInner() {
                                                     }}
                                                 >
                                                     <Undo2 className="w-3.5 h-3.5" />
-                                                    Revert
+                                                    <span className="hidden sm:inline">Revert</span>
                                                 </button>
                                             </div>
                                         )}
 
                                         {/* Approve / Reject buttons — pipeline_passed tasks only */}
                                         {task.status === "pipeline_passed" && (
-                                            <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                                            <div className="flex items-center gap-1 sm:gap-2" onClick={(e) => e.stopPropagation()}>
                                                 <button
                                                     disabled={isActing}
                                                     onClick={() => rejectTask(task)}
-                                                    className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-mono transition-all"
+                                                    className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1.5 rounded text-xs font-mono transition-all"
                                                     style={{
                                                         background: "rgba(255,68,68,0.08)",
                                                         color: "var(--red)",
@@ -298,12 +298,12 @@ function AdminPageInner() {
                                                     }}
                                                 >
                                                     <XCircle className="w-3.5 h-3.5" />
-                                                    Reject
+                                                    <span className="hidden sm:inline">Reject</span>
                                                 </button>
                                                 <button
                                                     disabled={isActing || task.siaStatus === "queued" || task.siaStatus === "uploading" || task.siaStatus === "pinning"}
                                                     onClick={() => approveTask(task)}
-                                                    className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-mono transition-all"
+                                                    className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1.5 rounded text-xs font-mono transition-all"
                                                     style={{
                                                         background: "rgba(0,230,118,0.1)",
                                                         color: "var(--green)",
@@ -338,7 +338,7 @@ function AdminPageInner() {
                                         </div>
 
                                         {/* Scores row */}
-                                        <div className="grid grid-cols-4 gap-3">
+                                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                                             {[
                                                 { label: "Quality Score", value: <ScoreDisplay score={task.qualityScore} size="sm" /> },
                                                 { label: "Similarity Score", value: <ScoreDisplay score={task.similarityScore} size="sm" /> },
@@ -422,7 +422,7 @@ function AdminPageInner() {
                                         <SiaProof siaHash={task.siaHash} indexdKey={task.indexdKey} />
 
                                         {/* Docker / config strip */}
-                                        <div className="grid grid-cols-3 gap-3">
+                                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                                             {[
                                                 { label: "Docker Image", value: task.dockerImage },
                                                 { label: "Scoring Type", value: task.scoringType },
