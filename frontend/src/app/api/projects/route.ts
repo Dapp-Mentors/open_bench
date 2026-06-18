@@ -4,16 +4,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { auth } from '@/lib/auth'
 
-interface ProjectRow {
-  id: string
-  name: string
-  description: string
-  domain: string
-  createdAt: Date
-  _count: { tasks: number }
-  tasks: { status: string }[]
-}
-
 export async function GET() {
   const session = await auth()
   const role = session?.user?.role
@@ -24,7 +14,7 @@ export async function GET() {
     ? {}
     : { members: { some: { userId: session?.user?.id } } }
 
-  const projects: ProjectRow[] = await prisma.project.findMany({
+  const projects = await prisma.project.findMany({
     where,
     orderBy: { createdAt: 'desc' },
     include: {
@@ -34,20 +24,21 @@ export async function GET() {
   })
 
   // Shape into ProjectSummary — compute sub-counts from the task list
-  const shaped = projects.map((p: ProjectRow) => ({
+  const shaped = projects.map((p) => ({
     id: p.id,
     name: p.name,
     description: p.description,
     domain: p.domain,
+    projectType: p.projectType,
+    tags: p.tags,
     createdAt: p.createdAt,
     _count: {
       tasks: p._count.tasks,
-      approvedTasks: p.tasks.filter((t: { status: string }) => t.status === 'approved').length,
+      approvedTasks: p.tasks.filter((t) => t.status === 'approved').length,
       pendingTasks: p.tasks.filter(
-        (t: { status: string }) =>
-          t.status === 'pending' || t.status === 'pipeline_running',
+        (t) => t.status === 'pending' || t.status === 'pipeline_running',
       ).length,
-      rejectedTasks: p.tasks.filter((t: { status: string }) => t.status === 'rejected').length,
+      rejectedTasks: p.tasks.filter((t) => t.status === 'rejected').length,
     },
   }))
 
@@ -61,7 +52,7 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json().catch(() => ({}))
-  const { name, description, domain } = body
+  const { name, description, domain, projectType, rules, tags } = body
 
   if (!name?.trim() || !description?.trim() || !domain?.trim()) {
     return NextResponse.json(
@@ -75,6 +66,9 @@ export async function POST(req: NextRequest) {
       name: name.trim(),
       description: description.trim(),
       domain: domain.trim(),
+      projectType: projectType?.trim() || 'coding_benchmark',
+      rules: rules?.trim() || '',
+      tags: Array.isArray(tags) ? tags : [],
       members: {
         create: {
           userId: session.user.id,

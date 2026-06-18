@@ -4,6 +4,9 @@ import { useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, FolderPlus, Terminal, CheckCircle, ChevronRight } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { MarkdownEditor } from "@/components/MarkdownEditor";
+import { ProjectTypeSelector } from "@/components/ProjectTypeSelector";
+import { TagInput } from "@/components/TagInput";
 
 const DOMAINS = [
   "Software Engineering",
@@ -14,6 +17,14 @@ const DOMAINS = [
   "DevOps",
 ];
 
+const TAG_SUGGESTIONS = [
+  "python", "javascript", "typescript", "rust", "go", "java", "c++",
+  "react", "node", "docker", "kubernetes", "aws", "gcp", "azure",
+  "llm", "rag", "prompt-engineering", "sql", "api", "cli",
+  "beginner", "intermediate", "advanced", "expert",
+  "code-gen", "debugging", "refactoring", "testing", "documentation",
+];
+
 type CreateState = "idle" | "creating" | "success" | "error";
 
 export default function NewProject() {
@@ -22,6 +33,9 @@ export default function NewProject() {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [domain, setDomain] = useState("");
+  const [projectType, setProjectType] = useState("coding_benchmark");
+  const [rules, setRules] = useState("");
+  const [tags, setTags] = useState<string[]>([]);
   const [state, setState] = useState<CreateState>("idle");
   const [error, setError] = useState<string | null>(null);
 
@@ -39,7 +53,14 @@ export default function NewProject() {
       const res = await fetch("/api/projects", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: name.trim(), description: description.trim(), domain }),
+        body: JSON.stringify({
+          name: name.trim(),
+          description: description.trim(),
+          domain,
+          projectType,
+          rules: rules.trim(),
+          tags,
+        }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
@@ -74,7 +95,7 @@ export default function NewProject() {
   }
 
   return (
-    <div className="max-w-xl mx-auto px-6 py-10">
+    <div className="max-w-2xl mx-auto px-6 py-10">
       {/* Back */}
       <Link
         href="/dashboard"
@@ -114,7 +135,7 @@ export default function NewProject() {
         <span>Runs</span>
       </div>
 
-      <div className="space-y-5">
+      <div className="space-y-6">
         {/* Project name */}
         <div>
           <label htmlFor="proj-name" className="block section-label mb-2">
@@ -138,30 +159,18 @@ export default function NewProject() {
           />
         </div>
 
-        {/* Description */}
+        {/* Project Type */}
+        <ProjectTypeSelector value={projectType} onChange={setProjectType} />
+
+        {/* Description — markdown editor */}
         <div>
-          <label htmlFor="proj-desc" className="block section-label mb-2">
-            Description
-          </label>
-          <textarea
-            id="proj-desc"
+          <MarkdownEditor
+            label="Description"
             value={description}
-            onChange={(e) => setDescription(e.target.value)}
+            onChange={setDescription}
             placeholder="What kind of tasks will live in this project? What are you trying to evaluate?"
-            maxLength={300}
-            rows={3}
-            className="w-full px-3 py-2.5 rounded text-sm font-mono outline-none transition-colors resize-none"
-            style={{
-              background: "var(--surface)",
-              border: "1px solid var(--border)",
-              color: "var(--text)",
-            }}
-            onFocus={(e) => (e.target.style.borderColor = "rgba(0,230,118,0.4)")}
-            onBlur={(e) => (e.target.style.borderColor = "var(--border)")}
+            minHeight={150}
           />
-          <p className="mt-1 text-xs font-mono" style={{ color: "var(--muted)" }}>
-            {description.length}/300
-          </p>
         </div>
 
         {/* Domain */}
@@ -191,6 +200,42 @@ export default function NewProject() {
             You can mix domains inside a project — this just sets the primary focus.
           </p>
         </div>
+
+        {/* Rules — markdown editor */}
+        <div>
+          <MarkdownEditor
+            label="Rules"
+            value={rules}
+            onChange={setRules}
+            placeholder={`## Project Rules
+
+Define the guidelines for evaluating tasks in this project.
+
+- What criteria should submissions meet?
+- Are there specific quality standards?
+- Any formatting or documentation requirements?
+
+\`\`\`
+Example: All submissions must include:
+- A clear problem statement
+- Expected input/output format
+- At least 3 test cases
+\`\`\``}
+            minHeight={150}
+          />
+          <p className="mt-1 text-xs font-mono" style={{ color: "var(--muted)" }}>
+            Describe rules and guidelines for task submission, evaluation criteria, etc. (Markdown supported)
+          </p>
+        </div>
+
+        {/* Tags */}
+        <TagInput
+          label="Tags"
+          tags={tags}
+          onChange={setTags}
+          suggestions={TAG_SUGGESTIONS}
+          placeholder="Add tags (e.g. python, code-gen, advanced)"
+        />
 
         {/* What happens next */}
         <div

@@ -6,13 +6,16 @@
 // Pass isAdmin=true to show the edit + delete action buttons.
 
 import Link from "next/link";
-import { FolderOpen, ChevronRight, Pencil, Trash2 } from "lucide-react";
+import { FolderOpen, ChevronRight, Pencil, Trash2, Tag, Code } from "lucide-react";
+import { PROJECT_TYPES } from "./ProjectTypeSelector";
 
 export interface ProjectSummary {
     id: string;
     name: string;
     description: string;
     domain: string;
+    projectType?: string;
+    tags?: string[];
     createdAt: string;
     _count: {
         tasks: number;

@@ -5,7 +5,7 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
-import { Plus, RefreshCw, FolderOpen, AlertTriangle, X } from "lucide-react";
+import { Plus, RefreshCw, FolderOpen, AlertTriangle, X, Tag, BookOpen, Code } from "lucide-react";
 import { ProjectCard, type ProjectSummary } from "@/components/ProjectCard";
 
 const DOMAINS = [

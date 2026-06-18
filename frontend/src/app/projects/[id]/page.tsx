@@ -3,9 +3,14 @@
 import { useEffect, useState, useCallback, use } from "react";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
-import { ArrowLeft, Plus, Upload, Pencil, Trash2, AlertTriangle, X } from "lucide-react";
+import { ArrowLeft, Plus, Upload, Pencil, Trash2, AlertTriangle, X, Tag, BookOpen, Code } from "lucide-react";
 import { TaskRow, PIPELINE_DEF } from "@/components/TaskRow";
 import type { ProjectTask } from "@/components/TaskRow";
+import { MarkdownEditor } from "@/components/MarkdownEditor";
+import { ProjectTypeSelector, PROJECT_TYPES } from "@/components/ProjectTypeSelector";
+import { TagInput } from "@/components/TagInput";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -14,6 +19,9 @@ interface Project {
   name: string;
   description: string;
   domain: string;
+  projectType: string;
+  rules: string;
+  tags: string[];
   createdAt: string;
   tasks: ProjectTask[];
 }
@@ -119,14 +127,17 @@ function EditModal({
     onCancel,
     saving,
 }: {
-    project: { name: string; description: string; domain: string };
-    onSave: (name: string, description: string, domain: string) => void;
+    project: { name: string; description: string; domain: string; projectType: string; rules: string; tags: string[] };
+    onSave: (name: string, description: string, domain: string, projectType: string, rules: string, tags: string[]) => void;
     onCancel: () => void;
     saving: boolean;
 }) {
     const [name, setName] = useState(project.name);
     const [description, setDescription] = useState(project.description);
     const [domain, setDomain] = useState(project.domain);
+    const [projectType, setProjectType] = useState(project.projectType);
+    const [rules, setRules] = useState(project.rules);
+    const [tags, setTags] = useState<string[]>(project.tags);
 
     const canSave =
         name.trim().length > 0 &&
@@ -136,11 +147,11 @@ function EditModal({
 
     return (
         <div
-            className="fixed inset-0 z-50 flex items-center justify-center px-4"
+            className="fixed inset-0 z-50 flex items-start justify-center px-4 py-10 overflow-y-auto"
             style={{ background: "rgba(0,0,0,0.7)" }}
         >
             <div
-                className="w-full max-w-lg rounded-xl p-6"
+                className="w-full max-w-2xl rounded-xl p-6 my-auto"
                 style={{ background: "var(--surface)", border: "1px solid var(--border)" }}
             >
                 <div className="flex items-center justify-between mb-6">
@@ -164,7 +175,7 @@ function EditModal({
                     </button>
                 </div>
 
-                <div className="space-y-4">
+                <div className="space-y-5">
                     <div>
                         <label className="block section-label mb-2">Project Name</label>
                         <input
@@ -182,26 +193,20 @@ function EditModal({
                             onBlur={(e) => (e.target.style.borderColor = "var(--border)")}
                         />
                     </div>
+
                     <div>
-                        <label className="block section-label mb-2">Description</label>
-                        <textarea
-                            value={description}
-                            onChange={(e) => setDescription(e.target.value)}
-                            maxLength={300}
-                            rows={3}
-                            className="w-full px-3 py-2.5 rounded text-sm font-mono outline-none resize-none"
-                            style={{
-                                background: "var(--bg)",
-                                border: "1px solid var(--border)",
-                                color: "var(--text)",
-                            }}
-                            onFocus={(e) => (e.target.style.borderColor = "rgba(0,230,118,0.4)")}
-                            onBlur={(e) => (e.target.style.borderColor = "var(--border)")}
-                        />
-                        <p className="mt-1 text-xs font-mono" style={{ color: "var(--muted)" }}>
-                            {description.length}/300
-                        </p>
+                        <ProjectTypeSelector value={projectType} onChange={setProjectType} />
                     </div>
+
+                    <div>
+                        <MarkdownEditor
+                            label="Description"
+                            value={description}
+                            onChange={setDescription}
+                            minHeight={120}
+                        />
+                    </div>
+
                     <div>
                         <label className="block section-label mb-2">Domain</label>
                         <div className="flex flex-wrap gap-2">
@@ -227,6 +232,24 @@ function EditModal({
                             })}
                         </div>
                     </div>
+
+                    <div>
+                        <MarkdownEditor
+                            label="Rules"
+                            value={rules}
+                            onChange={setRules}
+                            minHeight={120}
+                        />
+                    </div>
+
+                    <div>
+                        <TagInput
+                            label="Tags"
+                            tags={tags}
+                            onChange={setTags}
+                            placeholder="Add tags…"
+                        />
+                    </div>
                 </div>
 
                 <div className="flex items-center justify-end gap-2 mt-6">
@@ -238,7 +261,7 @@ function EditModal({
                         Cancel
                     </button>
                     <button
-                        onClick={() => onSave(name.trim(), description.trim(), domain)}
+                        onClick={() => onSave(name.trim(), description.trim(), domain, projectType, rules.trim(), tags)}
                         disabled={!canSave}
                         className="bench-btn-primary flex items-center gap-2 px-4 py-2 rounded text-xs font-mono disabled:opacity-40 disabled:cursor-not-allowed"
                     >
@@ -313,17 +336,17 @@ export default function ProjectDetail({ params }: { params: Promise<{ id: string
     }
   }
 
-  async function handleSave(name: string, description: string, domain: string) {
+  async function handleSave(name: string, description: string, domain: string, projectType: string, rules: string, tags: string[]) {
     if (!project) return;
     setSaving(true);
     try {
       const res = await fetch(`/api/projects/${project.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, description, domain }),
+        body: JSON.stringify({ name, description, domain, projectType, rules, tags }),
       });
       if (res.ok) {
-        setProject((prev) => prev ? { ...prev, name, description, domain } : prev);
+        setProject((prev) => prev ? { ...prev, name, description, domain, projectType, rules, tags } : prev);
         setShowEdit(false);
       } else {
         const d = await res.json().catch(() => ({}));
@@ -348,6 +371,10 @@ export default function ProjectDetail({ params }: { params: Promise<{ id: string
     (t) => t.status === "pending" || t.status === "pipeline_running"
   ).length ?? 0;
   const rejectedCount = project?.tasks.filter((t) => t.status === "rejected").length ?? 0;
+
+  // Find the project type label
+  const projectTypeInfo = PROJECT_TYPES.find((pt) => pt.id === project?.projectType);
+  const projectTypeLabel = projectTypeInfo?.label ?? project?.projectType ?? "Unknown";
 
   if (loading) {
     return (
@@ -402,9 +429,12 @@ export default function ProjectDetail({ params }: { params: Promise<{ id: string
             <h1 className="font-display text-2xl font-bold mb-1" style={{ color: "var(--text)" }}>
               {project.name}
             </h1>
-            <p className="text-sm" style={{ color: "var(--subtle)", maxWidth: "520px", lineHeight: 1.6 }}>
-              {project.description}
-            </p>
+            {/* Description rendered as markdown */}
+            <div className="text-sm prose prose-invert max-w-none" style={{ color: "var(--subtle)", lineHeight: 1.6 }}>
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                {project.description}
+              </ReactMarkdown>
+            </div>
           </div>
           <div className="flex gap-2 flex-shrink-0 w-full sm:w-auto">
             {isAdmin && (
@@ -442,15 +472,55 @@ export default function ProjectDetail({ params }: { params: Promise<{ id: string
           </div>
         </div>
 
-        {/* Domain tag */}
-        <div className="mb-6">
+        {/* Badges row: domain, project type, tags */}
+        <div className="flex flex-wrap items-center gap-2 mb-6">
+          {/* Domain */}
           <span
             className="font-mono text-xs px-2 py-1 rounded"
             style={{ background: "var(--muted)", color: "var(--subtle)", border: "1px solid var(--border)" }}
           >
             {project.domain}
           </span>
+
+          {/* Project Type */}
+          <span
+            className="inline-flex items-center gap-1 font-mono text-xs px-2 py-1 rounded"
+            style={{ background: "rgba(99,102,241,0.08)", color: "#818cf8", border: "1px solid rgba(99,102,241,0.2)" }}
+          >
+            <Code className="w-3 h-3" />
+            {projectTypeLabel}
+          </span>
+
+          {/* Tags */}
+          {project.tags.map((tag) => (
+            <span
+              key={tag}
+              className="inline-flex items-center gap-1 font-mono text-xs px-2 py-1 rounded"
+              style={{ background: "rgba(0,230,118,0.08)", color: "var(--green)", border: "1px solid rgba(0,230,118,0.2)" }}
+            >
+              <Tag className="w-3 h-3" />
+              {tag}
+            </span>
+          ))}
         </div>
+
+        {/* Rules section */}
+        {project.rules && (
+          <div
+            className="mb-6 p-4 rounded-lg border"
+            style={{ background: "rgba(0,230,118,0.02)", borderColor: "rgba(0,230,118,0.1)" }}
+          >
+            <div className="section-label mb-2 inline-flex items-center gap-1.5" style={{ color: "var(--green)" }}>
+              <BookOpen className="w-3.5 h-3.5" />
+              Rules
+            </div>
+            <div className="text-sm prose prose-invert max-w-none" style={{ color: "var(--subtle)", lineHeight: 1.6 }}>
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                {project.rules}
+              </ReactMarkdown>
+            </div>
+          </div>
+        )}
 
         {/* Stats */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8">

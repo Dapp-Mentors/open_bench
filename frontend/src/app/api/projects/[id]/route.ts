@@ -52,17 +52,23 @@ export async function PATCH(req: Request, { params }: Params) {
     return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
   }
 
-  const { name, description, domain } = body as {
+  const { name, description, domain, projectType, rules, tags } = body as {
     name?: string;
     description?: string;
     domain?: string;
+    projectType?: string;
+    rules?: string;
+    tags?: string[];
   };
 
   // Only update fields that were actually sent
-  const data: Record<string, string> = {};
+  const data: Record<string, string | string[]> = {};
   if (typeof name === "string" && name.trim()) data.name = name.trim();
   if (typeof description === "string") data.description = description.trim();
   if (typeof domain === "string" && domain.trim()) data.domain = domain.trim();
+  if (typeof projectType === "string" && projectType.trim()) data.projectType = projectType.trim();
+  if (typeof rules === "string") data.rules = rules.trim();
+  if (Array.isArray(tags)) data.tags = tags;
 
   if (Object.keys(data).length === 0) {
     return NextResponse.json({ error: "Nothing to update" }, { status: 400 });
