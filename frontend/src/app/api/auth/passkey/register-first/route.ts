@@ -11,8 +11,7 @@ import {
   generateFirstTimePasskeyOptions,
   verifyFirstTimePasskeyRegistration,
 } from "@/lib/auth/passkey";
-import { cookies } from "next/headers";
-import { createId } from "@paralleldrive/cuid2";
+import { signIn } from "@/lib/auth";
 
 // GET: generate registration options for a first-time user
 export async function GET() {
@@ -26,7 +25,7 @@ export async function GET() {
   }
 }
 
-// POST: verify the registration and create the user + passkey, then issue a session
+// POST: verify the registration and create the user + passkey, then issue a JWT session
 export async function POST(request: Request) {
   try {
     const body = await request.json();
@@ -48,32 +47,14 @@ export async function POST(request: Request) {
       );
     }
 
-    // Create a session manually (Auth.js database sessions)
-    const sessionToken = createId();
-    const expires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days
-
-    const { prisma } = await import("@/lib/prisma/client");
-
-    await prisma.session.create({
-      data: {
-        sessionToken,
-        userId: result.user.id,
-        expires,
-      },
+    // Use NextAuth's signIn with the passkey credentials provider.
+    // This creates a proper JWT session cookie that the middleware can decode.
+    await signIn("passkey", {
+      userId: result.user.id,
+      redirect: false,
     });
 
-    const response_next = NextResponse.json({ success: true, userId: result.user.id });
-
-    // Set the session cookie (Auth.js v5 cookie name)
-    response_next.cookies.set("authjs.session-token", sessionToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      expires,
-      path: "/",
-    });
-
-    return response_next;
+    return NextResponse.json({ success: true, userId: result.user.id });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Registration failed";
     return NextResponse.json({ error: message }, { status: 400 });

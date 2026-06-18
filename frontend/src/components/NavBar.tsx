@@ -240,20 +240,22 @@ export function NavBar() {
               icon={LayoutDashboard}
               isActive={isActive("/dashboard")}
             />
-            <NavLink
-              href="/projects"
-              label="Projects"
-              icon={FolderOpen}
-              isActive={isActive("/projects")}
-            />
             {isAdmin && (
-              <NavLink
-                href="/admin"
-                label="Admin"
-                icon={Shield}
-                isActive={isActive("/admin")}
-                accent="amber"
-              />
+              <>
+                <NavLink
+                  href="/projects"
+                  label="Projects"
+                  icon={FolderOpen}
+                  isActive={isActive("/projects")}
+                />
+                <NavLink
+                  href="/admin"
+                  label="Admin"
+                  icon={Shield}
+                  isActive={isActive("/admin")}
+                  accent="amber"
+                />
+              </>
             )}
             {isSuperAdmin && (
               <NavLink

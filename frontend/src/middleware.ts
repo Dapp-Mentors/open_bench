@@ -26,6 +26,7 @@ const SUPER_ADMIN_PATHS = [
 // Routes that require admin
 const ADMIN_PATHS = [
   "/admin",
+  "/projects",
   "/api/admin",
   "/api/projects",  // project creation/deletion
 ];

@@ -2,8 +2,7 @@
 
 import { NextResponse } from "next/server";
 import { generatePasskeyAuthOptions, verifyPasskeyAuth } from "@/lib/auth/passkey";
-import { prisma } from "@/lib/prisma/client";
-import { createId } from "@paralleldrive/cuid2";
+import { signIn } from "@/lib/auth";
 
 export async function GET() {
     try {
@@ -24,24 +23,14 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: "Authentication failed" }, { status: 401 });
         }
 
-        const sessionToken = createId();
-        const expires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-
-        await prisma.session.create({
-            data: { sessionToken, userId: user.id, expires },
+        // Use NextAuth's signIn with the passkey credentials provider.
+        // This creates a proper JWT session cookie that the middleware can decode.
+        await signIn("passkey", {
+            userId: user.id,
+            redirect: false,
         });
 
-        const response = NextResponse.json({ success: true });
-
-        response.cookies.set("authjs.session-token", sessionToken, {
-            httpOnly: true,
-            secure: process.env.NODE_ENV === "production",
-            sameSite: "lax",
-            expires,
-            path: "/",
-        });
-
-        return response;
+        return NextResponse.json({ success: true });
     } catch (err) {
         const message = err instanceof Error ? err.message : "Authentication failed";
         return NextResponse.json({ error: message }, { status: 401 });
