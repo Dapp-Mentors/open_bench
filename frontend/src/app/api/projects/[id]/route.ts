@@ -9,6 +9,10 @@ type Params = { params: Promise<{ id: string }> };
 // ─── GET /api/projects/[id] ───────────────────────────────────────────────────
 
 export async function GET(_: Request, { params }: Params) {
+  const session = await auth();
+  const role = session?.user?.role;
+  const isAdmin = role === "admin" || role === "super_admin";
+
   const { id } = await params;
 
   const project = await prisma.project.findUnique({
@@ -29,6 +33,13 @@ export async function GET(_: Request, { params }: Params) {
 
   if (!project) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+
+  // Non-admin users only see tasks they submitted
+  if (!isAdmin && session?.user?.id) {
+    project.tasks = project.tasks.filter(
+      (t) => t.submittedById === session.user.id
+    );
   }
 
   return NextResponse.json(project);

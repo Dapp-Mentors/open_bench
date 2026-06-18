@@ -19,28 +19,35 @@ export async function GET() {
     orderBy: { createdAt: 'desc' },
     include: {
       _count: { select: { tasks: true } },
-      tasks: { select: { status: true } },
+      tasks: { select: { status: true, submittedById: true } },
     },
   })
 
   // Shape into ProjectSummary — compute sub-counts from the task list
-  const shaped = projects.map((p) => ({
-    id: p.id,
-    name: p.name,
-    description: p.description,
-    domain: p.domain,
-    projectType: p.projectType,
-    tags: p.tags,
-    createdAt: p.createdAt,
-    _count: {
-      tasks: p._count.tasks,
-      approvedTasks: p.tasks.filter((t) => t.status === 'approved').length,
-      pendingTasks: p.tasks.filter(
-        (t) => t.status === 'pending' || t.status === 'pipeline_running',
-      ).length,
-      rejectedTasks: p.tasks.filter((t) => t.status === 'rejected').length,
-    },
-  }))
+  // Non-admin users only see counts for tasks they submitted
+  const shaped = projects.map((p) => {
+    const relevantTasks = isAdmin
+      ? p.tasks
+      : p.tasks.filter((t) => t.submittedById === session?.user?.id)
+
+    return {
+      id: p.id,
+      name: p.name,
+      description: p.description,
+      domain: p.domain,
+      projectType: p.projectType,
+      tags: p.tags,
+      createdAt: p.createdAt,
+      _count: {
+        tasks: isAdmin ? p._count.tasks : relevantTasks.length,
+        approvedTasks: relevantTasks.filter((t) => t.status === 'approved').length,
+        pendingTasks: relevantTasks.filter(
+          (t) => t.status === 'pending' || t.status === 'pipeline_running',
+        ).length,
+        rejectedTasks: relevantTasks.filter((t) => t.status === 'rejected').length,
+      },
+    }
+  })
 
   return NextResponse.json(shaped)
 }
