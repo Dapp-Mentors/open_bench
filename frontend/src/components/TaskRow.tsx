@@ -46,6 +46,7 @@ export const PIPELINE_DEF = [
     { key: "easiness", label: "Easiness Prefilter", desc: "Sonnet 4.6 must not solve it (pass@5 = 1/5)" },
     { key: "difficulty", label: "Opus 4.8 Difficulty Probe", desc: "Must land 1–3/5 passes" },
     { key: "agent_quality", label: "Agent Quality Check", desc: "Benchmark designer verdict" },
+    { key: "sia_upload", label: "Sia Network Upload", desc: "Decentralized storage via Sia" },
 ] as const;
 
 export const PROVIDER_COLOR: Record<string, string> = {
