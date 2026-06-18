@@ -4,13 +4,47 @@ import { useEffect, useState, useCallback, use } from "react";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { ArrowLeft, Plus, Upload, Pencil, Trash2, AlertTriangle, X, Tag, BookOpen, Code } from "lucide-react";
-import { TaskRow } from "@/components/TaskRow";
+import { TaskRow, PIPELINE_DEF } from "@/components/TaskRow";
 import type { ProjectTask } from "@/components/TaskRow";
 import { MarkdownEditor } from "@/components/MarkdownEditor";
 import { ProjectTypeSelector, PROJECT_TYPES } from "@/components/ProjectTypeSelector";
 import { TagInput } from "@/components/TagInput";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+
+// ─── Markdown preview styles (shared with MarkdownEditor) ────────────────────
+// Injected once into <head>. Avoids needing @tailwindcss/typography.
+const MD_PREVIEW_STYLES = `
+.md-preview h1,.md-preview h2,.md-preview h3,.md-preview h4,.md-preview h5,.md-preview h6{font-family:var(--font-mono,monospace);font-weight:600;color:var(--text);margin-top:1rem;margin-bottom:.35rem;line-height:1.3}
+.md-preview h1{font-size:1.15rem}.md-preview h2{font-size:1.05rem}.md-preview h3{font-size:.95rem}.md-preview h4,.md-preview h5,.md-preview h6{font-size:.875rem}
+.md-preview p{color:var(--subtle);margin:.4rem 0;line-height:1.65}
+.md-preview ul{list-style-type:disc;padding-left:1.4rem;margin:.4rem 0}
+.md-preview ol{list-style-type:decimal;padding-left:1.4rem;margin:.4rem 0}
+.md-preview li{color:var(--subtle);margin:.2rem 0;line-height:1.6}
+.md-preview li>ul,.md-preview li>ol{margin:.15rem 0}
+.md-preview strong{font-weight:600;color:var(--text)}
+.md-preview em{font-style:italic;color:var(--subtle)}
+.md-preview code{font-family:var(--font-mono,monospace);font-size:.8rem;color:var(--green);background:rgba(0,230,118,.08);padding:.1rem .35rem;border-radius:.25rem}
+.md-preview pre{background:var(--bg);border:1px solid var(--border);border-radius:.4rem;padding:.75rem;margin:.5rem 0;overflow-x:auto}
+.md-preview pre code{background:transparent;padding:0;color:var(--text)}
+.md-preview blockquote{border-left:2px solid var(--green);padding-left:.75rem;margin:.5rem 0;color:var(--muted)}
+.md-preview a{color:var(--green);text-decoration:none}.md-preview a:hover{text-decoration:underline}
+.md-preview hr{border:none;border-top:1px solid var(--border);margin:.75rem 0}
+.md-preview table{width:100%;border-collapse:collapse;font-size:.8rem;margin:.5rem 0}
+.md-preview th{font-family:var(--font-mono,monospace);font-weight:600;color:var(--text);text-align:left;padding:.4rem .6rem;border-bottom:1px solid var(--border)}
+.md-preview td{color:var(--subtle);padding:.35rem .6rem;border-bottom:1px solid var(--border)}
+`;
+
+function useInjectMdStyles() {
+  useEffect(() => {
+    const id = "md-preview-styles";
+    if (document.getElementById(id)) return;
+    const style = document.createElement("style");
+    style.id = id;
+    style.textContent = MD_PREVIEW_STYLES;
+    document.head.appendChild(style);
+  }, []);
+}
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -151,7 +185,7 @@ function EditModal({
       style={{ background: "rgba(0,0,0,0.7)" }}
     >
       <div
-        className="w-full max-w-2xl rounded-xl p-6 my-auto"
+        className="w-full max-w-4xl rounded-xl p-6 my-auto"
         style={{ background: "var(--surface)", border: "1px solid var(--border)" }}
       >
         <div className="flex items-center justify-between mb-6">
@@ -203,7 +237,7 @@ function EditModal({
               label="Description"
               value={description}
               onChange={setDescription}
-              minHeight={120}
+              minHeight={200}
             />
           </div>
 
@@ -238,7 +272,7 @@ function EditModal({
               label="Rules"
               value={rules}
               onChange={setRules}
-              minHeight={120}
+              minHeight={200}
             />
           </div>
 
@@ -286,6 +320,8 @@ export default function ProjectDetail({ params }: { params: Promise<{ id: string
   const { data: session } = useSession();
   const role = session?.user?.role;
   const isAdmin = role === "admin" || role === "super_admin";
+
+  useInjectMdStyles();
 
   const { id } = use(params);
   const [project, setProject] = useState<Project | null>(null);
@@ -602,19 +638,7 @@ export default function ProjectDetail({ params }: { params: Promise<{ id: string
             style={{ background: "var(--surface)", borderColor: "var(--border)" }}
           >
             {project.description ? (
-              <div
-                className="prose prose-invert max-w-none text-sm leading-relaxed
-                  prose-headings:font-mono prose-headings:text-[var(--text)] prose-headings:font-semibold
-                  prose-p:text-[var(--subtle)] prose-p:my-2
-                  prose-li:text-[var(--subtle)] prose-li:my-0.5
-                  prose-ul:my-2 prose-ol:my-2
-                  prose-strong:text-[var(--text)] prose-strong:font-semibold
-                  prose-code:text-[var(--green)] prose-code:bg-[rgba(0,230,118,0.08)] prose-code:px-1 prose-code:rounded
-                  prose-pre:bg-[var(--bg)] prose-pre:border prose-pre:border-[var(--border)]
-                  prose-a:text-[var(--green)] prose-a:no-underline hover:prose-a:underline
-                  prose-blockquote:border-l-[var(--green)] prose-blockquote:text-[var(--muted)]
-                  prose-hr:border-[var(--border)]"
-              >
+              <div className="md-preview text-sm">
                 <ReactMarkdown remarkPlugins={[remarkGfm]}>
                   {project.description}
                 </ReactMarkdown>
@@ -637,19 +661,7 @@ export default function ProjectDetail({ params }: { params: Promise<{ id: string
               <BookOpen className="w-3.5 h-3.5" style={{ color: "var(--green)" }} />
               <span className="section-label" style={{ color: "var(--green)" }}>Rules</span>
             </div>
-            <div
-              className="prose prose-invert max-w-none text-sm leading-relaxed
-                prose-headings:font-mono prose-headings:text-[var(--text)] prose-headings:font-semibold
-                prose-p:text-[var(--subtle)] prose-p:my-2
-                prose-li:text-[var(--subtle)] prose-li:my-0.5
-                prose-ul:my-2 prose-ol:my-2
-                prose-strong:text-[var(--text)] prose-strong:font-semibold
-                prose-code:text-[var(--green)] prose-code:bg-[rgba(0,230,118,0.08)] prose-code:px-1 prose-code:rounded
-                prose-pre:bg-[var(--bg)] prose-pre:border prose-pre:border-[var(--border)]
-                prose-a:text-[var(--green)] prose-a:no-underline hover:prose-a:underline
-                prose-blockquote:border-l-[var(--green)] prose-blockquote:text-[var(--muted)]
-                prose-hr:border-[var(--border)]"
-            >
+            <div className="md-preview text-sm">
               <ReactMarkdown remarkPlugins={[remarkGfm]}>
                 {project.rules}
               </ReactMarkdown>

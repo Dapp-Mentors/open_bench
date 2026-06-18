@@ -10,6 +10,141 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Eye, Edit3, Maximize2, Minimize2 } from "lucide-react";
 
+// Injected once into <head> so the markdown preview renders properly
+// without needing @tailwindcss/typography.
+const MD_PREVIEW_STYLES = `
+.md-preview h1, .md-preview h2, .md-preview h3,
+.md-preview h4, .md-preview h5, .md-preview h6 {
+  font-family: var(--font-mono, monospace);
+  font-weight: 600;
+  color: var(--text);
+  margin-top: 1rem;
+  margin-bottom: 0.35rem;
+  line-height: 1.3;
+}
+.md-preview h1 { font-size: 1.15rem; }
+.md-preview h2 { font-size: 1.05rem; }
+.md-preview h3 { font-size: 0.95rem; }
+.md-preview h4, .md-preview h5, .md-preview h6 { font-size: 0.875rem; }
+
+.md-preview p {
+  color: var(--subtle);
+  margin-top: 0.4rem;
+  margin-bottom: 0.4rem;
+  line-height: 1.65;
+}
+
+.md-preview ul {
+  list-style-type: disc;
+  padding-left: 1.4rem;
+  margin-top: 0.4rem;
+  margin-bottom: 0.4rem;
+}
+.md-preview ol {
+  list-style-type: decimal;
+  padding-left: 1.4rem;
+  margin-top: 0.4rem;
+  margin-bottom: 0.4rem;
+}
+.md-preview li {
+  color: var(--subtle);
+  margin-top: 0.2rem;
+  margin-bottom: 0.2rem;
+  line-height: 1.6;
+}
+.md-preview li > ul,
+.md-preview li > ol {
+  margin-top: 0.15rem;
+  margin-bottom: 0.15rem;
+}
+
+.md-preview strong {
+  font-weight: 600;
+  color: var(--text);
+}
+.md-preview em {
+  font-style: italic;
+  color: var(--subtle);
+}
+
+.md-preview code {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.8rem;
+  color: var(--green);
+  background: rgba(0, 230, 118, 0.08);
+  padding: 0.1rem 0.35rem;
+  border-radius: 0.25rem;
+}
+.md-preview pre {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 0.4rem;
+  padding: 0.75rem;
+  margin-top: 0.5rem;
+  margin-bottom: 0.5rem;
+  overflow-x: auto;
+}
+.md-preview pre code {
+  background: transparent;
+  padding: 0;
+  color: var(--text);
+  font-size: 0.8rem;
+}
+
+.md-preview blockquote {
+  border-left: 2px solid var(--green);
+  padding-left: 0.75rem;
+  margin: 0.5rem 0;
+  color: var(--muted);
+  font-style: normal;
+}
+
+.md-preview a {
+  color: var(--green);
+  text-decoration: none;
+}
+.md-preview a:hover {
+  text-decoration: underline;
+}
+
+.md-preview hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 0.75rem 0;
+}
+
+.md-preview table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+  margin: 0.5rem 0;
+}
+.md-preview th {
+  font-family: var(--font-mono, monospace);
+  font-weight: 600;
+  color: var(--text);
+  text-align: left;
+  padding: 0.4rem 0.6rem;
+  border-bottom: 1px solid var(--border);
+}
+.md-preview td {
+  color: var(--subtle);
+  padding: 0.35rem 0.6rem;
+  border-bottom: 1px solid var(--border);
+}
+`;
+
+function useInjectStyles(id: string, css: string) {
+  useEffect(() => {
+    if (document.getElementById(id)) return;
+    const style = document.createElement("style");
+    style.id = id;
+    style.textContent = css;
+    document.head.appendChild(style);
+    return () => { document.getElementById(id)?.remove(); };
+  }, [id, css]);
+}
+
 interface MarkdownEditorProps {
   value: string;
   onChange: (value: string) => void;
@@ -30,6 +165,8 @@ export function MarkdownEditor({
   const [mode, setMode] = useState<"edit" | "preview" | "split">("edit");
   const [expanded, setExpanded] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useInjectStyles("md-preview-styles", MD_PREVIEW_STYLES);
 
   // Tab key support: insert 2 spaces
   useEffect(() => {
@@ -170,22 +307,13 @@ export function MarkdownEditor({
           <div
             className={`overflow-y-auto ${mode === "split" ? "w-1/2" : "w-full"
               }`}
-            style={{ minHeight: expanded ? undefined : `${minHeight}px`, maxHeight: expanded ? "100%" : "400px" }}
+            style={{
+              minHeight: expanded ? undefined : `${minHeight}px`,
+              maxHeight: expanded ? "100%" : "400px",
+            }}
           >
             {value.trim() ? (
-              <div
-                className="p-3 text-sm prose prose-invert max-w-none
-                  prose-headings:font-mono prose-headings:text-[var(--text)] prose-headings:font-semibold prose-headings:mt-3 prose-headings:mb-1
-                  prose-p:text-[var(--subtle)] prose-p:my-1.5
-                  prose-li:text-[var(--subtle)] prose-li:my-0.5
-                  prose-ul:my-1.5 prose-ul:pl-4 prose-ol:my-1.5 prose-ol:pl-4
-                  prose-strong:text-[var(--text)] prose-strong:font-semibold
-                  prose-code:text-[var(--green)] prose-code:bg-[rgba(0,230,118,0.08)] prose-code:px-1 prose-code:rounded prose-code:text-xs
-                  prose-pre:bg-[var(--bg)] prose-pre:border prose-pre:border-[var(--border)] prose-pre:rounded prose-pre:p-3
-                  prose-a:text-[var(--green)] prose-a:no-underline hover:prose-a:underline
-                  prose-blockquote:border-l-2 prose-blockquote:border-[var(--green)] prose-blockquote:pl-3 prose-blockquote:text-[var(--muted)] prose-blockquote:not-italic
-                  prose-hr:border-[var(--border)]"
-              >
+              <div className="md-preview p-3 text-sm">
                 <ReactMarkdown remarkPlugins={[remarkGfm]}>
                   {value}
                 </ReactMarkdown>
