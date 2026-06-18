@@ -7,8 +7,12 @@ export const PIPELINE_STAGES = [
   { key: "similarity",    label: "Similarity & Diversity",      desc: "Cosine similarity vs approved tasks" },
   { key: "ci",            label: "CI Checks",                   desc: "Container smoke test — exits 0?" },
   { key: "quality",       label: "Quality Check",               desc: "5-criteria LLM score ≥ 0.6" },
+  { key: "preflight",     label: "Preflight Validation",        desc: "pytest --collect-only ≥ 6 tests" },
+  { key: "oracle_nop",    label: "Oracle / NOP Validation",     desc: "NOP=0 / Oracle=1 container runs" },
   { key: "easiness",      label: "Easiness Prefilter",          desc: "Llama3 must not solve it perfectly" },
+  { key: "difficulty",    label: "Difficulty Probe",            desc: "Frontier model 1-3/5 passes" },
   { key: "agent_quality", label: "Agent Quality Check",         desc: "Benchmark designer verdict" },
+  { key: "sia_upload",    label: "Sia Network Upload",          desc: "Upload to decentralized storage" },
 ] as const;
 
 type StageKey = typeof PIPELINE_STAGES[number]["key"];

@@ -5,13 +5,12 @@
  *
  * Central state management for the admin task review page.
  *
- * Key changes from the broken version:
+ * Key design:
  *
- * 1. OPTIMISTIC UPDATES — approveTask immediately sets siaStatus="queued" in
- *    local state so the badge appears before any network round-trip completes.
- *    rejectTask and revertTask already did this; they're left as-is.
+ * 1. OPTIMISTIC UPDATES — approveTask immediately sets status="approved" so
+ *    the UI reacts before the network round-trip completes.
  *
- * 2. FORCE REFRESH — fetchData now accepts a `force` flag that bypasses the
+ * 2. FORCE REFRESH — fetchData accepts a `force` flag that bypasses the
  *    isSameTasks shallow-equality guard. Called with force=true after any
  *    user-initiated action so a race between the HTTP response and the DB
  *    write can't leave the UI stuck showing stale data.
@@ -21,12 +20,13 @@
  *    SSE never connects (Docker networking, CORS, etc.) the UI still heals
  *    itself within one poll cycle. The interval is cleared on unmount.
  *
- * 4. SSE STILL WORKS — the SSE path is kept and fires fetchData(true, true)
- *    (background + forced) on each event, so when SSE IS working updates are
- *    near-instant rather than waiting up to 8 s for the poll.
+ * 4. SSE — the hook fires fetchData(true, true) (background + forced) on
+ *    each Sia event, so when SSE is working updates are near-instant.
  *
  * 5. isSameTasks is only skipped when force=true, preserving the optimisation
  *    for the high-frequency poll path so React doesn't re-render needlessly.
+ *
+ * Note: Sia upload now runs as stage 9 of the pipeline (not on approval).
  */
 
 import React, {
@@ -223,10 +223,6 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
             return {
               ...t,
               siaStatus: typedSiaStatus,
-              // When Sia signals "ready" the task.status also flips to
-              // "approved" on the backend — mirror that locally so the badge
-              // and action buttons update before the refetch completes.
-              status: typedSiaStatus === "ready" ? "approved" : t.status,
               ...(extra.sia_hash ? { siaHash: extra.sia_hash as string } : {}),
             };
           })
@@ -247,22 +243,18 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
   /**
    * approveTask
    *
-   * The backend queues the Sia upload and returns immediately with
-   * siaStatus="queued". The task stays in "pipeline_passed" until Sia
-   * finishes, at which point it flips to "approved".
-   *
-   * We optimistically patch local state to siaStatus="queued" right away
-   * so the admin sees the amber "Sia queued" badge without waiting for
-   * the refetch or an SSE event to arrive.
+   * Approves a pipeline-passed task. Sia upload has already happened as
+   * part of the pipeline (stage 9), so this simply flips status to "approved".
+   * No optimistic Sia state update needed.
    */
   const approveTask = useCallback(
     async (task: Task) => {
       setActing(task.id);
 
-      // Optimistic update — show the Sia badge immediately
+      // Optimistic update — show approved immediately
       setTasks((prev) =>
         prev.map((t) =>
-          t.id === task.id ? { ...t, siaStatus: "queued" as SiaStatus } : t
+          t.id === task.id ? { ...t, status: "approved" as const } : t
         )
       );
 
@@ -273,14 +265,12 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
         );
 
         if (res.ok) {
-          // Force a refresh — the backend has now committed siaStatus="queued"
-          // to the DB and we want the full task object (not just our local patch).
           await fetchData(true, true);
         } else {
-          // Roll back the optimistic update — something went wrong
+          // Roll back the optimistic update
           setTasks((prev) =>
             prev.map((t) =>
-              t.id === task.id ? { ...t, siaStatus: task.siaStatus } : t
+              t.id === task.id ? { ...t, status: task.status } : t
             )
           );
         }
@@ -288,7 +278,7 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
         // Network error — roll back
         setTasks((prev) =>
           prev.map((t) =>
-            t.id === task.id ? { ...t, siaStatus: task.siaStatus } : t
+            t.id === task.id ? { ...t, status: task.status } : t
           )
         );
       } finally {
