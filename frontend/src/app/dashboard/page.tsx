@@ -48,7 +48,7 @@ export default function Dashboard() {
             Dashboard
           </h1>
           <p className="font-mono text-xs mt-1" style={{ color: "var(--subtle)" }}>
-            {isAdmin ? "All projects on the platform" : "Projects you've been added to"}
+            Projects you've been added to
           </p>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">

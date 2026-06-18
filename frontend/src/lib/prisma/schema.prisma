@@ -36,6 +36,8 @@ model User {
   accounts      Account[]
   sessions      Session[]
   passkeys      Passkey[]
+  tasks         Task[]            @relation("TaskSubmitter")
+  memberships   ProjectMember[]
 }
 
 model Account {
@@ -106,6 +108,25 @@ model Project {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   tasks       Task[]
+  members     ProjectMember[]
+}
+
+// ─── ProjectMember ────────────────────────────────────────────────────────────
+// Tracks which users are members of which projects (many-to-many).
+
+model ProjectMember {
+  id        String   @id @default(cuid())
+  userId    String
+  projectId String
+  role      String   @default("member") // member | manager
+  createdAt DateTime @default(now())
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, projectId])
+  @@index([userId])
+  @@index([projectId])
 }
 
 // ─── Task ─────────────────────────────────────────────────────────────────────
@@ -114,6 +135,7 @@ model Task {
   id               String         @id @default(cuid())
   projectId        String
   project          Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  submittedById    String?                          // who submitted this task
 
   title            String
   description      String         @default("")
@@ -149,6 +171,9 @@ model Task {
   pipelineLogs     PipelineLog[]
   siaLogs          SiaLog[]
   runs             BenchmarkRun[]
+  submitter        User?          @relation("TaskSubmitter", fields: [submittedById], references: [id], onDelete: SetNull)
+
+  @@index([submittedById])
 }
 
 // ─── PipelineLog ──────────────────────────────────────────────────────────────

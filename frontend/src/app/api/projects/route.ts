@@ -1,7 +1,8 @@
-// app/api/projects/route.ts
+// src/app/api/projects/route.ts
 
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { auth } from '@/lib/auth'
 
 interface ProjectRow {
   id: string
@@ -14,7 +15,14 @@ interface ProjectRow {
 }
 
 export async function GET() {
+  const session = await auth()
+
   const projects: ProjectRow[] = await prisma.project.findMany({
+    where: {
+      members: {
+        some: { userId: session?.user?.id },
+      },
+    },
     orderBy: { createdAt: 'desc' },
     include: {
       _count: { select: { tasks: true } },

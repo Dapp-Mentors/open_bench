@@ -29,7 +29,12 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       <body className="noise scanlines">
         <SessionProviderWrapper session={session}>
           <NavBar />
-          <main>{children}</main>
+          {/*
+            On desktop (lg+) the sidebar is a fixed 64px rail.
+            Offset main content so it isn't hidden under the rail.
+            On mobile (<lg) the sidebar is an overlay drawer — no offset needed.
+          */}
+          <main className="lg:pl-16">{children}</main>
         </SessionProviderWrapper>
       </body>
     </html>

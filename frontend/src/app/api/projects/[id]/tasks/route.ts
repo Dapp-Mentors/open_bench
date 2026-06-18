@@ -2,6 +2,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { auth } from '@/lib/auth'
 import { inngest } from '@/lib/inngest/client'
 import { writeFile, mkdir } from 'fs/promises'
 import { join } from 'path'
@@ -66,7 +67,11 @@ export async function POST(
 
   const title = file.name.replace(/\.zip$/, '')
 
-  // 4. Create task record — status starts as "pending"
+  // 4. Get the authenticated user who is submitting the task
+  const session = await auth()
+  const submittedById = session?.user?.id ?? null
+
+  // 5. Create task record — status starts as "pending"
   const task = await prisma.task.create({
     data: {
       projectId: id,
@@ -78,10 +83,11 @@ export async function POST(
       status: 'pending',
       scoringType: 'passfail',
       timeoutMs: 120_000,
+      submittedById,
     },
   })
 
-  // 5. Fire the Inngest pipeline event.
+  // 6. Fire the Inngest pipeline event.
   //    If Inngest isn't reachable (e.g. running next dev outside Docker) we
   //    log the failure but still return 201 — the task record was created and
   //    can be manually re-queued or picked up once Inngest is running.
