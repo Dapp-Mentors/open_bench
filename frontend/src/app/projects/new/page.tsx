@@ -33,7 +33,7 @@ export default function NewProject() {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [domain, setDomain] = useState("");
-  const [projectType, setProjectType] = useState("coding_benchmark");
+  const [projectType, setProjectType] = useState("coding_software");
   const [rules, setRules] = useState("");
   const [tags, setTags] = useState<string[]>([]);
   const [state, setState] = useState<CreateState>("idle");

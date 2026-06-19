@@ -105,7 +105,7 @@ model Project {
   name        String
   description String   @db.Text
   domain      String
-  projectType String   @default("coding_benchmark")
+  projectType String   @default("coding_software")
   rules       String   @default("")   @db.Text
   tags        String[] @default([])
   createdAt   DateTime @default(now())

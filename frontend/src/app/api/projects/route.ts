@@ -73,7 +73,7 @@ export async function POST(req: NextRequest) {
       name: name.trim(),
       description: description.trim(),
       domain: domain.trim(),
-      projectType: projectType?.trim() || 'coding_benchmark',
+      projectType: projectType?.trim() || 'coding_software',
       rules: rules?.trim() || '',
       tags: Array.isArray(tags) ? tags : [],
       members: {
