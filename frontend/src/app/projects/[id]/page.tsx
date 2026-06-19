@@ -7,7 +7,7 @@ import { ArrowLeft, Plus, Upload, Pencil, Trash2, AlertTriangle, X, Tag, BookOpe
 import { TaskRow, PIPELINE_DEF } from "@/components/TaskRow";
 import type { ProjectTask } from "@/components/TaskRow";
 import { MarkdownEditor } from "@/components/MarkdownEditor";
-import { ProjectTypeSelector, PROJECT_TYPES } from "@/components/ProjectTypeSelector";
+import { ProjectTypeSelector } from "@/components/ProjectTypeSelector";
 import { TagInput } from "@/components/TagInput";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -409,9 +409,23 @@ export default function ProjectDetail({ params }: { params: Promise<{ id: string
   ).length ?? 0;
   const rejectedCount = project?.tasks.filter((t) => t.status === "rejected").length ?? 0;
 
-  // Find the project type label
-  const projectTypeInfo = PROJECT_TYPES.find((pt) => pt.id === project?.projectType);
-  const projectTypeLabel = projectTypeInfo?.label ?? project?.projectType ?? "Unknown";
+  // Resolve the project type label from the ID
+  const projectTypeLabel = (() => {
+    const labelMap: Record<string, string> = {
+      general_knowledge: "General Knowledge",
+      mathematical_reasoning: "Mathematical Reasoning",
+      coding_software: "Coding & Software",
+      multimodal: "Multimodal",
+      agentic_tool_use: "Agentic & Tool Use",
+      long_context: "Long-Context & Retrieval",
+      safety_alignment: "Safety & Alignment",
+      instruction_following: "Instruction Following",
+      domain_specific: "Domain-Specific",
+      creative_open_ended: "Creative & Open-Ended",
+      efficiency_deployment: "Efficiency & Deployment",
+    };
+    return project?.projectType ? (labelMap[project.projectType] ?? project.projectType) : "Unknown";
+  })();
 
   if (loading) {
     return (

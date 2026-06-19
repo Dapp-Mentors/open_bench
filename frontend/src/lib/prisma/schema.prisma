@@ -248,6 +248,19 @@ model RunLog {
   @@index([runId])
 }
 
+// ─── BenchmarkType ────────────────────────────────────────────────────────────
+// Admin-managed list of active benchmark categories. Controls which types
+// appear in the ProjectTypeSelector on project creation.
+
+model BenchmarkType {
+  id        String   @id
+  label     String
+  active    Boolean  @default(true)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
 // ─── ModelConfig ──────────────────────────────────────────────────────────────
 
 model ModelConfig {

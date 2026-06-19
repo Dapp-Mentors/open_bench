@@ -36,6 +36,7 @@ export async function GET() {
       description: p.description,
       domain: p.domain,
       projectType: p.projectType,
+      rules: p.rules,
       tags: p.tags,
       createdAt: p.createdAt,
       _count: {

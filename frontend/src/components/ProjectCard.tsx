@@ -7,7 +7,6 @@
 
 import Link from "next/link";
 import { FolderOpen, ChevronRight, Pencil, Trash2, Tag, Code } from "lucide-react";
-import { PROJECT_TYPES } from "./ProjectTypeSelector";
 
 export interface ProjectSummary {
     id: string;
@@ -15,6 +14,7 @@ export interface ProjectSummary {
     description: string;
     domain: string;
     projectType?: string;
+    rules?: string;
     tags?: string[];
     createdAt: string;
     _count: {
