@@ -31,10 +31,17 @@ export async function POST(
 ) {
   const { id } = await params
 
-  // 1. Verify project exists
+  // 1. Verify project exists and is not paused
   const project = await prisma.project.findUnique({ where: { id } })
   if (!project) {
     return NextResponse.json({ error: 'Project not found' }, { status: 404 })
+  }
+
+  if (project.paused) {
+    return NextResponse.json(
+      { error: 'This project is paused. Task submission is disabled until the project is unpaused.' },
+      { status: 409 },
+    )
   }
 
   // 2. Parse form data

@@ -38,6 +38,7 @@ export async function GET() {
       projectType: p.projectType,
       rules: p.rules,
       tags: p.tags,
+      paused: p.paused,
       createdAt: p.createdAt,
       _count: {
         tasks: isAdmin ? p._count.tasks : relevantTasks.length,

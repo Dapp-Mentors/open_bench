@@ -108,6 +108,7 @@ model Project {
   projectType String   @default("coding_software")
   rules       String   @default("")   @db.Text
   tags        String[] @default([])
+  paused      Boolean  @default(false)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   tasks       Task[]
