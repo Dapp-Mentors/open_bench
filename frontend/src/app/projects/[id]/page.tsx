@@ -3,11 +3,11 @@
 import { useEffect, useState, useCallback, use } from "react";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
-import { ArrowLeft, Plus, Upload, Pencil, Trash2, AlertTriangle, X, Tag, BookOpen, Code } from "lucide-react";
+import { ArrowLeft, Plus, Upload, Pencil, Trash2, AlertTriangle, X, Tag, BookOpen, Code, PauseCircle, Play, MoreVertical } from "lucide-react";
 import { TaskRow, PIPELINE_DEF } from "@/components/TaskRow";
 import type { ProjectTask } from "@/components/TaskRow";
 import { MarkdownEditor } from "@/components/MarkdownEditor";
-import { ProjectTypeSelector, PROJECT_TYPES } from "@/components/ProjectTypeSelector";
+import { ProjectTypeSelector } from "@/components/ProjectTypeSelector";
 import { TagInput } from "@/components/TagInput";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -56,6 +56,7 @@ interface Project {
   projectType: string;
   rules: string;
   tags: string[];
+  paused: boolean;
   createdAt: string;
   tasks: ProjectTask[];
 }
@@ -330,6 +331,8 @@ export default function ProjectDetail({ params }: { params: Promise<{ id: string
   const [showDelete, setShowDelete] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [togglingPause, setTogglingPause] = useState(false);
+  const [showAdminMenu, setShowAdminMenu] = useState(false);
   const [activeTab, setActiveTab] = useState<"tasks" | "description" | "rules">("tasks");
 
   const fetchProject = useCallback(async () => {
@@ -373,6 +376,29 @@ export default function ProjectDetail({ params }: { params: Promise<{ id: string
     }
   }
 
+  async function handleTogglePause() {
+    if (!project || togglingPause) return;
+    setTogglingPause(true);
+    try {
+      const res = await fetch(`/api/projects/${project.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ paused: !project.paused }),
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setProject((prev) => prev ? { ...prev, paused: updated.paused } : prev);
+      } else {
+        const d = await res.json().catch(() => ({}));
+        alert(d.error ?? "Toggle failed.");
+      }
+    } catch {
+      alert("Network error. Try again.");
+    } finally {
+      setTogglingPause(false);
+    }
+  }
+
   async function handleSave(name: string, description: string, domain: string, projectType: string, rules: string, tags: string[]) {
     if (!project) return;
     setSaving(true);
@@ -409,9 +435,23 @@ export default function ProjectDetail({ params }: { params: Promise<{ id: string
   ).length ?? 0;
   const rejectedCount = project?.tasks.filter((t) => t.status === "rejected").length ?? 0;
 
-  // Find the project type label
-  const projectTypeInfo = PROJECT_TYPES.find((pt) => pt.id === project?.projectType);
-  const projectTypeLabel = projectTypeInfo?.label ?? project?.projectType ?? "Unknown";
+  // Resolve the project type label from the ID
+  const projectTypeLabel = (() => {
+    const labelMap: Record<string, string> = {
+      general_knowledge: "General Knowledge",
+      mathematical_reasoning: "Mathematical Reasoning",
+      coding_software: "Coding & Software",
+      multimodal: "Multimodal",
+      agentic_tool_use: "Agentic & Tool Use",
+      long_context: "Long-Context & Retrieval",
+      safety_alignment: "Safety & Alignment",
+      instruction_following: "Instruction Following",
+      domain_specific: "Domain-Specific",
+      creative_open_ended: "Creative & Open-Ended",
+      efficiency_deployment: "Efficiency & Deployment",
+    };
+    return project?.projectType ? (labelMap[project.projectType] ?? project.projectType) : "Unknown";
+  })();
 
   if (loading) {
     return (
@@ -470,41 +510,127 @@ export default function ProjectDetail({ params }: { params: Promise<{ id: string
               {project.domain} · {projectTypeLabel}
             </p>
           </div>
-          <div className="flex gap-2 flex-shrink-0 w-full sm:w-auto">
-            {isAdmin && (
-              <>
-                <button
-                  onClick={() => setShowEdit(true)}
-                  title="Edit project"
-                  className="bench-btn-ghost inline-flex items-center gap-1.5 px-3 py-2 rounded text-xs w-full sm:w-auto justify-center"
-                >
-                  <Pencil className="w-3.5 h-3.5" />
-                  Edit
-                </button>
-                <button
-                  onClick={() => setShowDelete(true)}
-                  title="Delete project"
-                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded text-xs w-full sm:w-auto justify-center"
-                  style={{
-                    background: "rgba(255,68,68,0.1)",
-                    border: "1px solid rgba(255,68,68,0.2)",
-                    color: "var(--red)",
-                  }}
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  Delete
-                </button>
-              </>
+          <div className="flex gap-2 flex-shrink-0 w-full sm:w-auto items-center">
+            {!project.paused ? (
+              <Link
+                href={`/projects/${project.id}/submit`}
+                className="bench-btn-primary inline-flex items-center gap-1.5 px-4 py-2 rounded text-xs w-full sm:w-auto justify-center"
+              >
+                <Upload className="w-3.5 h-3.5" />
+                Add Task
+              </Link>
+            ) : (
+              <span
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded text-xs w-full sm:w-auto justify-center opacity-50 cursor-not-allowed"
+                style={{
+                  background: "var(--muted)",
+                  border: "1px solid var(--border)",
+                  color: "var(--subtle)",
+                }}
+                title="Task submission is disabled while project is paused"
+              >
+                <PauseCircle className="w-3.5 h-3.5" />
+                Add Task
+              </span>
             )}
-            <Link
-              href={`/projects/${project.id}/submit`}
-              className="bench-btn-primary inline-flex items-center gap-1.5 px-4 py-2 rounded text-xs w-full sm:w-auto justify-center"
-            >
-              <Upload className="w-3.5 h-3.5" />
-              Add Task
-            </Link>
+
+            {isAdmin && (
+              <div className="relative">
+                <button
+                  onClick={() => setShowAdminMenu(!showAdminMenu)}
+                  title="Admin actions"
+                  className="bench-btn-ghost inline-flex items-center gap-1 px-3 py-2 rounded text-xs"
+                >
+                  <MoreVertical className="w-3.5 h-3.5" />
+                </button>
+
+                {showAdminMenu && (
+                  <>
+                    {/* Backdrop */}
+                    <div
+                      className="fixed inset-0 z-40"
+                      onClick={() => setShowAdminMenu(false)}
+                    />
+
+                    {/* Dropdown */}
+                    <div
+                      className="absolute right-0 top-full mt-1 z-50 w-40 rounded-lg border py-1 shadow-lg"
+                      style={{
+                        background: "var(--surface)",
+                        borderColor: "var(--border)",
+                      }}
+                      onClick={() => setShowAdminMenu(false)}
+                    >
+                      {/* Pause/Unpause */}
+                      <button
+                        onClick={handleTogglePause}
+                        disabled={togglingPause}
+                        className="flex items-center gap-2 w-full px-3 py-2 text-xs font-mono transition-colors disabled:opacity-40"
+                        style={{
+                          color: project.paused ? "var(--green)" : "var(--amber)",
+                        }}
+                        onMouseEnter={(e) => (e.currentTarget.style.background = "var(--muted)")}
+                        onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                      >
+                        {togglingPause ? (
+                          <span className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                        ) : project.paused ? (
+                          <Play className="w-3.5 h-3.5" />
+                        ) : (
+                          <PauseCircle className="w-3.5 h-3.5" />
+                        )}
+                        {project.paused ? "Unpause" : "Pause"}
+                      </button>
+
+                      {/* Edit */}
+                      <button
+                        onClick={() => setShowEdit(true)}
+                        className="flex items-center gap-2 w-full px-3 py-2 text-xs font-mono transition-colors"
+                        style={{ color: "var(--subtle)" }}
+                        onMouseEnter={(e) => (e.currentTarget.style.background = "var(--muted)")}
+                        onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                        Edit
+                      </button>
+
+                      {/* Separator */}
+                      <div style={{ borderTop: "1px solid var(--border)", margin: "0.25rem 0" }} />
+
+                      {/* Delete */}
+                      <button
+                        onClick={() => setShowDelete(true)}
+                        className="flex items-center gap-2 w-full px-3 py-2 text-xs font-mono transition-colors"
+                        style={{ color: "var(--red)" }}
+                        onMouseEnter={(e) => (e.currentTarget.style.background = "var(--muted)")}
+                        onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        Delete
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
           </div>
         </div>
+
+        {/* Paused banner */}
+        {project.paused && (
+          <div
+            className="flex items-center gap-2 px-4 py-3 rounded-lg border mb-6"
+            style={{
+              background: "rgba(251,191,36,0.06)",
+              borderColor: "rgba(251,191,36,0.2)",
+            }}
+          >
+            <PauseCircle className="w-4 h-4 flex-shrink-0" style={{ color: "var(--amber)" }} />
+            <p className="font-mono text-xs" style={{ color: "var(--amber)" }}>
+              This project is paused. Task submission is disabled until an admin unpauses it.
+            </p>
+          </div>
+        )}
 
         {/* Badges row: domain, project type, tags */}
         <div className="flex flex-wrap items-center gap-2 mb-6">

@@ -16,6 +16,9 @@ class Project(Base):
     name        = Column(String, nullable=False)
     description = Column(String, nullable=False)
     domain      = Column(String, nullable=False)
+    projectType = Column(String, default="coding_software")
+    rules       = Column(String, default="")
+    tags        = Column(String, nullable=True)  # JSON array stored as string
     createdAt   = Column(DateTime(timezone=True))
     updatedAt   = Column(DateTime(timezone=True))
 

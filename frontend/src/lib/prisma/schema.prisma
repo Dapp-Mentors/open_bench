@@ -105,9 +105,10 @@ model Project {
   name        String
   description String   @db.Text
   domain      String
-  projectType String   @default("coding_benchmark")
+  projectType String   @default("coding_software")
   rules       String   @default("")   @db.Text
   tags        String[] @default([])
+  paused      Boolean  @default(false)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   tasks       Task[]
@@ -246,6 +247,19 @@ model RunLog {
   ts     DateTime     @default(now())
 
   @@index([runId])
+}
+
+// ─── BenchmarkType ────────────────────────────────────────────────────────────
+// Admin-managed list of active benchmark categories. Controls which types
+// appear in the ProjectTypeSelector on project creation.
+
+model BenchmarkType {
+  id        String   @id
+  label     String
+  active    Boolean  @default(true)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 // ─── ModelConfig ──────────────────────────────────────────────────────────────

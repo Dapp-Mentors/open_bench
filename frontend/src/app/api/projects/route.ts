@@ -36,7 +36,9 @@ export async function GET() {
       description: p.description,
       domain: p.domain,
       projectType: p.projectType,
+      rules: p.rules,
       tags: p.tags,
+      paused: p.paused,
       createdAt: p.createdAt,
       _count: {
         tasks: isAdmin ? p._count.tasks : relevantTasks.length,
@@ -73,7 +75,7 @@ export async function POST(req: NextRequest) {
       name: name.trim(),
       description: description.trim(),
       domain: domain.trim(),
-      projectType: projectType?.trim() || 'coding_benchmark',
+      projectType: projectType?.trim() || 'coding_software',
       rules: rules?.trim() || '',
       tags: Array.isArray(tags) ? tags : [],
       members: {

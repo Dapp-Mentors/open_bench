@@ -7,6 +7,9 @@ import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { Plus, RefreshCw, FolderOpen, AlertTriangle, X, Tag, BookOpen, Code } from "lucide-react";
 import { ProjectCard, type ProjectSummary } from "@/components/ProjectCard";
+import { ProjectTypeSelector } from "@/components/ProjectTypeSelector";
+import { MarkdownEditor } from "@/components/MarkdownEditor";
+import { TagInput } from "@/components/TagInput";
 
 const DOMAINS = [
     "Software Engineering",
@@ -105,6 +108,7 @@ function DeleteModal({
 }
 
 // ─── Edit modal ───────────────────────────────────────────────────────────────
+// Full-featured modal matching the project creation form.
 
 function EditModal({
     project,
@@ -113,13 +117,16 @@ function EditModal({
     saving,
 }: {
     project: ProjectSummary;
-    onSave: (name: string, description: string, domain: string) => void;
+    onSave: (name: string, description: string, domain: string, projectType: string, rules: string, tags: string[]) => void;
     onCancel: () => void;
     saving: boolean;
 }) {
     const [name, setName] = useState(project.name);
     const [description, setDescription] = useState(project.description);
     const [domain, setDomain] = useState(project.domain);
+    const [projectType, setProjectType] = useState(project.projectType ?? "coding_software");
+    const [rules, setRules] = useState(project.rules ?? "");
+    const [tags, setTags] = useState<string[]>(project.tags ?? []);
 
     const canSave =
         name.trim().length > 0 &&
@@ -129,11 +136,11 @@ function EditModal({
 
     return (
         <div
-            className="fixed inset-0 z-50 flex items-center justify-center px-4"
+            className="fixed inset-0 z-50 flex items-start justify-center px-4 py-10 overflow-y-auto"
             style={{ background: "rgba(0,0,0,0.7)" }}
         >
             <div
-                className="w-full max-w-lg rounded-xl p-6"
+                className="w-full max-w-4xl rounded-xl p-6 my-auto"
                 style={{ background: "var(--surface)", border: "1px solid var(--border)" }}
             >
                 <div className="flex items-center justify-between mb-6">
@@ -157,7 +164,7 @@ function EditModal({
                     </button>
                 </div>
 
-                <div className="space-y-4">
+                <div className="space-y-5">
                     <div>
                         <label className="block section-label mb-2">Project Name</label>
                         <input
@@ -175,26 +182,20 @@ function EditModal({
                             onBlur={(e) => (e.target.style.borderColor = "var(--border)")}
                         />
                     </div>
+
                     <div>
-                        <label className="block section-label mb-2">Description</label>
-                        <textarea
-                            value={description}
-                            onChange={(e) => setDescription(e.target.value)}
-                            maxLength={300}
-                            rows={3}
-                            className="w-full px-3 py-2.5 rounded text-sm font-mono outline-none resize-none"
-                            style={{
-                                background: "var(--bg)",
-                                border: "1px solid var(--border)",
-                                color: "var(--text)",
-                            }}
-                            onFocus={(e) => (e.target.style.borderColor = "rgba(0,230,118,0.4)")}
-                            onBlur={(e) => (e.target.style.borderColor = "var(--border)")}
-                        />
-                        <p className="mt-1 text-xs font-mono" style={{ color: "var(--muted)" }}>
-                            {description.length}/300
-                        </p>
+                        <ProjectTypeSelector value={projectType} onChange={setProjectType} />
                     </div>
+
+                    <div>
+                        <MarkdownEditor
+                            label="Description"
+                            value={description}
+                            onChange={setDescription}
+                            minHeight={200}
+                        />
+                    </div>
+
                     <div>
                         <label className="block section-label mb-2">Domain</label>
                         <div className="flex flex-wrap gap-2">
@@ -220,6 +221,24 @@ function EditModal({
                             })}
                         </div>
                     </div>
+
+                    <div>
+                        <MarkdownEditor
+                            label="Rules"
+                            value={rules}
+                            onChange={setRules}
+                            minHeight={200}
+                        />
+                    </div>
+
+                    <div>
+                        <TagInput
+                            label="Tags"
+                            tags={tags}
+                            onChange={setTags}
+                            placeholder="Add tags…"
+                        />
+                    </div>
                 </div>
 
                 <div className="flex items-center justify-end gap-2 mt-6">
@@ -231,7 +250,7 @@ function EditModal({
                         Cancel
                     </button>
                     <button
-                        onClick={() => onSave(name.trim(), description.trim(), domain)}
+                        onClick={() => onSave(name.trim(), description.trim(), domain, projectType, rules.trim(), tags)}
                         disabled={!canSave}
                         className="bench-btn-primary flex items-center gap-2 px-4 py-2 rounded text-xs font-mono disabled:opacity-40 disabled:cursor-not-allowed"
                     >
@@ -311,19 +330,24 @@ export default function ProjectsPage() {
         }
     }
 
-    async function handleSave(name: string, description: string, domain: string) {
+    async function handleSave(name: string, description: string, domain: string, projectType?: string, rules?: string, tags?: string[]) {
         if (!editTarget) return;
         setSaving(true);
         try {
+            const body: Record<string, any> = { name, description, domain };
+            if (projectType) body.projectType = projectType;
+            if (rules !== undefined) body.rules = rules;
+            if (tags) body.tags = tags;
+
             const res = await fetch(`/api/projects/${editTarget.id}`, {
                 method: "PATCH",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ name, description, domain }),
+                body: JSON.stringify(body),
             });
             if (res.ok) {
                 setProjects((prev) =>
                     prev.map((p) =>
-                        p.id === editTarget.id ? { ...p, name, description, domain } : p
+                        p.id === editTarget.id ? { ...p, name, description, domain, projectType, rules, tags } : p
                     )
                 );
                 setEditTarget(null);
@@ -353,6 +377,7 @@ export default function ProjectsPage() {
             )}
             {editTarget && (
                 <EditModal
+                    key={editTarget.id}
                     project={editTarget}
                     onSave={handleSave}
                     onCancel={() => !saving && setEditTarget(null)}

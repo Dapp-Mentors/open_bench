@@ -6,8 +6,7 @@
 // Pass isAdmin=true to show the edit + delete action buttons.
 
 import Link from "next/link";
-import { FolderOpen, ChevronRight, Pencil, Trash2, Tag, Code } from "lucide-react";
-import { PROJECT_TYPES } from "./ProjectTypeSelector";
+import { FolderOpen, ChevronRight, Pencil, Trash2, Tag, Code, PauseCircle } from "lucide-react";
 
 export interface ProjectSummary {
     id: string;
@@ -15,7 +14,9 @@ export interface ProjectSummary {
     description: string;
     domain: string;
     projectType?: string;
+    rules?: string;
     tags?: string[];
+    paused: boolean;
     createdAt: string;
     _count: {
         tasks: number;
@@ -72,6 +73,21 @@ export function ProjectCard({
 
             {/* Right: domain + task counts + (admin) actions + chevron */}
             <div className="flex items-center gap-1 sm:gap-3 flex-shrink-0 ml-2 sm:ml-4">
+                {/* Paused badge */}
+                {p.paused && (
+                    <span
+                        className="inline-flex items-center gap-1 font-mono text-xs px-2 py-0.5 rounded"
+                        style={{
+                            background: "rgba(251,191,36,0.1)",
+                            color: "var(--amber)",
+                            border: "1px solid rgba(251,191,36,0.25)",
+                        }}
+                    >
+                        <PauseCircle className="w-3 h-3" />
+                        Paused
+                    </span>
+                )}
+
                 {/* Domain badge — hidden on small screens */}
                 <span
                     className="font-mono text-xs px-2 py-0.5 rounded hidden sm:inline"

@@ -58,28 +58,36 @@ export async function PATCH(req: Request, { params }: Params) {
 
   const { id } = await params;
 
+  // Verify project exists first
+  const existing = await prisma.project.findUnique({ where: { id } });
+  if (!existing) {
+    return NextResponse.json({ error: "Project not found" }, { status: 404 });
+  }
+
   const body = await req.json().catch(() => null);
   if (!body) {
     return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
   }
 
-  const { name, description, domain, projectType, rules, tags } = body as {
+  const { name, description, domain, projectType, rules, tags, paused } = body as {
     name?: string;
     description?: string;
     domain?: string;
     projectType?: string;
     rules?: string;
     tags?: string[];
+    paused?: boolean;
   };
 
   // Only update fields that were actually sent
-  const data: Record<string, string | string[]> = {};
+  const data: Record<string, string | string[] | boolean> = {};
   if (typeof name === "string" && name.trim()) data.name = name.trim();
   if (typeof description === "string") data.description = description.trim();
   if (typeof domain === "string" && domain.trim()) data.domain = domain.trim();
   if (typeof projectType === "string" && projectType.trim()) data.projectType = projectType.trim();
   if (typeof rules === "string") data.rules = rules.trim();
   if (Array.isArray(tags)) data.tags = tags;
+  if (typeof paused === "boolean") data.paused = paused;
 
   if (Object.keys(data).length === 0) {
     return NextResponse.json({ error: "Nothing to update" }, { status: 400 });
@@ -91,8 +99,9 @@ export async function PATCH(req: Request, { params }: Params) {
       data,
     });
     return NextResponse.json(updated);
-  } catch {
-    return NextResponse.json({ error: "Project not found" }, { status: 404 });
+  } catch (err) {
+    console.error("[PATCH /api/projects/[id]] Update failed:", err);
+    return NextResponse.json({ error: "Failed to update project. Check server logs for details." }, { status: 500 });
   }
 }
 

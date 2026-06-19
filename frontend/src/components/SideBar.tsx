@@ -15,6 +15,7 @@ import {
     Wifi,
     WifiOff,
     X,
+    BarChart3,
 } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -308,6 +309,16 @@ export function SideBar({ isOpen, onClose, sia }: SideBarProps) {
                                 label="Models"
                                 icon={Settings2}
                                 isActive={isActive("/admin/models")}
+                                accent="amber"
+                                onClick={() => {
+                                    if (window.innerWidth < 1024) onClose();
+                                }}
+                            />
+                            <SideItem
+                                href="/admin/benchmark-types"
+                                label="Benchmark Types"
+                                icon={BarChart3}
+                                isActive={isActive("/admin/benchmark-types")}
                                 accent="amber"
                                 onClick={() => {
                                     if (window.innerWidth < 1024) onClose();
