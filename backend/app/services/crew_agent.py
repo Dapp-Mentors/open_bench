@@ -2,48 +2,35 @@
 #
 # CrewAI-powered agents for the easiness prefilter and difficulty probe pipeline.
 #
-# Instead of a single monolithic LLM loop (the old _run_agent_once approach),
-# we now use a CrewAI crew of specialised agents that collaborate to solve
-# the task. Each agent has a defined role, goal, and backstory, mirroring
-# the natural workflow of a human engineer:
+# Agents (sequential, NO tools — see note below):
+#   1. Task Analyst       — analyses task files (injected into prompt at creation)
+#   2. Solution Architect — plans the fix based on analyst output
+#   3. Code Implementer   — executes the fix step by step
+#   4. Test Verifier      — runs the test suite and confirms pass/fail
 #
-#   1. Task Analyst       — reads instruction.md, task.toml, understands the brief
-#   2. Solution Architect — studies solve.sh, plans the implementation strategy
-#   3. Code Implementer   — executes commands to fix the code
-#   4. Test Verifier      — runs tests and confirms completeness
+# ── Why no tools? ─────────────────────────────────────────────────────────────
 #
-# CrewAI process: sequential (each agent hands context to the next)
+# crewai 1.14.7: whenever ANY agent has tools=[ ... ], the framework activates
+# a "native tools" execution path that creates a raw OpenAI client internally,
+# ignoring the base_url / api_key we set on crewai.LLM.  With OpenRouter (or
+# any non-OpenAI provider) this crashes immediately:
 #
-# ── crewai==1.14.7 LLM fix ────────────────────────────────────────────────────
+#   ERROR: OpenAI API call failed: 'NoneType' object is not subscriptable
+#   Error executing listener call_llm_native_tools: ...
 #
-# The old `CrewLLM` custom wrapper class is NOT compatible with crewai 1.x.
-# Agent.llm is validated by Pydantic and must be either:
-#   • a plain str (model name)          e.g. "openrouter/openai/gpt-4o"
-#   • a crewai.LLM instance             (which delegates to LiteLLM)
+# Solution: remove all tools.  Task file content is read once at crew-creation
+# time (via build_initial_user_prompt) and injected directly into task_1's
+# description, so the Task Analyst has everything it needs without a tool call.
 #
-# We now use crewai.LLM directly.  The model string it expects follows
-# LiteLLM's convention:
+# ── crewai.LLM + OpenRouter ───────────────────────────────────────────────────
 #
-#   "<provider>/<model_id>"
+# crewai.LLM requires all three of:
+#   model    = "openrouter/<model_id>"         — LiteLLM provider prefix
+#   base_url = settings.llm_base_url(provider) — https://openrouter.ai/api/v1
+#   api_key  = settings.llm_api_key(provider)  — OPENROUTER_API_KEY from config
 #
-# where <provider> maps to a LiteLLM provider prefix.  For OpenRouter:
-#
-#   provider  (from DB) = "openrouter"
-#   model_id  (from DB) = "openai/gpt-oss-120b:free"
-#   → litellm model str = "openrouter/openai/gpt-oss-120b:free"
-#
-# This is exactly what probe_base.py already logs, so the DB values are
-# used as-is — nothing is hard-coded here.
-#
-# Additional fixes in this revision
-# ──────────────────────────────────
-# • ReadTaskFilesTool._run now accepts **kwargs  (crewai-tools 1.14.7 requirement)
-# • crew.kickoff() is run in a thread executor   (it is blocking/sync; calling it
-#   directly inside an async function stalls the event loop and deadlocks the
-#   5 staggered-parallel probe tasks in probe_base.py)
-# • crew_completed_successfully handles CrewOutput objects (crewai 1.x return type)
-# • Verifier task prompt explicitly requests a closing JSON block so the parser
-#   has a reliable signal to detect success
+# model_id and provider always come from the DB via get_model_for_role() —
+# nothing is hard-coded here.
 
 from __future__ import annotations
 
@@ -54,20 +41,16 @@ from pathlib import Path
 from typing import Any
 
 from crewai import Agent, Task, Crew, Process, LLM
-from crewai.tools import BaseTool
-from pydantic import Field
 
-from app.services.agent_prompt import (
-    AGENT_SYSTEM_PROMPT,
-    build_initial_user_prompt,
-)
+from app.core.config import settings
+from app.services.agent_prompt import build_initial_user_prompt
 
 
 # ── Configuration ──────────────────────────────────────────────────────────────
 
 CREW_MAX_TOKENS  = 2048
 CREW_TEMPERATURE = 0.3
-CREW_MAX_ITER    = 15      # max total agent turns across all crew tasks
+CREW_MAX_ITER    = 15
 
 
 # ── Logging ────────────────────────────────────────────────────────────────────
@@ -77,96 +60,51 @@ def _log(msg: str) -> None:
 
 
 # ── LLM factory ───────────────────────────────────────────────────────────────
-#
-# Converts the (model_id, provider) pair stored in the DB into a crewai.LLM
-# instance that crewai 1.14.7 accepts.
-#
-# The DB stores them separately:
-#   provider = "openrouter"
-#   model_id = "openai/gpt-oss-120b:free"
-#
-# LiteLLM (which crewai.LLM wraps) wants a single prefixed string:
-#   "openrouter/openai/gpt-oss-120b:free"
-#
-# For any other provider value we pass model_id through unchanged; LiteLLM
-# resolves it natively (e.g. "anthropic/claude-3-5-sonnet-20241022").
 
 def build_crewai_llm(model_id: str, provider: str) -> LLM:
     """
     Build a crewai.LLM from the (model_id, provider) pair fetched from the DB.
-
-    No model strings are hard-coded here — we just assemble the LiteLLM
-    prefix that crewai.LLM needs from whatever the DB gives us.
+    Credentials and base URL come from settings — nothing is hard-coded here.
     """
     if provider == "openrouter":
-        # Guard against model_id that already carries the prefix
-        # (shouldn't happen if the DB is clean, but defensive is better)
-        if model_id.startswith("openrouter/"):
-            litellm_model = model_id
-        else:
-            litellm_model = f"openrouter/{model_id}"
+        # Always prepend the LiteLLM "openrouter/" routing prefix unconditionally.
+        # The DB stores the raw OpenRouter model slug exactly as shown in the UI
+        # (e.g. "nvidia/nemotron-3-ultra-550b-a55b:free", "openrouter/owl-alpha",
+        # "openai/gpt-oss-120b:free"). The "openrouter/" in "openrouter/owl-alpha"
+        # is part of that model's slug on OpenRouter — it is NOT the LiteLLM prefix.
+        # LiteLLM always needs its own prefix on top of whatever the slug is:
+        #   "nvidia/nemotron-..."    → "openrouter/nvidia/nemotron-..."
+        #   "openai/gpt-oss-120b"   → "openrouter/openai/gpt-oss-120b"
+        #   "openrouter/owl-alpha"  → "openrouter/openrouter/owl-alpha"
+        litellm_model = f"openrouter/{model_id}"
     else:
-        # Pass through for native LiteLLM providers (anthropic/, openai/, etc.)
         litellm_model = model_id
 
     return LLM(
         model=litellm_model,
+        base_url=settings.llm_base_url(provider),
+        api_key=settings.llm_api_key(provider),
         temperature=CREW_TEMPERATURE,
         max_tokens=CREW_MAX_TOKENS,
     )
 
 
-# ── Custom tools ───────────────────────────────────────────────────────────────
-#
-# crewai-tools 1.14.7: BaseTool._run must accept **kwargs — CrewAI may inject
-# keyword arguments at call time.  Omitting **kwargs causes a runtime TypeError.
-#
-# task_dir is declared as a Pydantic Field so it survives model serialisation
-# inside CrewAI's internals (Pydantic v2 requires explicit Field declarations
-# for instance-level values on BaseModel subclasses).
+# ── Agent definitions (no tools) ──────────────────────────────────────────────
 
-class ReadTaskFilesTool(BaseTool):
-    """Read the task's instruction, metadata, solution, and test files."""
-
-    name: str = "Read Task Files"
-    description: str = (
-        "Read the task description (instruction.md), metadata (task.toml), "
-        "the oracle solution (solution/solve.sh), and test files (tests/test.sh, "
-        "tests/test_outputs.py) to understand what needs to be done. "
-        "Call this tool with no arguments — it reads the pre-configured task directory."
-    )
-
-    task_dir: str = Field(default="/tmp", description="Absolute path to the task directory")
-
-    def _run(self, *args: Any, **kwargs: Any) -> str:  # noqa: ARG002
-        try:
-            return build_initial_user_prompt(Path(self.task_dir))
-        except Exception as exc:
-            return f"Error reading task files: {exc}"
-
-
-# ── Agent definitions ──────────────────────────────────────────────────────────
-
-def create_task_analyst(llm: LLM, task_dir: str, run_index: int) -> Agent:
-    """Agent 1 — reads and analyses the task."""
+def create_task_analyst(llm: LLM) -> Agent:
     return Agent(
         role="Task Analyst",
         goal=(
-            f"Thoroughly analyze the benchmark task in {task_dir} and produce "
-            "a clear, structured summary of what the task requires. "
-            "Read instruction.md, task.toml, solution/solve.sh, tests/test.sh, "
-            f"and tests/test_outputs.py to understand the full picture. "
-            f"You have a maximum of {CREW_MAX_ITER // 4} steps."
+            "Analyse the benchmark task files provided in the task description "
+            "and produce a clear, structured summary of what needs to be done."
         ),
         backstory=(
             "You are an expert at reading technical specifications and distilling "
             "them into actionable plans. You have deep experience with software "
             "engineering benchmarks and understand exactly what each task file "
-            "contributes to the overall challenge. You never rush to conclusions "
-            "and always read all available files before forming your analysis."
+            "contributes to the overall challenge."
         ),
         llm=llm,
-        tools=[ReadTaskFilesTool(task_dir=task_dir)],
         allow_delegation=False,
         verbose=False,
         max_iter=CREW_MAX_ITER // 4,
@@ -174,20 +112,17 @@ def create_task_analyst(llm: LLM, task_dir: str, run_index: int) -> Agent:
 
 
 def create_solution_architect(llm: LLM) -> Agent:
-    """Agent 2 — plans the fix based on the analyst's output."""
     return Agent(
         role="Solution Architect",
         goal=(
-            "Study the oracle solution (solution/solve.sh) and the task description, "
-            "then produce a detailed step-by-step plan for implementing the fix. "
-            "The plan must include the exact commands needed at each step, "
-            "the expected outcomes, and how to verify success via the test suite."
+            "Study the oracle solution (solution/solve.sh) and the task description "
+            "provided in context, then produce a detailed step-by-step implementation "
+            "plan with exact shell commands and verification steps."
         ),
         backstory=(
             "You are a senior software engineer specialising in code repair and "
             "test-driven development. You study reference solutions carefully and "
-            "adapt them rather than reinventing from scratch. Your plans are "
-            "precise, minimal, and focused on passing the test suite efficiently."
+            "adapt them rather than reinventing from scratch."
         ),
         llm=llm,
         allow_delegation=False,
@@ -197,22 +132,18 @@ def create_solution_architect(llm: LLM) -> Agent:
 
 
 def create_implementer(llm: LLM) -> Agent:
-    """Agent 3 — executes the plan."""
     return Agent(
         role="Code Implementer",
         goal=(
             "Execute the implementation plan step by step. Run shell commands "
             "to apply the fix, build the project, and prepare for testing. "
-            "Each command must be precise and well-documented. "
-            "If a command fails, diagnose the issue and try a different approach."
+            "If a command fails, diagnose and try a different approach."
         ),
         backstory=(
-            "You are a skilled DevOps engineer and software developer who excels "
-            "at executing complex build and fix workflows in Linux environments. "
-            "You are methodical: you run one command at a time, check the output, "
-            "and proceed only when each step succeeds. You are familiar with "
-            "Python, JavaScript/TypeScript, Hardhat, Rust, Go, and many other "
-            "toolchains."
+            "You are a skilled DevOps engineer who excels at executing complex "
+            "build and fix workflows in Linux environments. You are methodical: "
+            "one command at a time, check output, proceed only on success. "
+            "Familiar with Python, JavaScript/TypeScript, Hardhat, Rust, Go, and more."
         ),
         llm=llm,
         allow_delegation=False,
@@ -222,20 +153,16 @@ def create_implementer(llm: LLM) -> Agent:
 
 
 def create_verifier(llm: LLM) -> Agent:
-    """Agent 4 — validates via the test suite."""
     return Agent(
         role="Test Verifier",
         goal=(
-            "Run the full test suite (tests/test.sh) and verify that every test "
-            "passes. Analyse any failures and determine if they are genuine or "
-            "environmental. Only confirm task completion when all tests pass "
-            "with reward=1."
+            "Run the full test suite (tests/test.sh) and verify every test passes. "
+            "Only confirm task completion when all tests pass with reward=1."
         ),
         backstory=(
-            "You are a quality assurance engineer with a keen eye for detail. "
-            "You know that a task is only complete when the test suite says so. "
-            "You are thorough, sceptical of premature success claims, and always "
-            "verify with actual test execution rather than relying on assumptions."
+            "You are a QA engineer with a keen eye for detail. A task is only "
+            "complete when the test suite says so. You are thorough and sceptical "
+            "of premature success claims."
         ),
         llm=llm,
         allow_delegation=False,
@@ -245,68 +172,65 @@ def create_verifier(llm: LLM) -> Agent:
 
 
 # ── Task definitions ───────────────────────────────────────────────────────────
+#
+# task_content is the output of build_initial_user_prompt() — the full text of
+# all task files (instruction.md, task.toml, solve.sh, test.sh, test_outputs.py).
+# We inject it directly into task_1's description so no tool call is needed.
 
 def create_crew_tasks(
     analyst: Agent,
     architect: Agent,
     implementer: Agent,
     verifier: Agent,
-    task_dir: str,
-    run_index: int,
+    task_content: str,
 ) -> list[Task]:
+
     task_1 = Task(
         description=(
-            f"Read and analyse the benchmark task located at {task_dir}. "
-            "You MUST read all of these files: "
-            "instruction.md (the task description), task.toml (metadata), "
-            "solution/solve.sh (the reference fix), tests/test.sh (test runner), "
-            "tests/test_outputs.py (test assertions). "
-            "Use the Read Task Files tool to read them. "
-            "Then produce a structured analysis covering:\n"
+            "Analyse the following benchmark task files and produce a structured "
+            "analysis covering:\n"
             "  1. What the task requires (language, framework, problem type)\n"
             "  2. What the oracle solution does (summarise solve.sh)\n"
             "  3. How the test suite validates correctness\n"
             "  4. Key files and their roles\n"
-            "  5. Potential challenges and failure modes\n"
-            "Be thorough — the next agents depend on your analysis."
+            "  5. Potential challenges and failure modes\n\n"
+            "── TASK FILES ──────────────────────────────────────────────────\n\n"
+            + task_content
         ),
         agent=analyst,
         expected_output=(
-            "A comprehensive markdown analysis with all 5 sections filled in. "
-            "Include file contents or summaries for each key file."
+            "A comprehensive markdown analysis with all 5 sections filled in."
         ),
     )
 
     task_2 = Task(
         description=(
-            "Based on the Task Analyst's analysis above, produce a detailed "
-            "step-by-step implementation plan. Your plan must:\n"
+            "Based on the Task Analyst's analysis, produce a detailed "
+            "step-by-step implementation plan:\n"
             "  1. List the exact files that need to be modified\n"
             "  2. Describe the changes needed in each file\n"
-            "  3. Specify the order of operations (what to fix first, second, etc.)\n"
+            "  3. Specify the order of operations\n"
             "  4. Include the exact shell commands to run at each step\n"
             "  5. Explain how to verify each step succeeded\n"
-            "Study solve.sh carefully and follow its approach — don't reinvent.\n"
-            "Your plan will be executed by the Code Implementer agent."
+            "Follow solve.sh's approach closely — don't reinvent."
         ),
         agent=architect,
         expected_output=(
-            "A numbered step-by-step plan in markdown format, with each step "
-            "including the rationale, commands, and verification method."
+            "A numbered step-by-step plan in markdown, each step with "
+            "rationale, commands, and verification method."
         ),
     )
 
     task_3 = Task(
         description=(
-            "Execute the implementation plan from the Solution Architect above. "
+            "Execute the implementation plan from the Solution Architect. "
             "For each step:\n"
             "  1. Run the specified command\n"
             "  2. Capture and analyse the output\n"
-            "  3. If the command fails, diagnose and retry with a corrected approach\n"
+            "  3. If the command fails, diagnose and retry\n"
             "  4. Move to the next step only when the current one succeeds\n"
-            "Keep a log of every command you run and its result. "
-            "After implementing the fix, build the project to ensure it compiles. "
-            "Do NOT run the test suite yet — that is the Verifier's job."
+            "Keep a log of every command and its result. "
+            "Do NOT run the test suite — that is the Verifier's job."
         ),
         agent=implementer,
         expected_output=(
@@ -317,23 +241,21 @@ def create_crew_tasks(
 
     task_4 = Task(
         description=(
-            "Run the test suite to verify the fix. Execute:\n"
+            "Run the test suite to verify the fix:\n"
             "  bash tests/test.sh\n"
-            "Analyse the output carefully:\n"
+            "Analyse the output:\n"
             "  - Did all tests pass? (reward=1)\n"
             "  - Did some tests fail? (reward=0)\n"
-            "  - Are the failures genuine or environmental?\n"
-            "If tests fail and the fix seems correct, re-check the implementation "
-            "and try again (you can coordinate with the implementer via context). \n"
-            "Your final output MUST end with one of these exact JSON blocks:\n"
-            '  {"task_complete": true}   — if ALL tests passed with reward=1\n'
-            '  {"task_complete": false}  — if any test failed\n'
-            "Do not omit this JSON block under any circumstances."
+            "Your final output MUST end with one of these exact JSON blocks "
+            "(no extra text after it):\n"
+            '  {"task_complete": true}   — ALL tests passed with reward=1\n'
+            '  {"task_complete": false}  — any test failed\n'
+            "Omitting the JSON block is not allowed."
         ),
         agent=verifier,
         expected_output=(
-            "Test execution results with clear pass/fail for each test, "
-            'and a closing JSON verdict: {"task_complete": true} or {"task_complete": false}.'
+            "Test results with pass/fail per test and a closing JSON verdict: "
+            '{"task_complete": true} or {"task_complete": false}.'
         ),
     )
 
@@ -346,18 +268,18 @@ def create_probe_crew(
     task_dir: str,
     model_id: str,
     provider: str,
-    run_index: int,
 ) -> Crew:
     """
-    Build a CrewAI crew for one probe run (crewai==1.14.7 compatible).
-
-    model_id and provider come directly from the DB via get_model_for_role()
-    — nothing is hard-coded.  build_crewai_llm() assembles the LiteLLM
-    model string from them.
+    Build a CrewAI crew for one probe run (crewai==1.14.7, no tools).
+    model_id / provider come from the DB — nothing hard-coded.
+    Task file content is read once here and injected into task_1's description.
     """
     llm = build_crewai_llm(model_id=model_id, provider=provider)
 
-    analyst     = create_task_analyst(llm, task_dir, run_index)
+    # Read task files once at crew-creation time — no tool call needed at runtime
+    task_content = build_initial_user_prompt(Path(task_dir))
+
+    analyst     = create_task_analyst(llm)
     architect   = create_solution_architect(llm)
     implementer = create_implementer(llm)
     verifier    = create_verifier(llm)
@@ -367,8 +289,7 @@ def create_probe_crew(
         architect=architect,
         implementer=implementer,
         verifier=verifier,
-        task_dir=task_dir,
-        run_index=run_index,
+        task_content=task_content,
     )
 
     return Crew(
@@ -381,21 +302,13 @@ def create_probe_crew(
 
 # ── Crew result parser ─────────────────────────────────────────────────────────
 #
-# crewai 1.x returns a CrewOutput object from kickoff(), not a raw string.
-# CrewOutput has:
-#   .raw            — str, the final agent output
-#   .tasks_output   — list[TaskOutput], one per task
-# We check both the top-level .raw and the last task's output (the Verifier).
+# crewai 1.x returns a CrewOutput object, not a raw string.
+# We check .raw (top-level) and .tasks_output[-1].raw (Verifier output).
 
 def crew_completed_successfully(crew_output: Any) -> bool:
-    """
-    Determine whether the crew run resulted in task_complete=true.
-    Handles both the crewai 1.x CrewOutput object and plain strings.
-    """
     if crew_output is None:
         return False
 
-    # Collect all text to scan: top-level raw + last task output (Verifier)
     texts: list[str] = []
 
     if hasattr(crew_output, "raw") and crew_output.raw:
@@ -412,10 +325,10 @@ def crew_completed_successfully(crew_output: Any) -> bool:
 
     combined = "\n".join(texts)
 
-    # 1. Strict JSON extraction — scan every { ... } block
-    start = 0
+    # Scan every { ... } block for task_complete: true
+    pos = 0
     while True:
-        start = combined.find("{", start)
+        start = combined.find("{", pos)
         if start == -1:
             break
         depth = 0
@@ -432,13 +345,13 @@ def crew_completed_successfully(crew_output: Any) -> bool:
                     except (json.JSONDecodeError, ValueError):
                         pass
                     break
-        start += 1
+        pos = start + 1
 
-    # 2. Fallback: unambiguous prose markers
+    # Fallback prose markers
     combined_lower = combined.lower()
     for marker in (
         '"task_complete": true',
-        "task_complete\": true",
+        'task_complete": true',
         "all tests passed",
         "all tests pass",
         "reward=1",
@@ -451,10 +364,8 @@ def crew_completed_successfully(crew_output: Any) -> bool:
 
 # ── Crew runner ────────────────────────────────────────────────────────────────
 #
-# crew.kickoff() is synchronous and can block for several minutes.
-# Running it directly inside an async function would stall the asyncio event
-# loop and deadlock the staggered-parallel tasks in probe_base.py.
-# We hand it off to the default ThreadPoolExecutor via run_in_executor().
+# crew.kickoff() is synchronous/blocking — run it in a thread executor so it
+# doesn't stall the asyncio event loop and deadlock probe_base.py's parallel tasks.
 
 async def run_crew_probe(
     task_dir: str,
@@ -464,10 +375,8 @@ async def run_crew_probe(
     start_delay: float = 0.0,
 ) -> bool:
     """
-    Execute one complete crew run for a probe (crewai==1.14.7).
-
-    model_id / provider are passed through from the DB — not modified here.
-    build_crewai_llm() handles the LiteLLM prefix assembly.
+    Execute one complete crew run.
+    model_id / provider are passed through from the DB unchanged.
     """
     tag = f"crew-run {run_index + 1}"
 
@@ -482,7 +391,6 @@ async def run_crew_probe(
             task_dir=task_dir,
             model_id=model_id,
             provider=provider,
-            run_index=run_index,
         )
     except Exception as exc:
         _log(f"{tag}: crew creation failed: {exc}")
