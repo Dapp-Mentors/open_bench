@@ -8,3 +8,5 @@ httpx==0.28.1
 cuid2==2.0.1
 docker==7.1.0
 sia_storage==0.8.0
+crewai==1.14.7
+crewai-tools==1.14.7

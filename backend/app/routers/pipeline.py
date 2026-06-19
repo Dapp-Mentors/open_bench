@@ -21,6 +21,7 @@ from app.services import pipeline as svc
 from app.services import similarity as sim_svc
 from app.services import quality as qual_svc
 from app.services import easiness as easiness_svc
+from app.services import difficulty as difficulty_svc
 from app.services import agent_quality as agent_quality_svc
 from app.services import sia as sia_svc
 
@@ -250,7 +251,7 @@ async def stage_difficulty(body: PipelineStageRequest, db: AsyncSession = Depend
         f"model=openrouter (from DB config)"
     )
 
-    passed, message = await easiness_svc.run_difficulty_probe(
+    passed, message = await difficulty_svc.run_difficulty_probe(
         task_id=body.taskId,
         storage_path=body.storagePath,
         db=db,

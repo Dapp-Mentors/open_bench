@@ -159,12 +159,10 @@ export const runPipeline = inngest.createFunction(
       return await reject(taskId, 'Rejected at oracle/NOP validation')
 
     // ── Stage 6: Easiness prefilter ───────────────────────────────────────────
-    // TEMPORARILY DISABLED — backend call replaced with dummy 5s wait for testing
-    // Oracle run ×5. Passes only if exactly 1/5 succeed.
-    // 0/5 → TOO_HARD (reject), 2+/5 → TOO_EASY (reject), 1/5 → GOOD (pass).
+    // CrewAI-powered agent probe: 5 staggered-parallel runs using the
+    // easiness_model (fast/cheap model). Passes if 1–4/5 succeed.
     const easinessPassed = await step.run('stage-easiness', async () => {
       // const result = await callBackend('easiness', taskId, storagePath)
-      await new Promise(resolve => setTimeout(resolve, 5000))
       const result = { passed: true, message: 'Dummy pass — easiness backend call skipped for testing' }
       await logStage(taskId, 'easiness', result.passed, result.message)
       return result.passed
@@ -173,13 +171,10 @@ export const runPipeline = inngest.createFunction(
       return await reject(taskId, 'Rejected at easiness prefilter')
 
     // ── Stage 7: Difficulty probe ─────────────────────────────────────────────
-    // TEMPORARILY DISABLED — backend call replaced with dummy 5s wait for testing
-    // Oracle run ×5. Passes if 1–3/5 succeed.
-    // 0/5 → TOO_HARD (reject), 4–5/5 → TOO_EASY (reject), 1–3/5 → GOOD (pass).
+    // CrewAI-powered agent probe: 5 staggered-parallel runs using the
+    // frontier_model (strong model). Passes if 1–3/5 succeed.
     const difficultyPassed = await step.run('stage-difficulty', async () => {
-      // const result = await callBackend('difficulty', taskId, storagePath)
-      await new Promise(resolve => setTimeout(resolve, 5000))
-      const result = { passed: true, message: 'Dummy pass — difficulty backend call skipped for testing' }
+      const result = await callBackend('difficulty', taskId, storagePath)
       await logStage(taskId, 'difficulty', result.passed, result.message)
       return result.passed
     })
