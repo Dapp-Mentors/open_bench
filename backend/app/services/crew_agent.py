@@ -7,47 +7,67 @@
 # the task. Each agent has a defined role, goal, and backstory, mirroring
 # the natural workflow of a human engineer:
 #
-#   1. Task Analyst    — reads instruction.md, task.toml, understands the brief
+#   1. Task Analyst       — reads instruction.md, task.toml, understands the brief
 #   2. Solution Architect — studies solve.sh, plans the implementation strategy
 #   3. Code Implementer   — executes commands to fix the code
 #   4. Test Verifier      — runs tests and confirms completeness
 #
 # CrewAI process: sequential (each agent hands context to the next)
 #
-# Integration with the rest of the pipeline:
-#   - The crew is launched by _run_agent_once() in easiness.py (or diff probe)
-#   - It receives the same task_dir, model_id, provider as before
-#   - It returns True/False (task_complete) just like the old loop
+# ── crewai==1.14.7 LLM fix ────────────────────────────────────────────────────
 #
-# Why CrewAI instead of a flat prompt?
-#   - Role specialisation yields better results on complex tasks
-#   - Each agent's output is structured and auditable per role
-#   - Easy to extend (add a Debugger agent, Security reviewer, etc.)
-#   - Built-in tool support for file reading, web search, etc.
+# The old `CrewLLM` custom wrapper class is NOT compatible with crewai 1.x.
+# Agent.llm is validated by Pydantic and must be either:
+#   • a plain str (model name)          e.g. "openrouter/openai/gpt-4o"
+#   • a crewai.LLM instance             (which delegates to LiteLLM)
+#
+# We now use crewai.LLM directly.  The model string it expects follows
+# LiteLLM's convention:
+#
+#   "<provider>/<model_id>"
+#
+# where <provider> maps to a LiteLLM provider prefix.  For OpenRouter:
+#
+#   provider  (from DB) = "openrouter"
+#   model_id  (from DB) = "openai/gpt-oss-120b:free"
+#   → litellm model str = "openrouter/openai/gpt-oss-120b:free"
+#
+# This is exactly what probe_base.py already logs, so the DB values are
+# used as-is — nothing is hard-coded here.
+#
+# Additional fixes in this revision
+# ──────────────────────────────────
+# • ReadTaskFilesTool._run now accepts **kwargs  (crewai-tools 1.14.7 requirement)
+# • crew.kickoff() is run in a thread executor   (it is blocking/sync; calling it
+#   directly inside an async function stalls the event loop and deadlocks the
+#   5 staggered-parallel probe tasks in probe_base.py)
+# • crew_completed_successfully handles CrewOutput objects (crewai 1.x return type)
+# • Verifier task prompt explicitly requests a closing JSON block so the parser
+#   has a reliable signal to detect success
 
 from __future__ import annotations
 
+import asyncio
 import json
 import sys
 from pathlib import Path
+from typing import Any
 
-from crewai import Agent, Task, Crew, Process
+from crewai import Agent, Task, Crew, Process, LLM
 from crewai.tools import BaseTool
-from pydantic import BaseModel, Field
+from pydantic import Field
 
-from app.services.llm import chat_completion
 from app.services.agent_prompt import (
     AGENT_SYSTEM_PROMPT,
     build_initial_user_prompt,
-    build_continuation_user_prompt,
 )
 
 
 # ── Configuration ──────────────────────────────────────────────────────────────
 
-CREW_MAX_TOKENS    = 2048
-CREW_TEMPERATURE   = 0.3
-CREW_MAX_ITER      = 15      # max total agent turns across all crew tasks
+CREW_MAX_TOKENS  = 2048
+CREW_TEMPERATURE = 0.3
+CREW_MAX_ITER    = 15      # max total agent turns across all crew tasks
 
 
 # ── Logging ────────────────────────────────────────────────────────────────────
@@ -56,128 +76,87 @@ def _log(msg: str) -> None:
     print(f"[CREW-AGENT] {msg}", file=sys.stderr, flush=True)
 
 
-# ── Custom CrewAI LLM wrapper ──────────────────────────────────────────────────
+# ── LLM factory ───────────────────────────────────────────────────────────────
 #
-# CrewAI expects either a model name string (which it resolves via provider env
-# vars) or a custom LLM class that implements the LLM interface.  We provide a
-# thin wrapper around our existing `chat_completion` so we reuse the same
-# provider/model resolution, retry logic, etc. without configuring CrewAI's
-# built-in LLM resolvers.
+# Converts the (model_id, provider) pair stored in the DB into a crewai.LLM
+# instance that crewai 1.14.7 accepts.
+#
+# The DB stores them separately:
+#   provider = "openrouter"
+#   model_id = "openai/gpt-oss-120b:free"
+#
+# LiteLLM (which crewai.LLM wraps) wants a single prefixed string:
+#   "openrouter/openai/gpt-oss-120b:free"
+#
+# For any other provider value we pass model_id through unchanged; LiteLLM
+# resolves it natively (e.g. "anthropic/claude-3-5-sonnet-20241022").
 
-class CrewLLM:
+def build_crewai_llm(model_id: str, provider: str) -> LLM:
     """
-    Adapter that lets CrewAI agents call our existing chat_completion function.
-    CrewAI internally calls llm.generate_reply(messages) on the LLM object.
+    Build a crewai.LLM from the (model_id, provider) pair fetched from the DB.
+
+    No model strings are hard-coded here — we just assemble the LiteLLM
+    prefix that crewai.LLM needs from whatever the DB gives us.
     """
+    if provider == "openrouter":
+        # Guard against model_id that already carries the prefix
+        # (shouldn't happen if the DB is clean, but defensive is better)
+        if model_id.startswith("openrouter/"):
+            litellm_model = model_id
+        else:
+            litellm_model = f"openrouter/{model_id}"
+    else:
+        # Pass through for native LiteLLM providers (anthropic/, openai/, etc.)
+        litellm_model = model_id
 
-    def __init__(
-        self,
-        model_id: str,
-        provider: str,
-        temperature: float = CREW_TEMPERATURE,
-        max_tokens: int = CREW_MAX_TOKENS,
-    ):
-        self.model_id = model_id
-        self.provider = provider
-        self.temperature = temperature
-        self.max_tokens = max_tokens
-
-    def generate_reply(self, messages: list[dict]) -> str:
-        """
-        CrewAI calls this with a list of messages:
-          [{"role": "system", "content": "..."},
-           {"role": "user", "content": "..."}]
-        We extract the last user message and call our chat_completion.
-        """
-        system_parts = []
-        user_parts = []
-
-        for msg in messages:
-            role = msg.get("role", "")
-            content = msg.get("content", "")
-            if role == "system":
-                system_parts.append(content)
-            elif role == "user":
-                user_parts.append(content)
-
-        system = "\n".join(system_parts) if system_parts else AGENT_SYSTEM_PROMPT
-        user = "\n".join(user_parts) if user_parts else "Proceed with the task."
-
-        import asyncio
-
-        try:
-            loop = asyncio.get_event_loop()
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-
-        result = loop.run_until_complete(
-            chat_completion(
-                system=system,
-                user=user,
-                provider=self.provider,
-                model_id=self.model_id,
-                temperature=self.temperature,
-                max_tokens=self.max_tokens,
-            )
-        )
-        return result or ""
+    return LLM(
+        model=litellm_model,
+        temperature=CREW_TEMPERATURE,
+        max_tokens=CREW_MAX_TOKENS,
+    )
 
 
 # ── Custom tools ───────────────────────────────────────────────────────────────
 #
-# CrewAI tools let agents read files and run sandboxed commands.
-# We wrap the same prompt-building logic that the old agent used.
+# crewai-tools 1.14.7: BaseTool._run must accept **kwargs — CrewAI may inject
+# keyword arguments at call time.  Omitting **kwargs causes a runtime TypeError.
+#
+# task_dir is declared as a Pydantic Field so it survives model serialisation
+# inside CrewAI's internals (Pydantic v2 requires explicit Field declarations
+# for instance-level values on BaseModel subclasses).
 
 class ReadTaskFilesTool(BaseTool):
     """Read the task's instruction, metadata, solution, and test files."""
+
     name: str = "Read Task Files"
     description: str = (
         "Read the task description (instruction.md), metadata (task.toml), "
         "the oracle solution (solution/solve.sh), and test files (tests/test.sh, "
-        "tests/test_outputs.py) to understand what needs to be done."
+        "tests/test_outputs.py) to understand what needs to be done. "
+        "Call this tool with no arguments — it reads the pre-configured task directory."
     )
 
-    task_dir: str = "/tmp"  # will be set per-instance
+    task_dir: str = Field(default="/tmp", description="Absolute path to the task directory")
 
-    def _run(self) -> str:
-        task_dir = Path(self.task_dir)
+    def _run(self, *args: Any, **kwargs: Any) -> str:  # noqa: ARG002
         try:
-            return build_initial_user_prompt(task_dir)
+            return build_initial_user_prompt(Path(self.task_dir))
         except Exception as exc:
             return f"Error reading task files: {exc}"
-
-    async def _arun(self) -> str:
-        return self._run()
 
 
 # ── Agent definitions ──────────────────────────────────────────────────────────
 
-def _build_duration_str(run_index: int) -> str:
-    return (
-        "You have a maximum of 12 steps to complete this task. "
-        "Be efficient and focused. Use the test suite to validate your work."
-    )
-
-
-def create_task_analyst(
-    llm: CrewLLM,
-    task_dir: str,
-    run_index: int,
-) -> Agent:
-    """
-    Agent 1 — Task Analyst
-    Reads and analyses the task description, metadata, and files.
-    Outputs a structured summary of what needs to be done.
-    """
+def create_task_analyst(llm: LLM, task_dir: str, run_index: int) -> Agent:
+    """Agent 1 — reads and analyses the task."""
     return Agent(
         role="Task Analyst",
         goal=(
             f"Thoroughly analyze the benchmark task in {task_dir} and produce "
-            f"a clear, structured summary of what the task requires. "
-            f"Read instruction.md, task.toml, solution/solve.sh, tests/test.sh, "
+            "a clear, structured summary of what the task requires. "
+            "Read instruction.md, task.toml, solution/solve.sh, tests/test.sh, "
             f"and tests/test_outputs.py to understand the full picture. "
-            f"{_build_duration_str(run_index)}"
+            f"You have a maximum of {CREW_MAX_ITER // 4} steps."
         ),
         backstory=(
             "You are an expert at reading technical specifications and distilling "
@@ -194,11 +173,8 @@ def create_task_analyst(
     )
 
 
-def create_solution_architect(llm: CrewLLM) -> Agent:
-    """
-    Agent 2 — Solution Architect
-    Studies the oracle solution and plans the implementation approach.
-    """
+def create_solution_architect(llm: LLM) -> Agent:
+    """Agent 2 — plans the fix based on the analyst's output."""
     return Agent(
         role="Solution Architect",
         goal=(
@@ -220,11 +196,8 @@ def create_solution_architect(llm: CrewLLM) -> Agent:
     )
 
 
-def create_implementer(llm: CrewLLM) -> Agent:
-    """
-    Agent 3 — Code Implementer
-    Executes the plan by running commands and fixing the code.
-    """
+def create_implementer(llm: LLM) -> Agent:
+    """Agent 3 — executes the plan."""
     return Agent(
         role="Code Implementer",
         goal=(
@@ -248,11 +221,8 @@ def create_implementer(llm: CrewLLM) -> Agent:
     )
 
 
-def create_verifier(llm: CrewLLM) -> Agent:
-    """
-    Agent 4 — Test Verifier
-    Runs the test suite and confirms the task is complete.
-    """
+def create_verifier(llm: LLM) -> Agent:
+    """Agent 4 — validates via the test suite."""
     return Agent(
         role="Test Verifier",
         goal=(
@@ -284,26 +254,21 @@ def create_crew_tasks(
     task_dir: str,
     run_index: int,
 ) -> list[Task]:
-    """
-    Create the four sequential tasks for the crew.
-    Each task passes its output as context to the next.
-    """
-
     task_1 = Task(
         description=(
             f"Read and analyse the benchmark task located at {task_dir}. "
-            f"You MUST read all of these files: "
-            f"instruction.md (the task description), task.toml (metadata), "
-            f"solution/solve.sh (the reference fix), tests/test.sh (test runner), "
-            f"tests/test_outputs.py (test assertions). "
-            f"Use the Read Task Files tool to read them. "
-            f"Then produce a structured analysis covering:\n"
-            f"  1. What the task requires (language, framework, problem type)\n"
-            f"  2. What the oracle solution does (summarise solve.sh)\n"
-            f"  3. How the test suite validates correctness\n"
-            f"  4. Key files and their roles\n"
-            f"  5. Potential challenges and failure modes\n"
-            f"Be thorough — the next agents depend on your analysis."
+            "You MUST read all of these files: "
+            "instruction.md (the task description), task.toml (metadata), "
+            "solution/solve.sh (the reference fix), tests/test.sh (test runner), "
+            "tests/test_outputs.py (test assertions). "
+            "Use the Read Task Files tool to read them. "
+            "Then produce a structured analysis covering:\n"
+            "  1. What the task requires (language, framework, problem type)\n"
+            "  2. What the oracle solution does (summarise solve.sh)\n"
+            "  3. How the test suite validates correctness\n"
+            "  4. Key files and their roles\n"
+            "  5. Potential challenges and failure modes\n"
+            "Be thorough — the next agents depend on your analysis."
         ),
         agent=analyst,
         expected_output=(
@@ -359,13 +324,16 @@ def create_crew_tasks(
             "  - Did some tests fail? (reward=0)\n"
             "  - Are the failures genuine or environmental?\n"
             "If tests fail and the fix seems correct, re-check the implementation "
-            "and try again (you can coordinate with the implementer via context). "
-            "ONLY set task_complete=true when ALL tests pass with reward=1."
+            "and try again (you can coordinate with the implementer via context). \n"
+            "Your final output MUST end with one of these exact JSON blocks:\n"
+            '  {"task_complete": true}   — if ALL tests passed with reward=1\n'
+            '  {"task_complete": false}  — if any test failed\n'
+            "Do not omit this JSON block under any circumstances."
         ),
         agent=verifier,
         expected_output=(
             "Test execution results with clear pass/fail for each test, "
-            "and a final verdict: task_complete=true or task_complete=false."
+            'and a closing JSON verdict: {"task_complete": true} or {"task_complete": false}.'
         ),
     )
 
@@ -381,32 +349,13 @@ def create_probe_crew(
     run_index: int,
 ) -> Crew:
     """
-    Build a CrewAI crew for one probe run.
+    Build a CrewAI crew for one probe run (crewai==1.14.7 compatible).
 
-    The crew consists of 4 specialised agents working sequentially:
-      1. Task Analyst     → reads & analyses the task
-      2. Solution Architect → plans the fix
-      3. Code Implementer   → executes the fix
-      4. Test Verifier      → validates the fix
-
-    Each agent uses the same LLM (easiness or frontier model) but with a
-    different role-specific prompt.
-
-    Args:
-        task_dir:  Absolute path to the unpacked task directory
-        model_id:  OpenRouter model slug (e.g. "anthropic/claude-sonnet-4-20250514")
-        provider:  LLM provider name ("openrouter")
-        run_index: 0-based run index for logging
-
-    Returns:
-        A configured Crew instance ready to kickoff.
+    model_id and provider come directly from the DB via get_model_for_role()
+    — nothing is hard-coded.  build_crewai_llm() assembles the LiteLLM
+    model string from them.
     """
-    llm = CrewLLM(
-        model_id=model_id,
-        provider=provider,
-        temperature=CREW_TEMPERATURE,
-        max_tokens=CREW_MAX_TOKENS,
-    )
+    llm = build_crewai_llm(model_id=model_id, provider=provider)
 
     analyst     = create_task_analyst(llm, task_dir, run_index)
     architect   = create_solution_architect(llm)
@@ -422,81 +371,79 @@ def create_probe_crew(
         run_index=run_index,
     )
 
-    crew = Crew(
+    return Crew(
         agents=[analyst, architect, implementer, verifier],
         tasks=tasks,
         process=Process.sequential,
         verbose=False,
     )
 
-    return crew
-
 
 # ── Crew result parser ─────────────────────────────────────────────────────────
 #
-# After the crew finishes, we extract the task_complete flag from the
-# Verifier's output.  If the JSON structure isn't found we fall back to
-# scanning the final output for success markers.
+# crewai 1.x returns a CrewOutput object from kickoff(), not a raw string.
+# CrewOutput has:
+#   .raw            — str, the final agent output
+#   .tasks_output   — list[TaskOutput], one per task
+# We check both the top-level .raw and the last task's output (the Verifier).
 
-def crew_completed_successfully(crew_output: str | dict | None) -> bool:
+def crew_completed_successfully(crew_output: Any) -> bool:
     """
     Determine whether the crew run resulted in task_complete=true.
-
-    Accepts:
-      - A dict with a `final_output` key (CrewAI's output format)
-      - A raw string (final output text)
-      - None (crew failure)
-
-    Checks the Verifier's output (the last task in the sequence) for
-    the task_complete flag.
+    Handles both the crewai 1.x CrewOutput object and plain strings.
     """
     if crew_output is None:
         return False
 
-    # Extract the text we need to parse
-    if isinstance(crew_output, dict):
-        text = crew_output.get("final_output", "") or str(crew_output)
-    else:
-        text = str(crew_output)
+    # Collect all text to scan: top-level raw + last task output (Verifier)
+    texts: list[str] = []
 
-    # Try JSON extraction first
-    try:
-        parsed = json.loads(text.strip())
-        if isinstance(parsed, dict) and parsed.get("task_complete") is True:
-            return True
-    except (json.JSONDecodeError, ValueError):
-        pass
+    if hasattr(crew_output, "raw") and crew_output.raw:
+        texts.append(crew_output.raw)
 
-    # Find outermost { ... } block
-    start = text.find("{")
-    if start != -1:
+    if hasattr(crew_output, "tasks_output") and crew_output.tasks_output:
+        last = crew_output.tasks_output[-1]
+        last_text = getattr(last, "raw", None) or str(last)
+        if last_text:
+            texts.append(last_text)
+
+    if not texts:
+        texts.append(str(crew_output))
+
+    combined = "\n".join(texts)
+
+    # 1. Strict JSON extraction — scan every { ... } block
+    start = 0
+    while True:
+        start = combined.find("{", start)
+        if start == -1:
+            break
         depth = 0
-        for i, ch in enumerate(text[start:], start):
+        for i, ch in enumerate(combined[start:], start):
             if ch == "{":
                 depth += 1
             elif ch == "}":
                 depth -= 1
                 if depth == 0:
                     try:
-                        block = json.loads(text[start : i + 1])
+                        block = json.loads(combined[start : i + 1])
                         if isinstance(block, dict) and block.get("task_complete") is True:
                             return True
                     except (json.JSONDecodeError, ValueError):
                         pass
                     break
+        start += 1
 
-    # Fallback: scan for success markers in the final output
-    success_markers = [
+    # 2. Fallback: unambiguous prose markers
+    combined_lower = combined.lower()
+    for marker in (
+        '"task_complete": true',
         "task_complete\": true",
-        "task_complete': true",
+        "all tests passed",
         "all tests pass",
         "reward=1",
-        "all tests passed",
-        "task complete",
-    ]
-    text_lower = text.lower()
-    for marker in success_markers:
-        if marker in text_lower or marker in text:
+    ):
+        if marker in combined or marker in combined_lower:
             return True
 
     return False
@@ -504,7 +451,10 @@ def crew_completed_successfully(crew_output: str | dict | None) -> bool:
 
 # ── Crew runner ────────────────────────────────────────────────────────────────
 #
-# Async wrapper around crew.kickoff() so the existing pipeline can await it.
+# crew.kickoff() is synchronous and can block for several minutes.
+# Running it directly inside an async function would stall the asyncio event
+# loop and deadlock the staggered-parallel tasks in probe_base.py.
+# We hand it off to the default ThreadPoolExecutor via run_in_executor().
 
 async def run_crew_probe(
     task_dir: str,
@@ -514,26 +464,15 @@ async def run_crew_probe(
     start_delay: float = 0.0,
 ) -> bool:
     """
-    Execute one complete crew run for a probe (replaces _run_agent_once).
+    Execute one complete crew run for a probe (crewai==1.14.7).
 
-    Creates a 4-agent crew, runs it, and returns True if the Verifier
-    determined task_complete=true.
-
-    Args:
-        task_dir:    Path to the unpacked task directory
-        run_index:   0-based run index (for logging)
-        model_id:    OpenRouter model slug
-        provider:    Provider name ("openrouter")
-        start_delay: Seconds to wait before starting (stagger)
-
-    Returns:
-        True if the task was completed, False otherwise.
+    model_id / provider are passed through from the DB — not modified here.
+    build_crewai_llm() handles the LiteLLM prefix assembly.
     """
     tag = f"crew-run {run_index + 1}"
 
     if start_delay > 0:
         _log(f"{tag}: waiting {start_delay:.0f}s stagger before starting...")
-        import asyncio
         await asyncio.sleep(start_delay)
 
     _log(f"{tag}: creating crew (model={provider}/{model_id}, dir={task_dir})")
@@ -545,16 +484,20 @@ async def run_crew_probe(
             provider=provider,
             run_index=run_index,
         )
+    except Exception as exc:
+        _log(f"{tag}: crew creation failed: {exc}")
+        return False
 
-        _log(f"{tag}: kicking off crew...")
-        result = crew.kickoff()
+    _log(f"{tag}: kicking off crew...")
+
+    try:
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(None, crew.kickoff)
         _log(f"{tag}: crew finished — output type={type(result).__name__}")
-
-        completed = crew_completed_successfully(result)
-        status = "PASS ✓" if completed else "FAIL ✗"
-        _log(f"{tag}: {status}")
-        return completed
-
     except Exception as exc:
         _log(f"{tag}: crew execution failed: {exc}")
         return False
+
+    completed = crew_completed_successfully(result)
+    _log(f"{tag}: {'PASS ✓' if completed else 'FAIL ✗'}")
+    return completed
