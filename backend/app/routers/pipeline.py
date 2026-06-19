@@ -331,6 +331,35 @@ async def stage_sia_upload(body: PipelineStageRequest, db: AsyncSession = Depend
         return PipelineStageResponse(passed=False, message=f"Sia upload failed: {exc}")
 
 
+# ── Docker cleanup ────────────────────────────────────────────────────────────
+#
+# Endpoints for cleaning up Docker build artifacts. The cleanup watchdog
+# (frontend Inngest cron) calls these to remove Docker images and build
+# cache for rejected tasks, preventing disk bloat.
+
+@router.post("/docker/cleanup/{task_id}", response_model=PipelineStageResponse)
+async def docker_cleanup_task(task_id: str):
+    """
+    Remove the Docker image built for a specific task and prune dangling
+    build cache. Called by the cleanup watchdog for rejected tasks.
+    """
+    _diag(f"[docker-cleanup] Removing image for task {task_id}")
+    passed, message = svc.remove_task_image(task_id)
+    return PipelineStageResponse(passed=passed, message=message)
+
+
+@router.post("/docker/prune", response_model=PipelineStageResponse)
+async def docker_prune_system():
+    """
+    Aggressive Docker system prune: removes all unused containers,
+    networks, images, and build cache. Called periodically by the
+    cleanup watchdog to reclaim disk space.
+    """
+    _diag("[docker-prune] Running Docker system prune")
+    code, message = svc.prune_docker_system()
+    return PipelineStageResponse(passed=(code == 0), message=message)
+
+
 # ── Benchmark execution ───────────────────────────────────────────────────────
 
 @router.post("/benchmark/execute", response_model=PipelineStageResponse)
