@@ -128,6 +128,7 @@ export default function Whitepaper() {
                                 ["07", "Task Format Specification", "#task-format"],
                                 ["08", "Project Goals", "#goals"],
                                 ["09", "Current Status & Limitations", "#status"],
+                                ["10", "Future Plans", "#roadmap"],
                             ].map(([num, label, href]) => (
                                 <a
                                     key={href}
@@ -396,7 +397,10 @@ export default function Whitepaper() {
                         All model calls go through OpenRouter, which provides access to hundreds of models
                         (DeepSeek, Claude, GPT, Gemini, Llama, and others) through a single API key. This
                         means the easiness and frontier model designations can be updated in the admin dashboard
-                        as the field evolves without changing any code.
+                        as the field evolves without changing any code. Using a single provider avoids the
+                        technical debt of building and maintaining separate integration modules for each LLM,
+                        and lets us swap between frontier models like Claude Opus, GPT, DeepSeek, or Grok
+                        from the UI with no backend changes.
                     </p>
                 </Section>
 
@@ -526,7 +530,7 @@ export default function Whitepaper() {
                             ["BIP-39 phrase storage", "The current implementation stores the auto-generated recovery phrase on disk, which is a security risk in production. Future versions should prompt the operator for their own phrase."],
                             ["OpenRouter dependency", "All LLM calls go through OpenRouter. If OpenRouter has an outage, the quality assessment and calibration stages can't complete. A fallback provider layer is on the roadmap."],
                             ["Human approval bottleneck", "After the pipeline passes, a human reviewer must approve the task for the registry. This is intentional as a quality gate, but it introduces latency. Tooling to make the review process faster is a near-term priority."],
-                            ["Benchmark type coverage", "The current task format is optimized for terminal-based software engineering challenges. Extending the format to support other agent task types (web tasks, multi-modal tasks) requires design work."],
+                            ["Benchmark type coverage", "The current task format is optimized for terminal-based software engineering challenges. Extending the format to support other benchmark types, including General Knowledge, Mathematical Reasoning, Multimodal, Long-Context & Retrieval, Safety & Alignment, Instruction Following, Domain-Specific, Creative & Open-Ended, and Efficiency & Deployment, requires design work for each category."],
                             ["Scale testing", "The pipeline has been tested with individual tasks and small batches. Behavior under high submission volume (many concurrent pipeline runs, many parallel CrewAI probes) hasn't been formally characterized."],
                         ].map(([title, desc]) => (
                             <div
@@ -537,6 +541,48 @@ export default function Whitepaper() {
                                 <span
                                     className="font-mono text-[11px] font-medium flex-shrink-0 mt-0.5"
                                     style={{ color: "var(--amber)", minWidth: "180px" }}
+                                >
+                                    {title}
+                                </span>
+                                <span
+                                    className="font-mono text-xs leading-relaxed"
+                                    style={{ color: "var(--subtle)" }}
+                                >
+                                    {desc}
+                                </span>
+                            </div>
+                        ))}
+                    </div>
+                </Section>
+
+                <Section id="roadmap" eyebrow="§10" title="Future Plans">
+                    <p>
+                        After the initial launch milestone, the focus will shift to broadening the
+                        types of benchmarks the platform supports. The current terminal-based format
+                        is well suited for software engineering and coding tasks, but the evaluation infrastructure
+                        is designed to be extensible. The following benchmark categories are planned:
+                    </p>
+                    <div className="space-y-2 mt-2">
+                        {[
+                            ["General Knowledge", "Tasks that test a model's breadth of factual knowledge across domains, with verifiable answer keys."],
+                            ["Mathematical Reasoning", "Multi-step math problems, proofs, and quantitative reasoning tasks with deterministic grading."],
+                            ["Multimodal", "Tasks combining images, code, and text inputs that require understanding across modalities."],
+                            ["Agentic & Tool Use", "Tasks requiring agents to interact with APIs, databases, browsers, and other external tools to accomplish goals."],
+                            ["Long-Context & Retrieval", "Tasks that test a model's ability to handle large contexts, retrieve relevant information, and reason across long documents."],
+                            ["Safety & Alignment", "Red-teaming, prompt injection detection, and alignment evaluation tasks with structured scoring rubrics."],
+                            ["Instruction Following", "Tasks that test how precisely a model follows multi-part, constrained instructions with clear success criteria."],
+                            ["Domain-Specific", "Specialized benchmarks for fields like medicine, law, finance, and engineering with expert-validated ground truth."],
+                            ["Creative & Open-Ended", "Tasks evaluating creative writing, brainstorming, and open-ended problem solving with structured human evaluation."],
+                            ["Efficiency & Deployment", "Benchmarks measuring inference speed, memory usage, token efficiency, and deployment characteristics."],
+                        ].map(([title, desc]) => (
+                            <div
+                                key={title}
+                                className="flex gap-3 py-3"
+                                style={{ borderBottom: "1px solid var(--border)" }}
+                            >
+                                <span
+                                    className="font-mono text-[11px] font-medium flex-shrink-0 mt-0.5"
+                                    style={{ color: "var(--green)", minWidth: "180px" }}
                                 >
                                     {title}
                                 </span>

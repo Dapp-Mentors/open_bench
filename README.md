@@ -42,7 +42,7 @@ Stages 6 (Easiness) and 7 (Difficulty) use a **CrewAI multi-agent probe**, four 
 | Backend | Python (FastAPI), SQLAlchemy, PostgreSQL |
 | Event Pipeline | Inngest (durable functions) |
 | Embeddings | Ollama (`nomic-embed-text`) |
-| LLM Provider | OpenRouter (sole provider - DeepSeek, Claude, GPT, Gemini, Llama, and hundreds more via a single API key) |
+| LLM Provider | OpenRouter (sole provider - DeepSeek, Claude, GPT, Gemini, Llama, and hundreds more via a single API key; avoids per-model integration modules and lets you swap frontier models from the UI) |
 | Multi-Agent Probes | CrewAI (sequential agents: Analyst -> Architect -> Implementer -> Verifier) |
 | Storage | Sia Network via `@siafoundation/sia-storage` SDK |
 | Metadata | Sia Indexd |
@@ -197,7 +197,7 @@ task-name/
 ## Running a Benchmark
 
 1. All pipeline stages pass, including the Sia upload (Stage 9). A human reviewer then approves the task for the registry.
-2. Configure a model via OpenRouter in the admin dashboard (the sole LLM provider, any model available on OpenRouter can be used).
+2. Configure a model via OpenRouter in the admin dashboard (the sole LLM provider, any model available on OpenRouter can be used). This avoids the technical debt of building separate integration modules for each LLM and lets you swap between Claude Opus, GPT, DeepSeek, Grok, and others from the UI with no backend changes.
 3. Start a benchmark run. The agent gets an isolated Docker container with the broken environment.
 4. After execution, the verifier checks `reward.txt` and the result is uploaded to Sia Network.
 
@@ -387,7 +387,7 @@ Stages 6 (Easiness) and 7 (Difficulty) share a common probe infrastructure in `p
 - **Staggered parallelism:** 5 runs launch in parallel with a 12-second stagger between each start, preventing rate-limit collisions.
 - **Early-exit:** The moment the outcome is decided (e.g., 1 pass + 1 fail for easiness), remaining runs are cancelled to save cost.
 - **Per-task locks:** An `asyncio.Lock` per task ID prevents concurrent probe executions from double-spending pipeline calls.
-- **Model roles:** Each stage uses a different model from the DB, `easiness_model` (fast/cheap) for Stage 6, `frontier_model` (strong) for Stage 7. These are configured in the admin dashboard. All models are accessed through **OpenRouter**, the sole LLM provider.
+- **Model roles:** Each stage uses a different model from the DB, `easiness_model` (fast/cheap) for Stage 6, `frontier_model` (strong) for Stage 7. These are configured in the admin dashboard. All models are accessed through **OpenRouter**, the sole LLM provider. Using a single provider avoids the technical debt of building and maintaining separate integration modules for each LLM, and lets you swap between frontier models like Claude Opus, GPT, DeepSeek, or Grok from the UI with no backend changes.
 
 ### Sia Integration
 
@@ -416,6 +416,27 @@ Stages 6 (Easiness) and 7 (Difficulty) share a common probe infrastructure in `p
 ### Benchmark Types
 
 Projects are categorized by benchmark type (e.g., Coding & Software, Mathematical Reasoning, Agentic Tool Use). Types are managed by super admins in the admin dashboard. They can activate/deactivate types and control sort order. Only active types appear in the project creation form's type selector.
+
+---
+
+## Future Plans
+
+After the initial launch milestone, the focus will shift to broadening the types of benchmarks the platform supports. The current terminal-based format is well suited for software engineering and coding tasks, but the evaluation infrastructure is designed to be extensible. The following benchmark categories are planned:
+
+| Category | Description |
+|----------|-------------|
+| General Knowledge | Tasks that test a model's breadth of factual knowledge across domains, with verifiable answer keys. |
+| Mathematical Reasoning | Multi-step math problems, proofs, and quantitative reasoning tasks with deterministic grading. |
+| Multimodal | Tasks combining images, code, and text inputs that require understanding across modalities. |
+| Agentic & Tool Use | Tasks requiring agents to interact with APIs, databases, browsers, and other external tools to accomplish goals. |
+| Long-Context & Retrieval | Tasks that test a model's ability to handle large contexts, retrieve relevant information, and reason across long documents. |
+| Safety & Alignment | Red-teaming, prompt injection detection, and alignment evaluation tasks with structured scoring rubrics. |
+| Instruction Following | Tasks that test how precisely a model follows multi-part, constrained instructions with clear success criteria. |
+| Domain-Specific | Specialized benchmarks for fields like medicine, law, finance, and engineering with expert-validated ground truth. |
+| Creative & Open-Ended | Tasks evaluating creative writing, brainstorming, and open-ended problem solving with structured human evaluation. |
+| Efficiency & Deployment | Benchmarks measuring inference speed, memory usage, token efficiency, and deployment characteristics. |
+
+Each category will require its own task format specification, quality criteria, and calibration thresholds, but the core pipeline and verification infrastructure will remain shared.
 
 ---
 
