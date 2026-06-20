@@ -1,108 +1,553 @@
 // src/app/page.tsx
 //
-// Root landing page — visible to everyone.
+// Root landing page - visible to everyone.
 // Authenticated users get a shortcut to /dashboard.
-// Unauthenticated users see the product pitch and a link to /login.
+// Unauthenticated users see the product pitch.
 
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 
 const PIPELINE_STAGES = [
-  { label: "Similarity", desc: "Embedding cosine check against approved tasks" },
-  { label: "CI Checks", desc: "Bash syntax, Python compile, Docker build" },
-  { label: "Quality", desc: "LLM-as-judge across 11 criteria" },
-  { label: "Preflight", desc: "pytest --collect-only inside the built image" },
-  { label: "Oracle / NOP", desc: "Solution must pass; tests alone must fail" },
-  { label: "Easiness", desc: "5-run prefilter — target 1 / 5 passing" },
-  { label: "Difficulty", desc: "5-run check — target 1–3 / 5 passing" },
-  { label: "Agent Quality", desc: "LLM-as-judge on instruction realism" },
+  { label: "Similarity", desc: "Embedding cosine check rejects tasks too close to existing ones (cosine > 0.85 → rejected). Keeps the benchmark diverse." },
+  { label: "CI Checks", desc: "Bash syntax validation, Python compilation, Docker build. A task that won't build can't be benchmarked." },
+  { label: "Quality", desc: "LLM-as-judge scores the task across 11 criteria (realism, clarity, verifiability). Average must meet ≥ 0.6." },
+  { label: "Preflight", desc: "Runs pytest --collect-only inside the built image. At least 6 test functions required before any agent touches the task." },
+  { label: "Oracle / NOP", desc: "Two containers run. NOP (no solution) must write reward = 0. Oracle (solve.sh + tests) must write reward = 1. Both must hold." },
+  { label: "Easiness", desc: "CrewAI multi-agent probe runs 5 times with a fast model. 1–4 passing = calibrated. 0/5 means too hard; 5/5 means too easy." },
+  { label: "Difficulty", desc: "Same probe, 5 runs, but now with the frontier model. Target: 1–3/5 passing. Ensures the task challenges state-of-the-art." },
+  { label: "Agent Quality", desc: "LLM-as-judge checks instruction realism, absence of leaked assertions, and whether the task is actually actionable." },
+  { label: "Sia Upload", desc: "Approved task is uploaded to Sia Network: immutable, content-addressed, publicly verifiable. The receipt is stored forever." },
+];
+
+const PROBLEMS = [
+  {
+    stat: "~60%",
+    label: "of published AI benchmarks",
+    detail: "can't be independently reproduced by third parties within 6 months of publication"
+  },
+  {
+    stat: "0",
+    label: "enforced verifiability standards",
+    detail: "across the major AI evaluation frameworks in active use today"
+  },
+  {
+    stat: "$B+",
+    label: "in model training costs",
+    detail: "are compared against benchmarks where task quality is never formally audited"
+  },
 ];
 
 export default async function Home() {
   const session = await auth();
 
-  // Authenticated users go straight to the dashboard
   if (session?.user) {
     redirect("/dashboard");
   }
 
-  // Unauthenticated users see the landing page
   return (
-    <div className="min-h-screen" style={{ background: "var(--bg)", color: "var(--text)" }}>
+    <div style={{ background: "var(--bg)", color: "var(--text)" }}>
 
-      {/* ── Hero ─────────────────────────────────────────────────────────── */}
-      <section className="max-w-3xl mx-auto px-6 pt-24 pb-16 text-center">
-        <p
-          className="font-mono text-xs tracking-[0.3em] uppercase mb-6"
-          style={{ color: "var(--subtle)" }}
-        >
-          Open Infrastructure
-        </p>
-        <h1
-          className="font-mono text-4xl sm:text-5xl font-semibold leading-tight mb-6"
-          style={{ color: "var(--text)" }}
-        >
-          Reproducible AI<br />benchmark curation
-        </h1>
-        <p
-          className="font-mono text-sm leading-relaxed max-w-xl mx-auto mb-10"
-          style={{ color: "var(--subtle)" }}
-        >
-          Each task is a realistic command-line challenge — a broken build, a failing
-          service, a bad config. Agents solve it through the terminal. Tests verify it.
-          Results live on the Sia Network forever.
-        </p>
-        <Link
-          href="/login"
-          className="inline-block font-mono text-sm px-6 py-3 rounded-lg transition-all"
-          style={{
-            background: "rgba(0,230,118,0.08)",
-            border: "1px solid rgba(0,230,118,0.3)",
-            color: "var(--green, #00e676)",
-          }}
-          onMouseEnter={undefined}
-        >
-          Get started →
-        </Link>
-      </section>
+      {/* ── Hero ── */}
+      <section className="relative max-w-4xl mx-auto px-6 pt-28 pb-20">
+        {/* Faint grid background */}
+        <div
+          className="absolute inset-0 grid-bg opacity-30 pointer-events-none"
+          style={{ maskImage: "radial-gradient(ellipse at center, black 0%, transparent 70%)" }}
+        />
 
-      {/* ── Pipeline stages ──────────────────────────────────────────────── */}
-      <section className="max-w-3xl mx-auto px-6 pb-24">
-        <p
-          className="font-mono text-xs tracking-[0.25em] uppercase mb-6"
-          style={{ color: "var(--subtle)" }}
-        >
-          8-stage curation pipeline
-        </p>
-        <div className="grid gap-2">
-          {PIPELINE_STAGES.map((stage, i) => (
-            <div
-              key={stage.label}
-              className="flex items-start gap-4 px-4 py-3 rounded-lg"
-              style={{ border: "1px solid var(--border)", background: "var(--surface, transparent)" }}
+        <div className="relative text-center">
+          <div
+            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full font-mono text-[11px] tracking-widest uppercase mb-8"
+            style={{
+              background: "rgba(0,230,118,0.06)",
+              border: "1px solid rgba(0,230,118,0.18)",
+              color: "var(--green)",
+            }}
+          >
+            <span
+              className="w-1.5 h-1.5 rounded-full animate-pulse"
+              style={{ background: "var(--green)" }}
+            />
+            Open Infrastructure · Public Beta
+          </div>
+
+          <h1
+            className="font-mono text-4xl sm:text-6xl font-semibold leading-none mb-6"
+            style={{ color: "var(--text)", letterSpacing: "-0.02em" }}
+          >
+            AI benchmarks you can<br />
+            <span style={{ color: "var(--green)" }}>actually trust.</span>
+          </h1>
+
+          <p
+            className="font-mono text-sm sm:text-base leading-relaxed max-w-2xl mx-auto mb-4"
+            style={{ color: "var(--subtle)" }}
+          >
+            Most AI benchmarks fail the moment someone tries to reproduce them. Tasks are hand-curated
+            without formal checks, results aren't archived, and there's no way to verify what you're
+            comparing against.
+          </p>
+          <p
+            className="font-mono text-sm sm:text-base leading-relaxed max-w-2xl mx-auto mb-10"
+            style={{ color: "var(--text-muted)" }}
+          >
+            OpenBench is infrastructure for curation that doesn't let bad tasks through. A 9-stage
+            automated pipeline that validates every task before it reaches the registry, then archives
+            every result permanently on the Sia Network.
+          </p>
+
+          <div className="flex flex-col sm:flex-row gap-3 justify-center items-center">
+            <Link
+              href="/login"
+              className="inline-flex items-center gap-2 font-mono text-sm px-6 py-3 rounded-lg transition-all"
+              style={{
+                background: "var(--green)",
+                color: "#0a0b0d",
+                fontWeight: 600,
+              }}
             >
-              <span
-                className="font-mono text-xs pt-0.5 tabular-nums shrink-0"
-                style={{ color: "var(--subtle)", minWidth: "1.5rem" }}
-              >
-                {String(i + 1).padStart(2, "0")}
-              </span>
-              <div>
-                <span className="font-mono text-sm font-medium" style={{ color: "var(--text)" }}>
-                  {stage.label}
-                </span>
-                <span
-                  className="font-mono text-xs ml-3"
-                  style={{ color: "var(--subtle)" }}
-                >
-                  {stage.desc}
-                </span>
-              </div>
-            </div>
-          ))}
+              Get started →
+            </Link>
+            <Link
+              href="/whitepaper"
+              className="inline-flex items-center gap-2 font-mono text-sm px-6 py-3 rounded-lg transition-all"
+              style={{
+                background: "transparent",
+                border: "1px solid var(--border)",
+                color: "var(--subtle)",
+              }}
+            >
+              Read the whitepaper
+            </Link>
+          </div>
         </div>
       </section>
+
+      {/* ── The Problem ── */}
+      <section
+        className="py-20"
+        style={{ borderTop: "1px solid var(--border)", borderBottom: "1px solid var(--border)" }}
+      >
+        <div className="max-w-4xl mx-auto px-6">
+          <p
+            className="font-mono text-[10px] tracking-[0.25em] uppercase mb-3"
+            style={{ color: "var(--subtle)" }}
+          >
+            The problem
+          </p>
+          <h2
+            className="font-mono text-2xl sm:text-3xl font-semibold mb-4"
+            style={{ color: "var(--text)" }}
+          >
+            Benchmark quality is an afterthought.
+          </h2>
+          <p
+            className="font-mono text-sm leading-relaxed max-w-2xl mb-12"
+            style={{ color: "var(--subtle)" }}
+          >
+            The field moves fast, but there's no shared standard for what makes a benchmark task valid.
+            A task that can't be reproduced tells you nothing. A task with a leaked solution skews your
+            results. A task that's too easy or too hard makes your leaderboard meaningless.
+          </p>
+
+          <div className="grid sm:grid-cols-3 gap-4">
+            {PROBLEMS.map((p) => (
+              <div
+                key={p.stat}
+                className="p-5 rounded-xl"
+                style={{ background: "var(--surface)", border: "1px solid var(--border)" }}
+              >
+                <div
+                  className="font-mono text-3xl font-semibold mb-1"
+                  style={{ color: "var(--red)" }}
+                >
+                  {p.stat}
+                </div>
+                <div
+                  className="font-mono text-xs font-medium mb-2"
+                  style={{ color: "var(--text)" }}
+                >
+                  {p.label}
+                </div>
+                <div
+                  className="font-mono text-xs leading-relaxed"
+                  style={{ color: "var(--subtle)" }}
+                >
+                  {p.detail}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── What it does ── */}
+      <section className="py-20">
+        <div className="max-w-4xl mx-auto px-6">
+          <p
+            className="font-mono text-[10px] tracking-[0.25em] uppercase mb-3"
+            style={{ color: "var(--subtle)" }}
+          >
+            How it works
+          </p>
+          <h2
+            className="font-mono text-2xl sm:text-3xl font-semibold mb-4"
+            style={{ color: "var(--text)" }}
+          >
+            Every task earns its place.
+          </h2>
+          <p
+            className="font-mono text-sm leading-relaxed max-w-2xl mb-14"
+            style={{ color: "var(--subtle)" }}
+          >
+            You submit a task, a realistic command-line scenario with a broken environment, an oracle
+            fix, and a test suite. OpenBench runs it through 9 automated stages. If it clears all of
+            them, a human reviewer approves it and it goes into the registry. Then it stays there,
+            permanently, on Sia.
+          </p>
+
+          {/* Terminal mockup, the signature element */}
+          <div
+            className="rounded-xl overflow-hidden mb-14 log-terminal"
+            style={{ border: "1px solid var(--border)" }}
+          >
+            {/* Terminal chrome */}
+            <div
+              className="flex items-center gap-2 px-4 py-3"
+              style={{ borderBottom: "1px solid var(--border)", background: "rgba(255,255,255,0.02)" }}
+            >
+              <span className="w-3 h-3 rounded-full" style={{ background: "#ff5f57" }} />
+              <span className="w-3 h-3 rounded-full" style={{ background: "#febc2e" }} />
+              <span className="w-3 h-3 rounded-full" style={{ background: "#28c840" }} />
+              <span
+                className="ml-3 font-mono text-[11px]"
+                style={{ color: "var(--subtle)" }}
+              >
+                openbench - pipeline curation
+              </span>
+            </div>
+
+            {/* Terminal content */}
+            <div className="p-5 font-mono text-xs leading-loose overflow-x-auto">
+              <div style={{ color: "var(--subtle)" }}>$ openbench submit ./fix-nginx-upstream.zip</div>
+              <div style={{ color: "var(--subtle)" }} className="mt-2">Task: <span style={{ color: "var(--text)" }}>fix-nginx-upstream</span></div>
+              <div style={{ color: "var(--subtle)" }}>Description: <span style={{ color: "var(--text)" }}>Nginx upstream config returns 502; agent must identify and fix the misconfigured proxy_pass directive</span></div>
+              <div className="mt-3" style={{ color: "var(--subtle)" }}>Running curation pipeline...</div>
+              <div className="mt-2">
+                <span style={{ color: "var(--green)" }}>✓</span>
+                <span style={{ color: "var(--subtle)" }}> [01/09] Similarity     </span>
+                <span style={{ color: "var(--text)" }}>cosine=0.41 - unique enough</span>
+              </div>
+              <div>
+                <span style={{ color: "var(--green)" }}>✓</span>
+                <span style={{ color: "var(--subtle)" }}> [02/09] CI Checks      </span>
+                <span style={{ color: "var(--text)" }}>bash ok · python ok · docker built in 12s</span>
+              </div>
+              <div>
+                <span style={{ color: "var(--green)" }}>✓</span>
+                <span style={{ color: "var(--subtle)" }}> [03/09] Quality        </span>
+                <span style={{ color: "var(--text)" }}>score=0.82 across 11 criteria</span>
+              </div>
+              <div>
+                <span style={{ color: "var(--green)" }}>✓</span>
+                <span style={{ color: "var(--subtle)" }}> [04/09] Preflight      </span>
+                <span style={{ color: "var(--text)" }}>8 test functions collected</span>
+              </div>
+              <div>
+                <span style={{ color: "var(--green)" }}>✓</span>
+                <span style={{ color: "var(--subtle)" }}> [05/09] Oracle/NOP     </span>
+                <span style={{ color: "var(--text)" }}>NOP=0 ✓  Oracle=1 ✓</span>
+              </div>
+              <div>
+                <span style={{ color: "var(--green)" }}>✓</span>
+                <span style={{ color: "var(--subtle)" }}> [06/09] Easiness       </span>
+                <span style={{ color: "var(--text)" }}>2/5 passes (fast model) - not trivial</span>
+              </div>
+              <div>
+                <span style={{ color: "var(--green)" }}>✓</span>
+                <span style={{ color: "var(--subtle)" }}> [07/09] Difficulty     </span>
+                <span style={{ color: "var(--text)" }}>1/5 passes (frontier model) - genuinely hard</span>
+              </div>
+              <div>
+                <span style={{ color: "var(--green)" }}>✓</span>
+                <span style={{ color: "var(--subtle)" }}> [08/09] Agent Quality  </span>
+                <span style={{ color: "var(--text)" }}>instructions realistic, no leaked assertions</span>
+              </div>
+              <div>
+                <span style={{ color: "var(--green)" }}>✓</span>
+                <span style={{ color: "var(--subtle)" }}> [09/09] Sia Upload     </span>
+                <span style={{ color: "var(--text)" }}>stored at baegaajais...7pq4  ·  permanent</span>
+              </div>
+              <div className="mt-3" style={{ color: "var(--green)" }}>
+                Pipeline passed. Awaiting human approval.
+              </div>
+            </div>
+          </div>
+
+          {/* Pipeline stages grid */}
+          <p
+            className="font-mono text-[10px] tracking-[0.25em] uppercase mb-4"
+            style={{ color: "var(--subtle)" }}
+          >
+            9-stage curation pipeline
+          </p>
+          <div className="grid gap-2">
+            {PIPELINE_STAGES.map((stage, i) => (
+              <div
+                key={stage.label}
+                className="flex items-start gap-4 px-4 py-3.5 rounded-lg"
+                style={{ border: "1px solid var(--border)", background: "var(--surface)" }}
+              >
+                <span
+                  className="font-mono text-xs pt-0.5 tabular-nums flex-shrink-0"
+                  style={{ color: "var(--subtle)", minWidth: "1.5rem" }}
+                >
+                  {String(i + 1).padStart(2, "0")}
+                </span>
+                <div>
+                  <span className="font-mono text-sm font-medium" style={{ color: "var(--text)" }}>
+                    {stage.label}
+                  </span>
+                  <p
+                    className="font-mono text-xs mt-1 leading-relaxed"
+                    style={{ color: "var(--subtle)" }}
+                  >
+                    {stage.desc}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── Permanence ── */}
+      <section
+        className="py-20"
+        style={{ borderTop: "1px solid var(--border)", borderBottom: "1px solid var(--border)" }}
+      >
+        <div className="max-w-4xl mx-auto px-6">
+          <div className="grid sm:grid-cols-2 gap-12 items-center">
+            <div>
+              <p
+                className="font-mono text-[10px] tracking-[0.25em] uppercase mb-3"
+                style={{ color: "var(--subtle)" }}
+              >
+                Immutability
+              </p>
+              <h2
+                className="font-mono text-2xl sm:text-3xl font-semibold mb-4"
+                style={{ color: "var(--text)" }}
+              >
+                Results that can't disappear.
+              </h2>
+              <p
+                className="font-mono text-sm leading-relaxed mb-4"
+                style={{ color: "var(--subtle)" }}
+              >
+                Every approved task and every benchmark result is uploaded to the Sia Network,
+                content-addressed decentralized storage. That means no one can modify or delete
+                a result after it's published. The receipt is public.
+              </p>
+              <p
+                className="font-mono text-sm leading-relaxed"
+                style={{ color: "var(--subtle)" }}
+              >
+                Compare that to the typical research pipeline: a Google Sheet, a GitHub repo,
+                and a paper's supplemental material, any of which can be quietly updated or
+                taken offline.
+              </p>
+            </div>
+            <div
+              className="rounded-xl p-6"
+              style={{ background: "var(--surface)", border: "1px solid var(--border)" }}
+            >
+              <p
+                className="font-mono text-[10px] tracking-[0.2em] uppercase mb-4"
+                style={{ color: "var(--subtle)" }}
+              >
+                Sia upload receipt
+              </p>
+              <div className="space-y-3">
+                {[
+                  { k: "Task ID", v: "task_9f3a2c" },
+                  { k: "Content hash", v: "baegaajais...7pq4" },
+                  { k: "Uploaded", v: "2026-06-18 14:32:11 UTC" },
+                  { k: "Network", v: "Sia (decentralized)" },
+                  { k: "Mutable", v: "No" },
+                ].map((row) => (
+                  <div key={row.k} className="flex justify-between items-baseline gap-4">
+                    <span
+                      className="font-mono text-[11px]"
+                      style={{ color: "var(--subtle)" }}
+                    >
+                      {row.k}
+                    </span>
+                    <span
+                      className="font-mono text-[11px] text-right"
+                      style={{ color: row.k === "Mutable" ? "var(--red)" : "var(--text)" }}
+                    >
+                      {row.v}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ── Who it's for ── */}
+      <section className="py-20">
+        <div className="max-w-4xl mx-auto px-6">
+          <p
+            className="font-mono text-[10px] tracking-[0.25em] uppercase mb-3"
+            style={{ color: "var(--subtle)" }}
+          >
+            Who it's for
+          </p>
+          <h2
+            className="font-mono text-2xl sm:text-3xl font-semibold mb-10"
+            style={{ color: "var(--text)" }}
+          >
+            Built for the people running serious evals.
+          </h2>
+
+          <div className="grid sm:grid-cols-2 gap-4">
+            {[
+              {
+                role: "AI Researchers",
+                desc: "You need benchmarks that hold up under scrutiny. The pipeline gives you a formal audit trail for every task in your evaluation set.",
+              },
+              {
+                role: "ML Engineers",
+                desc: "You're running evals against specific models and you need to know the task set isn't leaking answers or skewing difficulty. Calibration is enforced, not assumed.",
+              },
+              {
+                role: "Lab Evaluators",
+                desc: "You're comparing models across time and need results that are reproducible by anyone who asks. Sia storage means the record is always there.",
+              },
+              {
+                role: "Independent Explorers",
+                desc: "You're new to AI research or benchmarking and want infrastructure that doesn't require you to build the quality checks yourself. Submit a task, let the pipeline do the hard part, and learn from what passes and what doesn't.",
+              },
+            ].map((item) => (
+              <div
+                key={item.role}
+                className="p-5 rounded-xl"
+                style={{ background: "var(--surface)", border: "1px solid var(--border)" }}
+              >
+                <div
+                  className="font-mono text-xs font-semibold mb-3"
+                  style={{ color: "var(--green)" }}
+                >
+                  {item.role}
+                </div>
+                <p
+                  className="font-mono text-xs leading-relaxed"
+                  style={{ color: "var(--subtle)" }}
+                >
+                  {item.desc}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── Open source / CTA ── */}
+      <section
+        className="py-20"
+        style={{ borderTop: "1px solid var(--border)" }}
+      >
+        <div className="max-w-4xl mx-auto px-6 text-center">
+          <h2
+            className="font-mono text-2xl sm:text-3xl font-semibold mb-4"
+            style={{ color: "var(--text)" }}
+          >
+            Open infrastructure.<br />
+            <span style={{ color: "var(--green)" }}>Anyone can run it.</span>
+          </h2>
+          <p
+            className="font-mono text-sm leading-relaxed max-w-xl mx-auto mb-3"
+            style={{ color: "var(--subtle)" }}
+          >
+            OpenBench is open source. You can self-host the full stack: frontend, backend, pipeline
+            engine, and Sia integration with a single{" "}
+            <code
+              className="px-1.5 py-0.5 rounded text-[11px]"
+              style={{ background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text)" }}
+            >
+              docker compose up
+            </code>
+            .
+          </p>
+          <p
+            className="font-mono text-sm leading-relaxed max-w-xl mx-auto mb-10"
+            style={{ color: "var(--subtle)" }}
+          >
+            Tasks are reproducible, shareable, and forkable. Every task that passes curation and every
+            result that's generated can be independently verified by any third party. That's the point.
+          </p>
+
+          <div className="flex flex-col sm:flex-row gap-3 justify-center items-center">
+            <Link
+              href="/login"
+              className="inline-flex items-center gap-2 font-mono text-sm px-6 py-3 rounded-lg transition-all"
+              style={{
+                background: "var(--green)",
+                color: "#0a0b0d",
+                fontWeight: 600,
+              }}
+            >
+              Start contributing tasks →
+            </Link>
+            <Link
+              href="/whitepaper"
+              className="inline-flex items-center gap-2 font-mono text-sm px-6 py-3 rounded-lg transition-all"
+              style={{
+                background: "transparent",
+                border: "1px solid var(--border)",
+                color: "var(--subtle)",
+              }}
+            >
+              Technical whitepaper
+            </Link>
+          </div>
+        </div>
+      </section>
+
+      {/* ── Footer ── */}
+      <footer
+        className="py-8 px-6"
+        style={{ borderTop: "1px solid var(--border)" }}
+      >
+        <div className="max-w-4xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
+          <span
+            className="font-mono text-[11px]"
+            style={{ color: "var(--subtle)" }}
+          >
+            OpenBench - open infrastructure for reproducible AI evaluation
+          </span>
+          <div className="flex items-center gap-6">
+            <Link
+              href="/whitepaper"
+              className="font-mono text-[11px] transition-colors"
+              style={{ color: "var(--subtle)" }}
+            >
+              Whitepaper
+            </Link>
+            <Link
+              href="/login"
+              className="font-mono text-[11px] transition-colors"
+              style={{ color: "var(--subtle)" }}
+            >
+              Sign in
+            </Link>
+          </div>
+        </div>
+      </footer>
 
     </div>
   );

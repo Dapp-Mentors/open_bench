@@ -15,7 +15,7 @@ function hasRole(userRole: Role, required: Role): boolean {
 }
 
 // Routes fully open to the public (no auth required)
-const PUBLIC_PATHS = ["/", "/login", "/unauthorized", "/api/auth", "/api/inngest"];
+const PUBLIC_PATHS = ["/", "/whitepaper", "/login", "/unauthorized", "/api/auth", "/api/inngest"];
 
 // Routes that require super_admin
 const SUPER_ADMIN_PATHS = [

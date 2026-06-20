@@ -1,20 +1,20 @@
 # OpenBench
 
-Open infrastructure for reproducible AI benchmark curation and evaluation. Each task is a realistic command-line challenge — a broken build, a failing service, a bad config. AI agents solve it through the terminal. Tests verify it. Results live on the Sia Network forever.
+Open infrastructure for reproducible AI benchmark curation and evaluation. Each task is a realistic command-line challenge, a broken build, a failing service, a bad config. AI agents solve it through the terminal. Tests verify it. Results live on the Sia Network forever.
 
 ---
 
 ## What it shows
 
-Submit a task ZIP → watch it move through 9 curation pipeline stages → approve it to the registry → run benchmarks against any model → results are content-addressed on Sia Network.
+Submit a task ZIP, watch it move through 9 curation pipeline stages, approve it to the registry, run benchmarks against any model, and results are content-addressed on Sia Network.
 
 ```
-Submit → Similarity → CI Checks → Quality → Preflight → Oracle/NOP → Easiness → Difficulty → Agent Quality → Sia Upload → Registry
+Submit -> Similarity -> CI Checks -> Quality -> Preflight -> Oracle/NOP -> Easiness -> Difficulty -> Agent Quality -> Sia Upload -> Registry
 ```
 
 Every stage is a durable Inngest function that survives crashes and restarts. Failed stages report exactly what to fix.
 
-Stages 6 (Easiness) and 7 (Difficulty) use a **CrewAI multi-agent probe** — four sequential agents (Task Analyst → Solution Architect → Code Implementer → Test Verifier) run in staggered parallel across 5 attempts. The easiness stage uses a fast/cheap model; the difficulty stage uses the frontier model. Early-exit logic cancels remaining runs the moment the outcome is decided, saving cost.
+Stages 6 (Easiness) and 7 (Difficulty) use a **CrewAI multi-agent probe**, four sequential agents (Task Analyst -> Solution Architect -> Code Implementer -> Test Verifier) run in staggered parallel across 5 attempts. The easiness stage uses a fast/cheap model; the difficulty stage uses the frontier model. Early-exit logic cancels remaining runs the moment the outcome is decided, saving cost.
 
 ---
 
@@ -22,14 +22,14 @@ Stages 6 (Easiness) and 7 (Difficulty) use a **CrewAI multi-agent probe** — fo
 
 | # | Stage | What it does | Threshold |
 |---|-------|-------------|-----------|
-| 1 | Similarity & Diversity | Embedding + cosine comparison against approved tasks | cosine > 0.85 → rejected |
+| 1 | Similarity & Diversity | Embedding + cosine comparison against approved tasks | cosine > 0.85 -> rejected |
 | 2 | CI Checks | Bash syntax, Python compilation, Docker build | All green |
-| 3 | Quality | LLM-as-judge across 11 criteria (realism, clarity, verifiability) | Average ≥ 0.6 |
-| 4 | Preflight | `pytest --collect-only` inside the built image | ≥ 6 test functions |
+| 3 | Quality | LLM-as-judge across 11 criteria (realism, clarity, verifiability) | Average >= 0.6 |
+| 4 | Preflight | `pytest --collect-only` inside the built image | >= 6 test functions |
 | 5 | Oracle / NOP | Two containers: NOP (tests alone must fail), Oracle (solve.sh + tests must pass) | NOP=0, Oracle=1 |
-| 6 | Easiness | CrewAI multi-agent probe ×5 using the **easiness model** (fast/cheap); exactly 1–4/5 must pass | 1–4/5 (0=TOO_HARD, 5=TOO_EASY) |
-| 7 | Difficulty | CrewAI multi-agent probe ×5 using the **frontier model** (strong); exactly 1–3/5 must pass | 1–3/5 (0=TOO_HARD, >3=TOO_EASY) |
-| 8 | Agent Quality | LLM-as-judge on instruction realism, no leaked assertions, actionability | ≥ 70% |
+| 6 | Easiness | CrewAI multi-agent probe x5 using the **easiness model** (fast/cheap); exactly 1-4/5 must pass | 1-4/5 (0=TOO_HARD, 5=TOO_EASY) |
+| 7 | Difficulty | CrewAI multi-agent probe x5 using the **frontier model** (strong); exactly 1-3/5 must pass | 1-3/5 (0=TOO_HARD, >3=TOO_EASY) |
+| 8 | Agent Quality | LLM-as-judge on instruction realism, no leaked assertions, actionability | >= 70% |
 | 9 | Sia Upload | Upload the approved task to Sia Network for immutable, content-addressed storage | Upload succeeds |
 
 ---
@@ -42,8 +42,8 @@ Stages 6 (Easiness) and 7 (Difficulty) use a **CrewAI multi-agent probe** — fo
 | Backend | Python (FastAPI), SQLAlchemy, PostgreSQL |
 | Event Pipeline | Inngest (durable functions) |
 | Embeddings | Ollama (`nomic-embed-text`) |
-| LLM Provider | OpenRouter (sole provider — DeepSeek, Claude, GPT, Gemini, Llama, and hundreds more via a single API key) |
-| Multi-Agent Probes | CrewAI (sequential agents: Analyst → Architect → Implementer → Verifier) |
+| LLM Provider | OpenRouter (sole provider - DeepSeek, Claude, GPT, Gemini, Llama, and hundreds more via a single API key) |
+| Multi-Agent Probes | CrewAI (sequential agents: Analyst -> Architect -> Implementer -> Verifier) |
 | Storage | Sia Network via `@siafoundation/sia-storage` SDK |
 | Metadata | Sia Indexd |
 | Containerization | Docker (sibling containers on host daemon) |
@@ -68,7 +68,7 @@ docker compose up --build
 | PostgreSQL | localhost:5432 | Database |
 | Ollama | localhost:11434 | Local embeddings |
 
-When the backend boots it eagerly initialises the Sia client. If Sia is unreachable or unapproved, it gracefully falls into **demo mode** — uploads and pipeline stages are simulated with realistic delays. The UI is identical either way; the mode badge in the top nav tells you which you're in.
+When the backend boots it eagerly initialises the Sia client. If Sia is unreachable or unapproved, it gracefully falls into **demo mode**. Uploads and pipeline stages are simulated with realistic delays. The UI is identical either way; the mode badge in the top nav tells you which you're in.
 
 ### Without Docker (development)
 
@@ -88,7 +88,7 @@ The defaults work out of the box. Key variables:
 |----------|---------|-------------|
 | `DATABASE_URL` | `postgresql+asyncpg://...` | PostgreSQL connection string |
 | `OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama endpoint |
-| `OPENROUTER_API_KEY` | — | Sole LLM provider API key (get one at https://openrouter.ai/keys) |
+| `OPENROUTER_API_KEY` | - | Sole LLM provider API key (get one at https://openrouter.ai/keys) |
 | `SIA_MODE` | `auto` | `auto` / `live` / `demo` |
 | `SIA_INDEXER_URL` | `https://sia.storage` | Sia indexer endpoint |
 | `SIA_APP_ID` | `6f70656e6275636b6574...` | 32-byte hex app identity |
@@ -96,7 +96,7 @@ The defaults work out of the box. Key variables:
 #### 2. Start the stack (correct order)
 
 ```bash
-# Terminal 1 — PostgreSQL
+# Terminal 1 - PostgreSQL
 docker run -d --name openbench_pg \
   -e POSTGRES_USER=openbench \
   -e POSTGRES_PASSWORD=openbench_secret \
@@ -104,7 +104,7 @@ docker run -d --name openbench_pg \
   -p 5432:5432 \
   postgres:16-alpine
 
-# Terminal 2 — Ollama
+# Terminal 2 - Ollama
 docker run -d --name openbench_ollama \
   -p 11434:11434 \
   -v ollama_data:/root/.ollama \
@@ -113,7 +113,7 @@ docker run -d --name openbench_ollama \
 # Pull the embedding model
 docker exec openbench_ollama ollama pull nomic-embed-text:latest
 
-# Terminal 3 — Backend (start AFTER Postgres + Ollama are ready)
+# Terminal 3 - Backend (start AFTER Postgres + Ollama are ready)
 cd backend && python -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
 uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
@@ -129,15 +129,15 @@ The backend eagerly initialises the Sia client on boot. Watch the logs for the a
 ╚══════════════════════════════════════════════════════════════╝
 ```
 
-If Sia is unreachable or you skip approval, the backend falls into **demo mode** — no action required.
+If Sia is unreachable or you skip approval, the backend falls into **demo mode** with no action required.
 
 ```bash
-# Terminal 4 — Inngest (start AFTER backend is running)
+# Terminal 4 - Inngest (start AFTER backend is running)
 npx inngest-cli@latest dev \
   -u http://localhost:8000/api/inngest \
   --no-discovery --no-poll --persist
 
-# Terminal 5 — Frontend (start AFTER backend is ready)
+# Terminal 5 - Frontend (start AFTER backend is ready)
 cd frontend && npm install && npm run dev
 ```
 
@@ -178,7 +178,7 @@ task-name/
 ├── environment/
 │   └── Dockerfile          # The broken environment the agent must fix
 ├── solution/
-│   └── solve.sh            # The oracle fix — tests must fail before this runs
+│   └── solve.sh            # The oracle fix, tests must fail before this runs
 └── tests/
     ├── test.sh             # Test harness entrypoint
     ├── test_*.py           # Python test functions (or JS/Hardhat equivalents)
@@ -190,15 +190,15 @@ task-name/
   - NOP run (no solution): must write `0`
   - Oracle run (after `solve.sh`): must write `1`
 - At least 6 test functions required (Python `def test_*` or JS `it(...)`/`test(...)`)
-- No self-reporting — the verifier writes the result
+- No self-reporting, the verifier writes the result
 
 ---
 
 ## Running a Benchmark
 
 1. All pipeline stages pass, including the Sia upload (Stage 9). A human reviewer then approves the task for the registry.
-2. Configure a model via OpenRouter in the admin dashboard (the sole LLM provider — any model available on OpenRouter can be used).
-3. Start a benchmark run — the agent gets an isolated Docker container with the broken environment.
+2. Configure a model via OpenRouter in the admin dashboard (the sole LLM provider, any model available on OpenRouter can be used).
+3. Start a benchmark run. The agent gets an isolated Docker container with the broken environment.
 4. After execution, the verifier checks `reward.txt` and the result is uploaded to Sia Network.
 
 ---
@@ -235,9 +235,9 @@ openbench/
 │       └── services/
 │           ├── agent_prompt.py   # LLM prompt building (initial + continuation)
 │           ├── agent_quality.py  # LLM-as-judge for instructions
-│           ├── crew_agent.py     # CrewAI multi-agent probe (Analyst → Architect → Implementer → Verifier)
-│           ├── difficulty.py     # Stage 7 — difficulty probe (frontier model, 5 runs, 1–3/5 pass)
-│           ├── easiness.py       # Stage 6 — easiness prefilter (fast model, 5 runs, 1–4/5 pass)
+│           ├── crew_agent.py     # CrewAI multi-agent probe (Analyst -> Architect -> Implementer -> Verifier)
+│           ├── difficulty.py     # Stage 7 - difficulty probe (frontier model, 5 runs, 1-3/5 pass)
+│           ├── easiness.py       # Stage 6 - easiness prefilter (fast model, 5 runs, 1-4/5 pass)
 │           ├── llm.py            # Unified LLM provider abstraction (OpenRouter only)
 │           ├── model_config.py   # Provider configuration logic + DB role-based model lookup
 │           ├── pipeline.py       # Docker container execution (6 pipeline stages)
@@ -373,11 +373,11 @@ The backend runs inside Docker. To spin up task containers it uses the host Dock
 
 Each pipeline function receives `(taskId, storagePath)` and returns `(passed: bool, message: str)`. Stages are called by the Inngest function via HTTP POST to the backend's `/api/pipeline/{stage}` endpoints. Logs are written to `PipelineLog` in the database.
 
-The pipeline runs 9 stages sequentially. If any stage fails, the task is marked `rejected` and the function stops. If all 9 pass (including Sia upload), the task moves to `pipeline_passed` — awaiting human approval. The Sia upload (Stage 9) is non-fatal: if it fails, the task is still `pipeline_passed` but `siaStatus` reflects the failure so admins can retry.
+The pipeline runs 9 stages sequentially. If any stage fails, the task is marked `rejected` and the function stops. If all 9 pass (including Sia upload), the task moves to `pipeline_passed`, awaiting human approval. The Sia upload (Stage 9) is non-fatal: if it fails, the task is still `pipeline_passed` but `siaStatus` reflects the failure so admins can retry.
 
 Two cron-based watchdog processes run alongside the pipeline:
-- **pipeline-watchdog** (every 5 min) — detects tasks stuck in `pipeline_running` for > 30 min, re-queues orphaned runs, and force-rejects tasks stuck > 2 hours.
-- **cleanup-watchdog** (every hour) — deletes local ZIP files, extracted directories, and Docker images for tasks rejected > 24 hours ago.
+- **pipeline-watchdog** (every 5 min): detects tasks stuck in `pipeline_running` for > 30 min, re-queues orphaned runs, and force-rejects tasks stuck > 2 hours.
+- **cleanup-watchdog** (every hour): deletes local ZIP files, extracted directories, and Docker images for tasks rejected > 24 hours ago.
 
 ### Multi-Agent Probe Architecture (Stages 6 & 7)
 
@@ -387,14 +387,14 @@ Stages 6 (Easiness) and 7 (Difficulty) share a common probe infrastructure in `p
 - **Staggered parallelism:** 5 runs launch in parallel with a 12-second stagger between each start, preventing rate-limit collisions.
 - **Early-exit:** The moment the outcome is decided (e.g., 1 pass + 1 fail for easiness), remaining runs are cancelled to save cost.
 - **Per-task locks:** An `asyncio.Lock` per task ID prevents concurrent probe executions from double-spending pipeline calls.
-- **Model roles:** Each stage uses a different model from the DB — `easiness_model` (fast/cheap) for Stage 6, `frontier_model` (strong) for Stage 7. These are configured in the admin dashboard. All models are accessed through **OpenRouter**, the sole LLM provider.
+- **Model roles:** Each stage uses a different model from the DB, `easiness_model` (fast/cheap) for Stage 6, `frontier_model` (strong) for Stage 7. These are configured in the admin dashboard. All models are accessed through **OpenRouter**, the sole LLM provider.
 
 ### Sia Integration
 
-- **Sia upload is Stage 9 of the pipeline** — upload runs automatically as part of the curation pipeline, not during human approval. Human approval simply flips the task status to `approved`.
-- **Approval flow:** One-time browser approval via Sia Indexer URL → derived App Key stored in `appkey.hex` → automatic reconnection on restarts.
+- **Sia upload is Stage 9 of the pipeline.** Upload runs automatically as part of the curation pipeline, not during human approval. Human approval simply flips the task status to `approved`.
+- **Approval flow:** One-time browser approval via Sia Indexer URL, derived App Key stored in `appkey.hex`, automatic reconnection on restarts.
 - **Demo mode:** If Sia is unreachable, the SDK gracefully falls back to simulated uploads with fake object IDs.
-- **Results:** Every benchmark result artifact is uploaded to Sia Network — immutable, content-addressed, publicly verifiable.
+- **Results:** Every benchmark result artifact is uploaded to Sia Network, immutable, content-addressed, publicly verifiable.
 
 ### File Upload Flow
 
@@ -408,15 +408,15 @@ Stages 6 (Easiness) and 7 (Difficulty) share a common probe infrastructure in `p
 
 - **Passkey-first:** Uses WebAuthn for passwordless authentication via passkeys (Touch ID, Face ID, security keys).
 - **NextAuth.js:** Session management with JWT strategies, passkey credentials stored in the database.
-- **Role-based access:** Three tiers — `user` (basic access), `admin` (project management), `super_admin` (model config, benchmark types, user management).
-- **Middleware:** Route protection via `middleware.ts` — unauthenticated users are redirected to `/login`, non-admin users to `/unauthorized`.
-- **Sidebar navigation:** Collapsible rail that adapts to user role — admins see Projects and Admin Panel; super admins additionally see Models, Benchmark Types, and Users management.
+- **Role-based access:** Three tiers: `user` (basic access), `admin` (project management), `super_admin` (model config, benchmark types, user management).
+- **Middleware:** Route protection via `middleware.ts`. Unauthenticated users are redirected to `/login`, non-admin users to `/unauthorized`.
+- **Sidebar navigation:** Collapsible rail that adapts to user role. Admins see Projects and Admin Panel; super admins additionally see Models, Benchmark Types, and Users management.
 - **Edge cases:** First-time passkey registration flow via dedicated endpoints, passkey management in user settings.
 
 ### Benchmark Types
 
-Projects are categorized by benchmark type (e.g., Coding & Software, Mathematical Reasoning, Agentic Tool Use). Types are managed by super admins in the admin dashboard — they can activate/deactivate types and control sort order. Only active types appear in the project creation form's type selector.
+Projects are categorized by benchmark type (e.g., Coding & Software, Mathematical Reasoning, Agentic Tool Use). Types are managed by super admins in the admin dashboard. They can activate/deactivate types and control sort order. Only active types appear in the project creation form's type selector.
 
 ---
 
-*Built in the open. Tasks are reproducible, shareable, and forkable — anyone can run the same benchmark and verify the result.*
+*Built in the open. Tasks are reproducible, shareable, and forkable. Anyone can run the same benchmark and verify the result.*
