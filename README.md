@@ -1,18 +1,18 @@
 # OpenBench
 
-Open infrastructure for reproducible AI benchmark curation and evaluation. Each task is a realistic command-line challenge, a broken build, a failing service, a bad config. AI agents solve it through the terminal. Tests verify it. Every task dataset, evaluation artifact, and result lives on the Sia Network forever.
+Open infrastructure for curating and producing high-quality AI training datasets. Each task is a realistic command-line challenge, a broken build, a failing service, a bad config. AI agents solve it through the terminal. Tests verify it. Every approved task is a verified training example, and every dataset and artifact lives on the Sia Network forever.
 
 ---
 
 ## What it shows
 
-Submit a task ZIP, watch it move through 9 curation pipeline stages, approve it to the registry, run benchmarks against any model. Every task dataset, evaluation artifact, and benchmark result is content-addressed and stored permanently on the Sia Network.
+Submit a task ZIP, watch it move through 9 automated curation pipeline stages, approve it to the registry. Every approved task is a verified, production-grade training example. Every task dataset, evaluation artifact, and result is content-addressed and stored permanently on the Sia Network. The same infrastructure also supports running benchmark evaluations.
 
 ```
 Submit -> Similarity -> CI Checks -> Quality -> Preflight -> Oracle/NOP -> Easiness -> Difficulty -> Agent Quality -> Sia Upload -> Registry
 ```
 
-Every stage is a durable Inngest function that survives crashes and restarts. Failed stages report exactly what to fix.
+Every stage is a durable Inngest function that survives crashes and restarts. Failed stages report exactly what to fix. The pipeline's primary purpose is certifying tasks as high-quality training data; the same validated tasks also serve as reliable benchmarks.
 
 Stages 6 (Easiness) and 7 (Difficulty) use a **CrewAI multi-agent probe**, four sequential agents (Task Analyst -> Solution Architect -> Code Implementer -> Test Verifier) run in staggered parallel across 5 attempts. The easiness stage uses a fast/cheap model; the difficulty stage uses the frontier model. Early-exit logic cancels remaining runs the moment the outcome is decided, saving cost.
 
@@ -437,7 +437,7 @@ After the initial launch milestone, the focus will shift to broadening the types
 | Creative & Open-Ended | Tasks evaluating creative writing, brainstorming, and open-ended problem solving with structured human evaluation. |
 | Efficiency & Deployment | Benchmarks measuring inference speed, memory usage, token efficiency, and deployment characteristics. |
 
-Each category will require its own task format specification, quality criteria, and calibration thresholds, but the core pipeline and verification infrastructure will remain shared. All datasets and artifacts across every benchmark category will be permanently archived on the Sia Network.
+Each category will require its own task format specification, quality criteria, and calibration thresholds, but the core pipeline and verification infrastructure will remain shared. All datasets and artifacts across every benchmark category will be permanently archived on the Sia Network and will serve as both benchmarks and training data.
 
 ---
 

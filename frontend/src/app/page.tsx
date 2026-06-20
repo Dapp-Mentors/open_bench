@@ -76,7 +76,7 @@ export default async function Home() {
             className="font-mono text-4xl sm:text-6xl font-semibold leading-none mb-6"
             style={{ color: "var(--text)", letterSpacing: "-0.02em" }}
           >
-            AI benchmarks you can<br />
+            Training data you can<br />
             <span style={{ color: "var(--green)" }}>actually trust.</span>
           </h1>
 
@@ -84,17 +84,19 @@ export default async function Home() {
             className="font-mono text-sm sm:text-base leading-relaxed max-w-2xl mx-auto mb-4"
             style={{ color: "var(--subtle)" }}
           >
-            Most AI benchmarks fail the moment someone tries to reproduce them. Tasks are hand-curated
-            without formal checks, results aren't archived, and there's no way to verify what you're
-            comparing against.
+            Most AI training data is assembled without rigorous quality checks. Tasks leak solutions,
+            instructions are ambiguous, difficulty is miscalibrated, and there's no way to verify
+            what you're training against.
           </p>
           <p
             className="font-mono text-sm sm:text-base leading-relaxed max-w-2xl mx-auto mb-10"
             style={{ color: "var(--text-muted)" }}
           >
-            OpenBench is infrastructure for curation that doesn't let bad tasks through. A 9-stage
-            automated pipeline that validates every task before it reaches the registry, then archives
-            every task dataset, evaluation artifact, and result permanently on the Sia Network.
+            OpenBench is a data curation pipeline that doesn't let bad examples through. A 9-stage
+            automated pipeline validates every task for syntactic correctness, instructional quality,
+            solvability, and calibrated difficulty before it reaches the registry. Every approved
+            task is a verified, production-grade training example, permanently archived on the
+            Sia Network. The same infrastructure also supports running benchmark evaluations.
           </p>
 
           <div className="flex flex-col sm:flex-row gap-3 justify-center items-center">
@@ -140,15 +142,17 @@ export default async function Home() {
             className="font-mono text-2xl sm:text-3xl font-semibold mb-4"
             style={{ color: "var(--text)" }}
           >
-            Benchmark quality is an afterthought.
+            Data quality is an afterthought.
           </h2>
           <p
             className="font-mono text-sm leading-relaxed max-w-2xl mb-12"
             style={{ color: "var(--subtle)" }}
           >
-            The field moves fast, but there's no shared standard for what makes a benchmark task valid.
-            A task that can't be reproduced tells you nothing. A task with a leaked solution skews your
-            results. A task that's too easy or too hard makes your leaderboard meaningless.
+            The field moves fast, but there's no shared standard for what makes a training example valid.
+            A task with a leaked solution corrupts your training data. An ambiguous instruction produces
+            unreliable model behavior. A task that's too easy or too hard tells you nothing about
+            capability. The same problems that make a task a bad training example also make it a
+            bad benchmark.
           </p>
 
           <div className="grid sm:grid-cols-3 gap-4">
@@ -195,16 +199,19 @@ export default async function Home() {
             className="font-mono text-2xl sm:text-3xl font-semibold mb-4"
             style={{ color: "var(--text)" }}
           >
-            Every task earns its place.
+            Every example earns its place.
           </h2>
           <p
             className="font-mono text-sm leading-relaxed max-w-2xl mb-14"
             style={{ color: "var(--subtle)" }}
           >
             You submit a task, a realistic command-line scenario with a broken environment, an oracle
-            fix, and a test suite. OpenBench runs it through 9 automated stages. If it clears all of
-            them, a human reviewer approves it and it goes into the registry. Then it stays there,
-            permanently, on the Sia Network along with all its datasets and artifacts.
+            fix, and a test suite. OpenBench runs it through 9 automated curation stages that check
+            for syntactic validity, instructional quality, solvability, and calibrated difficulty.
+            If it clears all of them, a human reviewer approves it and it enters the registry as a
+            verified training example. Then it stays there, permanently, on the Sia Network along
+            with all its datasets and artifacts. The same tasks can also be used for benchmark
+            evaluations.
           </p>
 
           {/* Terminal mockup, the signature element */}
@@ -411,27 +418,32 @@ export default async function Home() {
             className="font-mono text-2xl sm:text-3xl font-semibold mb-10"
             style={{ color: "var(--text)" }}
           >
-            Built for the people running serious evals.
+            Built for the people building better AI.
           </h2>
 
           <div className="grid sm:grid-cols-2 gap-4">
             {[
               {
+                role: "Data Curators",
+                desc: "You want to contribute tasks that become verified training examples for an AI Project or the community. Submit a task, and the pipeline certifies its quality through 9 automated stages with measurable thresholds.",
+              },
+              {
+                role: "AI Trainers",
+                desc: "You need high-quality, verified training data to improve model performance. Every approved task is a certified training example with documented quality scores, difficulty calibration, and proven solvability.",
+              },
+              {
                 role: "AI Researchers",
-                desc: "You need benchmarks that hold up under scrutiny. The pipeline gives you a formal audit trail for every task in your evaluation set.",
+                desc: "You need evaluation tasks that hold up under scrutiny. The pipeline gives you a formal audit trail for every task in your benchmark set.",
               },
               {
                 role: "ML Engineers",
-                desc: "You're running evals against specific models and you need to know the task set isn't leaking answers or skewing difficulty. Calibration is enforced, not assumed.",
+                desc: "You're running evals against specific models and need to know the task set isn't leaking answers or skewing difficulty. Calibration is enforced, not assumed.",
               },
               {
                 role: "Lab Evaluators",
                 desc: "You're comparing models across time and need results that are reproducible by anyone who asks. Sia storage means the record is always there.",
               },
-              {
-                role: "Independent Explorers",
-                desc: "You're new to AI research or benchmarking and want infrastructure that doesn't require you to build the quality checks yourself. Submit a task, let the pipeline do the hard part, and learn from what passes and what doesn't.",
-              },
+
             ].map((item) => (
               <div
                 key={item.role}
@@ -473,7 +485,7 @@ export default async function Home() {
             className="font-mono text-sm leading-relaxed max-w-xl mx-auto mb-3"
             style={{ color: "var(--subtle)" }}
           >
-            OpenBench is open source. You can self-host the full stack: frontend, backend, pipeline
+            OpenBench is open source. You can self-host the full data curation stack: frontend, backend, pipeline
             engine, and Sia integration with a single{" "}
             <code
               className="px-1.5 py-0.5 rounded text-[11px]"
@@ -484,12 +496,13 @@ export default async function Home() {
             .
           </p>
           <p
-            className="font-mono text-sm leading-relaxed max-w-xl mx-auto mb-10"
+            className="font-mono text-sm leading-relaxed max-w-2xl mx-auto mb-10"
             style={{ color: "var(--subtle)" }}
           >
-            Tasks are reproducible, shareable, and forkable. Every task that passes curation, every
-            dataset it depends on, and every result that's generated can be independently verified by
-            any third party by fetching the corresponding artifacts from the Sia Network. That's the point.
+            Tasks are reproducible, shareable, and forkable as both training data and benchmarks. Every
+            task that passes curation, every dataset it depends on, and every result that's generated
+            can be independently verified by any third party by fetching the corresponding artifacts
+            from the Sia Network. That's the point.
           </p>
 
           <div className="flex flex-col sm:flex-row gap-3 justify-center items-center">

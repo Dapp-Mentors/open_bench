@@ -95,7 +95,7 @@ export default function Whitepaper() {
                         style={{ color: "var(--text)", letterSpacing: "-0.02em" }}
                     >
                         OpenBench: Open Infrastructure<br />
-                        for Reproducible AI Evaluation
+                        for AI Training Data Curation & Evaluation
                     </h1>
 
                     <p
@@ -103,7 +103,7 @@ export default function Whitepaper() {
                         style={{ color: "var(--subtle)" }}
                     >
                         A technical overview of the design, architecture, and goals of the OpenBench platform,
-                        including the curation pipeline, multi-agent probing system, and decentralized storage model.
+                        including the data curation pipeline, multi-agent quality assurance system, and decentralized storage model.
                     </p>
 
                     {/* TOC */}
@@ -150,52 +150,60 @@ export default function Whitepaper() {
 
                 <Section id="abstract" eyebrow="§01" title="Abstract">
                     <p>
-                        OpenBench is an open-source platform for curating, validating, and archiving
-                        AI agent benchmark tasks. The core claim is simple: a benchmark task should not
-                        reach an evaluation registry unless it has been formally verified to be syntactically
+                        OpenBench is an open-source platform for curating, validating, and producing
+                        high-quality AI training datasets. The core claim is simple: a training example should not
+                        reach a dataset registry unless it has been formally verified to be syntactically
                         valid, semantically meaningful, correctly calibrated for difficulty, and permanently
                         archived in a form that anyone can independently verify.
                     </p>
                     <p>
-                        The platform implements this through a 9-stage automated pipeline that accepts
+                        The platform implements this through a 9-stage automated curation pipeline that accepts
                         task submissions as ZIP archives and rejects anything that doesn't meet explicit,
-                        measurable thresholds. Tasks that pass, along with all their associated datasets
+                        measurable thresholds. Tasks that pass the pipeline, along with all their associated datasets
                         and artifacts, are uploaded to the Sia Network, a decentralized storage layer,
-                        where they become content-addressed and immutable. Benchmark results are archived
-                        the same way.
+                        where they become content-addressed and immutable. Each approved task is a verified,
+                        production-grade training example ready for use in model training pipelines, and the
+                        same infrastructure also supports running benchmark evaluations against those tasks.
                     </p>
                     <p>
-                        The system is built for AI researchers and engineers who need evaluation
-                        infrastructure they can trust, audit, and run themselves.
+                        The system is built for AI trainers who need verified training examples, data curators
+                        who want to contribute quality tasks to the community, and researchers and engineers
+                        who need evaluation infrastructure they can trust, audit, and run themselves.
                     </p>
                 </Section>
 
                 <Section id="motivation" eyebrow="§02" title="Motivation & Prior Work">
                     <p>
-                        The reproducibility problem in AI benchmarking has been documented repeatedly.
-                        Leaderboard contamination, task leakage, and inconsistent evaluation protocols
-                        make it difficult to draw reliable conclusions from benchmark results even when
-                        the underlying research is honest.
+                        The quality of training data is the single biggest factor in AI model performance,
+                        yet most datasets are assembled without rigorous quality checks. Task leakage,
+                        ambiguous instructions, miscalibrated difficulty, and syntactically broken examples
+                        all degrade training quality. When a dataset is updated, there's often no public
+                        record of what changed and no way to verify the provenance of individual examples.
                     </p>
                     <p>
-                        Most existing evaluation frameworks, including common leaderboard platforms,
-                        don't enforce formal quality checks on individual tasks. Curation is usually
-                        a manual process performed by a small team, and the criteria are rarely published.
-                        When a benchmark dataset is updated, there's often no public record of what changed.
+                        The same problems plague AI benchmarking. Leaderboard contamination, inconsistent
+                        evaluation protocols, and unverifiable results make it difficult to draw reliable
+                        conclusions. Most evaluation frameworks don't enforce formal quality checks on
+                        individual tasks, and curation is usually a manual process with unpublished criteria.
                     </p>
                     <p>
-                        OpenBench's design is influenced by ideas from software quality assurance,
-                        specifically the principle that a test suite is only as reliable as the tests
-                        themselves. If you can't verify that a test is correct, you can't trust what it
-                        tells you. The same applies to AI evaluation tasks.
+                        OpenBench solves both problems with a single pipeline. The 9-stage curation process
+                        treats every submitted task as a candidate training example and applies automated
+                        quality gates at each stage. A task that survives the full pipeline has been
+                        validated for syntactic correctness, scored for instructional quality across
+                        11 criteria, proven to have a deterministic solution via the Oracle/NOP contract,
+                        calibrated for difficulty through multi-agent probing, and checked for clarity
+                        and actionability from an agent's perspective. The result is a training example
+                        whose quality is formally documented, not assumed.
                     </p>
                     <p>
                         The specific focus on command-line, terminal-based tasks reflects a practical
                         reality: agentic AI systems are increasingly deployed in environments where
-                        they interact with shells, build tools, and services. Benchmarking these
-                        capabilities requires tasks that can actually be executed and verified
+                        they interact with shells, build tools, and services. Training data for these
+                        scenarios requires tasks that can actually be executed and verified
                         programmatically, not multiple-choice questions or natural language outputs
-                        that require human judgment to score.
+                        that require human judgment to score. The same characteristics that make a
+                        task a good training example also make it a valid benchmark.
                     </p>
                 </Section>
 
@@ -498,6 +506,7 @@ export default function Whitepaper() {
                             ["Eliminate low-quality task leakage", "The Oracle/NOP contract and the multi-agent calibration stages exist specifically to catch tasks that seem valid but aren't, tasks where the environment isn't actually broken, where the oracle doesn't actually fix it, or where the difficulty is so miscalibrated it tells you nothing about model capability."],
                             ["Support any model through OpenRouter", "Calibration should reflect the current state of the field, not a fixed set of models. Using OpenRouter as the sole provider means any new model is immediately available as the frontier model or easiness model."],
                             ["Self-hostable by design", "A platform that requires trusting a central operator defeats the purpose. The full stack should run locally with docker compose up, and everything a central deployment does should be reproducible by anyone."],
+                            ["Produce training-grade datasets", "Tasks that pass the pipeline are not just benchmarks. They are verified, calibrated, and immutably archived training examples. Researchers should be able to pull any approved task from Sia and use it directly as a training sample, confident that it meets documented quality standards."],
                         ].map(([title, desc]) => (
                             <div
                                 key={title}
