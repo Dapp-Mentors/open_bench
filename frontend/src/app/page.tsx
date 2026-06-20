@@ -94,7 +94,7 @@ export default async function Home() {
           >
             OpenBench is infrastructure for curation that doesn't let bad tasks through. A 9-stage
             automated pipeline that validates every task before it reaches the registry, then archives
-            every result permanently on the Sia Network.
+            every task dataset, evaluation artifact, and result permanently on the Sia Network.
           </p>
 
           <div className="flex flex-col sm:flex-row gap-3 justify-center items-center">
@@ -204,7 +204,7 @@ export default async function Home() {
             You submit a task, a realistic command-line scenario with a broken environment, an oracle
             fix, and a test suite. OpenBench runs it through 9 automated stages. If it clears all of
             them, a human reviewer approves it and it goes into the registry. Then it stays there,
-            permanently, on Sia.
+            permanently, on the Sia Network along with all its datasets and artifacts.
           </p>
 
           {/* Terminal mockup, the signature element */}
@@ -346,9 +346,9 @@ export default async function Home() {
                 className="font-mono text-sm leading-relaxed mb-4"
                 style={{ color: "var(--subtle)" }}
               >
-                Every approved task and every benchmark result is uploaded to the Sia Network,
-                content-addressed decentralized storage. That means no one can modify or delete
-                a result after it's published. The receipt is public.
+                Every approved task, along with all its datasets and evaluation artifacts, is uploaded
+                to the Sia Network, content-addressed decentralized storage. That means no one can
+                modify or delete a result after it's published. The receipt is public.
               </p>
               <p
                 className="font-mono text-sm leading-relaxed"
@@ -487,8 +487,9 @@ export default async function Home() {
             className="font-mono text-sm leading-relaxed max-w-xl mx-auto mb-10"
             style={{ color: "var(--subtle)" }}
           >
-            Tasks are reproducible, shareable, and forkable. Every task that passes curation and every
-            result that's generated can be independently verified by any third party. That's the point.
+            Tasks are reproducible, shareable, and forkable. Every task that passes curation, every
+            dataset it depends on, and every result that's generated can be independently verified by
+            any third party by fetching the corresponding artifacts from the Sia Network. That's the point.
           </p>
 
           <div className="flex flex-col sm:flex-row gap-3 justify-center items-center">

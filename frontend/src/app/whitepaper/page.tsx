@@ -159,9 +159,10 @@ export default function Whitepaper() {
                     <p>
                         The platform implements this through a 9-stage automated pipeline that accepts
                         task submissions as ZIP archives and rejects anything that doesn't meet explicit,
-                        measurable thresholds. Tasks that pass are uploaded to the Sia Network, a
-                        decentralized storage layer, where they become content-addressed and immutable.
-                        Benchmark results are archived the same way.
+                        measurable thresholds. Tasks that pass, along with all their associated datasets
+                        and artifacts, are uploaded to the Sia Network, a decentralized storage layer,
+                        where they become content-addressed and immutable. Benchmark results are archived
+                        the same way.
                     </p>
                     <p>
                         The system is built for AI researchers and engineers who need evaluation
@@ -218,7 +219,7 @@ export default function Whitepaper() {
                             ["Embeddings", "Ollama - nomic-embed-text (local)"],
                             ["LLM Provider", "OpenRouter (DeepSeek, Claude, GPT, Gemini, Llama)"],
                             ["Multi-Agent", "CrewAI (sequential: Analyst → Architect → Implementer → Verifier)"],
-                            ["Storage", "Sia Network via siafoundation SDK"],
+                            ["Storage", "Sia Network via SDK & Indexer"],
                             ["Auth", "NextAuth.js with WebAuthn / Passkey"],
                             ["Containerization", "Docker (sibling containers on host daemon)"],
                         ].map(([layer, tech]) => (
@@ -412,7 +413,8 @@ export default function Whitepaper() {
                     </p>
                     <p>
                         The Sia Network provides content-addressed storage on a decentralized network of
-                        storage providers. When a file is uploaded, it returns a CID (content identifier)
+                        storage providers. Every task dataset, benchmark artifact, and evaluation result
+                        is stored here. When a file is uploaded, it returns a CID (content identifier)
                         that is derived directly from the file's content. If the file changes, the CID changes.
                         If you have a CID, you can retrieve the file from the network and verify that its hash
                         matches without trusting the platform that gave you the CID.
@@ -491,7 +493,7 @@ export default function Whitepaper() {
                     </p>
                     <div className="space-y-3 mt-2">
                         {[
-                            ["Make reproducibility the default", "A researcher should be able to take any task ID, fetch its archive from Sia by CID, and reproduce any benchmark result without asking anyone for access or clarification."],
+                            ["Make reproducibility the default", "A researcher should be able to take any task ID, fetch its archive and all associated datasets from Sia by CID, and reproduce any benchmark result without asking anyone for access or clarification."],
                             ["Formalize task quality", "The 9-stage pipeline should be a published, versioned standard, not a black box. Every threshold should be documented and debatable. The system should be open to community input on what the criteria should be."],
                             ["Eliminate low-quality task leakage", "The Oracle/NOP contract and the multi-agent calibration stages exist specifically to catch tasks that seem valid but aren't, tasks where the environment isn't actually broken, where the oracle doesn't actually fix it, or where the difficulty is so miscalibrated it tells you nothing about model capability."],
                             ["Support any model through OpenRouter", "Calibration should reflect the current state of the field, not a fixed set of models. Using OpenRouter as the sole provider means any new model is immediately available as the frontier model or easiness model."],
@@ -559,8 +561,10 @@ export default function Whitepaper() {
                     <p>
                         After the initial launch milestone, the focus will shift to broadening the
                         types of benchmarks the platform supports. The current terminal-based format
-                        is well suited for software engineering and coding tasks, but the evaluation infrastructure
-                        is designed to be extensible. The following benchmark categories are planned:
+                        is well suited for software engineering tasks, but the evaluation infrastructure
+                        is designed to be extensible. Every new benchmark category will follow the same
+                        storage model: all task datasets, evaluation artifacts, and results will be
+                        permanently archived on the Sia Network. The following categories are planned:
                     </p>
                     <div className="space-y-2 mt-2">
                         {[

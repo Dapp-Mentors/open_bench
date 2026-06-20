@@ -1,12 +1,12 @@
 # OpenBench
 
-Open infrastructure for reproducible AI benchmark curation and evaluation. Each task is a realistic command-line challenge, a broken build, a failing service, a bad config. AI agents solve it through the terminal. Tests verify it. Results live on the Sia Network forever.
+Open infrastructure for reproducible AI benchmark curation and evaluation. Each task is a realistic command-line challenge, a broken build, a failing service, a bad config. AI agents solve it through the terminal. Tests verify it. Every task dataset, evaluation artifact, and result lives on the Sia Network forever.
 
 ---
 
 ## What it shows
 
-Submit a task ZIP, watch it move through 9 curation pipeline stages, approve it to the registry, run benchmarks against any model, and results are content-addressed on Sia Network.
+Submit a task ZIP, watch it move through 9 curation pipeline stages, approve it to the registry, run benchmarks against any model. Every task dataset, evaluation artifact, and benchmark result is content-addressed and stored permanently on the Sia Network.
 
 ```
 Submit -> Similarity -> CI Checks -> Quality -> Preflight -> Oracle/NOP -> Easiness -> Difficulty -> Agent Quality -> Sia Upload -> Registry
@@ -30,7 +30,7 @@ Stages 6 (Easiness) and 7 (Difficulty) use a **CrewAI multi-agent probe**, four 
 | 6 | Easiness | CrewAI multi-agent probe x5 using the **easiness model** (fast/cheap); exactly 1-4/5 must pass | 1-4/5 (0=TOO_HARD, 5=TOO_EASY) |
 | 7 | Difficulty | CrewAI multi-agent probe x5 using the **frontier model** (strong); exactly 1-3/5 must pass | 1-3/5 (0=TOO_HARD, >3=TOO_EASY) |
 | 8 | Agent Quality | LLM-as-judge on instruction realism, no leaked assertions, actionability | >= 70% |
-| 9 | Sia Upload | Upload the approved task to Sia Network for immutable, content-addressed storage | Upload succeeds |
+| 9 | Sia Upload | Upload the approved task, its datasets, and all artifacts to Sia Network for immutable, content-addressed, decentralized storage | Upload succeeds |
 
 ---
 
@@ -199,7 +199,7 @@ task-name/
 1. All pipeline stages pass, including the Sia upload (Stage 9). A human reviewer then approves the task for the registry.
 2. Configure a model via OpenRouter in the admin dashboard (the sole LLM provider, any model available on OpenRouter can be used). This avoids the technical debt of building separate integration modules for each LLM and lets you swap between Claude Opus, GPT, DeepSeek, Grok, and others from the UI with no backend changes.
 3. Start a benchmark run. The agent gets an isolated Docker container with the broken environment.
-4. After execution, the verifier checks `reward.txt` and the result is uploaded to Sia Network.
+4. After execution, the verifier checks `reward.txt` and the result, along with all evaluation artifacts, is uploaded to the Sia Network for permanent, decentralized storage.
 
 ---
 
@@ -394,7 +394,7 @@ Stages 6 (Easiness) and 7 (Difficulty) share a common probe infrastructure in `p
 - **Sia upload is Stage 9 of the pipeline.** Upload runs automatically as part of the curation pipeline, not during human approval. Human approval simply flips the task status to `approved`.
 - **Approval flow:** One-time browser approval via Sia Indexer URL, derived App Key stored in `appkey.hex`, automatic reconnection on restarts.
 - **Demo mode:** If Sia is unreachable, the SDK gracefully falls back to simulated uploads with fake object IDs.
-- **Results:** Every benchmark result artifact is uploaded to Sia Network, immutable, content-addressed, publicly verifiable.
+- **Results:** Every benchmark result artifact, along with all task datasets and evaluation outputs, is uploaded to Sia Network, immutable, content-addressed, publicly verifiable. Anyone can verify any result by fetching the corresponding CID from the network directly.
 
 ### File Upload Flow
 
@@ -402,7 +402,7 @@ Stages 6 (Easiness) and 7 (Difficulty) share a common probe infrastructure in `p
 2. Frontend writes the ZIP to a shared `task_uploads` Docker volume.
 3. An Inngest event (`pipeline/task.submitted`) triggers the 9-stage curation pipeline.
 4. Each stage calls the backend API, which reads the ZIP from the shared volume.
-5. After all 9 stages pass (including Sia upload), a human reviews and approves the task for the registry.
+5. After all 9 stages pass (including Sia upload), a human reviews and approves the task for the registry. The task ZIP, all associated datasets, and benchmark artifacts remain permanently on the Sia Network.
 
 ### Authentication & Authorization
 
@@ -425,6 +425,7 @@ After the initial launch milestone, the focus will shift to broadening the types
 
 | Category | Description |
 |----------|-------------|
+| Coding & Software | The current focus: terminal-based software engineering challenges with broken builds, misconfigured services, and failing tests. |
 | General Knowledge | Tasks that test a model's breadth of factual knowledge across domains, with verifiable answer keys. |
 | Mathematical Reasoning | Multi-step math problems, proofs, and quantitative reasoning tasks with deterministic grading. |
 | Multimodal | Tasks combining images, code, and text inputs that require understanding across modalities. |
@@ -436,7 +437,7 @@ After the initial launch milestone, the focus will shift to broadening the types
 | Creative & Open-Ended | Tasks evaluating creative writing, brainstorming, and open-ended problem solving with structured human evaluation. |
 | Efficiency & Deployment | Benchmarks measuring inference speed, memory usage, token efficiency, and deployment characteristics. |
 
-Each category will require its own task format specification, quality criteria, and calibration thresholds, but the core pipeline and verification infrastructure will remain shared.
+Each category will require its own task format specification, quality criteria, and calibration thresholds, but the core pipeline and verification infrastructure will remain shared. All datasets and artifacts across every benchmark category will be permanently archived on the Sia Network.
 
 ---
 
