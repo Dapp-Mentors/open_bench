@@ -27,3 +27,6 @@ frontend/uploads/
 # Build
 /dist
 /.inngest
+
+# App key
+backend/data/appkey.hex

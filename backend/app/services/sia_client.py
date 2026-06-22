@@ -140,17 +140,12 @@ async def registration_start(recovery_phrase: str) -> dict:
 
     builder = Builder(settings.sia_indexer_url(), app_meta)
 
-    # Try stored key first (fast path — no user interaction needed)
-    stored_key = _load_stored_key()
-    if stored_key:
-        print("[Sia] Attempting connection with stored app key…")
-        sdk = await builder.connected(stored_key)
-        if sdk is not None:
-            print("[Sia] Connected with stored app key.")
-            global _sdk
-            _sdk = sdk
-            _registration_flow = {"builder": None, "phrase": None, "approval_url": None, "step": "completed", "error": None}
-            return {"ok": True, "already_connected": True}
+    # Note: We intentionally do NOT try the stored key here during explicit
+    # registration. The stored key check happens at startup (in _init_sia_client).
+    # When the user clicks "Start Sia registration" in the setup wizard, they
+    # expect to see the approval URL flow. If a stored key exists and is valid,
+    # the next startup will pick it up automatically. This also prevents the
+    # frontend from silently marking Sia as "connected" without user interaction.
 
     # Full registration flow using the user's recovery phrase
     try:
