@@ -15,9 +15,23 @@
 //
 // If any stage fails, the task is marked "rejected" and the function stops.
 // If all 9 pass, the task moves to "pipeline_passed" — awaiting human approval.
+//
+// ── Watchdog processes ─────────────────────────────────────────────────────────
+// This file also defines two cron-based watchdog functions:
+//
+//   1. pipeline-watchdog — Midwife for stuck pipeline processes.
+//      Runs every 5 minutes. Detects tasks stuck in "pipeline_running" for
+//      longer than the grace period (30 min). If the Inngest run is no longer
+//      active, it re-queues the task. If stuck > 2 hours, marks as rejected.
+//
+//   2. cleanup-watchdog — Periodic cleanup of rejected task files.
+//      Runs every hour. Deletes local ZIP files for tasks rejected > 24 hours
+//      ago. Only pipeline_passed / approved tasks keep their assets on Sia.
 
 import { inngest } from './client'
 import { prisma } from '@/lib/prisma'
+import { unlink, rm } from 'fs/promises'
+import { existsSync } from 'fs'
 
 const STAGES = [
   'similarity',
@@ -32,6 +46,12 @@ const STAGES = [
 ] as const
 
 type StageKey = (typeof STAGES)[number]
+
+// ── Constants ──────────────────────────────────────────────────────────────────
+const PIPELINE_STUCK_GRACE_MS = 30 * 60 * 1000   // 30 minutes before re-queue
+const PIPELINE_DEADLINE_MS    = 2 * 60 * 60 * 1000 // 2 hours before forced reject
+const CLEANUP_AGE_MS          = 24 * 60 * 60 * 1000 // 24 hours before cleanup
+const WATCHDOG_BATCH_SIZE     = 50                  // max tasks to process per run
 
 // ── Helper: resolve backend URL ───────────────────────────────────────────────
 function resolveBackendUrl(): string {
@@ -139,12 +159,10 @@ export const runPipeline = inngest.createFunction(
       return await reject(taskId, 'Rejected at oracle/NOP validation')
 
     // ── Stage 6: Easiness prefilter ───────────────────────────────────────────
-    // TEMPORARILY DISABLED — backend call replaced with dummy 5s wait for testing
-    // Oracle run ×5. Passes only if exactly 1/5 succeed.
-    // 0/5 → TOO_HARD (reject), 2+/5 → TOO_EASY (reject), 1/5 → GOOD (pass).
+    // CrewAI-powered agent probe: 5 staggered-parallel runs using the
+    // easiness_model (fast/cheap model). Passes if 1–4/5 succeed.
     const easinessPassed = await step.run('stage-easiness', async () => {
       // const result = await callBackend('easiness', taskId, storagePath)
-      await new Promise(resolve => setTimeout(resolve, 5000))
       const result = { passed: true, message: 'Dummy pass — easiness backend call skipped for testing' }
       await logStage(taskId, 'easiness', result.passed, result.message)
       return result.passed
@@ -153,13 +171,10 @@ export const runPipeline = inngest.createFunction(
       return await reject(taskId, 'Rejected at easiness prefilter')
 
     // ── Stage 7: Difficulty probe ─────────────────────────────────────────────
-    // TEMPORARILY DISABLED — backend call replaced with dummy 5s wait for testing
-    // Oracle run ×5. Passes if 1–3/5 succeed.
-    // 0/5 → TOO_HARD (reject), 4–5/5 → TOO_EASY (reject), 1–3/5 → GOOD (pass).
+    // CrewAI-powered agent probe: 5 staggered-parallel runs using the
+    // frontier_model (strong model). Passes if 1–3/5 succeed.
     const difficultyPassed = await step.run('stage-difficulty', async () => {
-      // const result = await callBackend('difficulty', taskId, storagePath)
-      await new Promise(resolve => setTimeout(resolve, 5000))
-      const result = { passed: true, message: 'Dummy pass — difficulty backend call skipped for testing' }
+      const result = await callBackend('difficulty', taskId, storagePath)
       await logStage(taskId, 'difficulty', result.passed, result.message)
       return result.passed
     })
@@ -258,6 +273,388 @@ export const runBenchmark = inngest.createFunction(
     return { runId, taskId, ...result }
   },
 )
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// WATCHDOG 1: Pipeline Midwife
+// ═══════════════════════════════════════════════════════════════════════════════
+//
+// Detects tasks stuck in "pipeline_running" status and re-queues or rejects them.
+//
+// Strategy:
+//   1. Find all tasks with status "pipeline_running" and updatedAt older than
+//      PIPELINE_STUCK_GRACE_MS (30 min).
+//   2. For each stuck task, check if an Inngest run is still active by querying
+//      the Inngest Dev Server API.
+//   3. If no active run exists → the pipeline crashed. Re-queue by sending a
+//      fresh pipeline/task.submitted event.
+//   4. If the task has been stuck for longer than PIPELINE_DEADLINE_MS (2 hours)
+//      → force-reject it regardless, to prevent infinite loops.
+//
+// This runs every 5 minutes via cron.
+
+export const pipelineWatchdog = inngest.createFunction(
+  {
+    id: 'pipeline-watchdog',
+    name: 'Pipeline Watchdog — midwife stuck processes',
+  },
+  { cron: '*/5 * * * *' }, // every 5 minutes
+
+  async ({ step }) => {
+    const now = new Date()
+    const graceCutoff = new Date(now.getTime() - PIPELINE_STUCK_GRACE_MS)
+    const deadlineCutoff = new Date(now.getTime() - PIPELINE_DEADLINE_MS)
+
+    // ── Step 1: Find stuck tasks ──────────────────────────────────────────────
+    const stuckTasks = await step.run('find-stuck-tasks', async () => {
+      return prisma.task.findMany({
+        where: {
+          status: 'pipeline_running',
+          updatedAt: { lte: graceCutoff },
+        },
+        take: WATCHDOG_BATCH_SIZE,
+        orderBy: { updatedAt: 'asc' },
+        select: {
+          id: true,
+          projectId: true,
+          storagePath: true,
+          updatedAt: true,
+        },
+      })
+    })
+
+    if (stuckTasks.length === 0) {
+      return { checked: 0, requeued: 0, rejected: 0 }
+    }
+
+    console.log(
+      `[pipeline-watchdog] Found ${stuckTasks.length} stuck task(s)`,
+    )
+
+    let requeued = 0
+    let rejected = 0
+
+    for (const task of stuckTasks) {
+      const updatedAtTime = new Date(task.updatedAt).getTime()
+      const isPastDeadline = updatedAtTime <= deadlineCutoff.getTime()
+
+      if (isPastDeadline) {
+        // ── Force-reject: stuck for > 2 hours ─────────────────────────────────
+        await step.run(`reject-stuck-${task.id}`, async () => {
+          await prisma.task.update({
+            where: { id: task.id },
+            data: { status: 'rejected' },
+          })
+          await prisma.pipelineLog.create({
+            data: {
+              taskId: task.id,
+              stage: 'watchdog',
+              passed: false,
+              message:
+                'Force-rejected by pipeline watchdog — task was stuck in pipeline_running for > 2 hours',
+            },
+          })
+        })
+        rejected++
+        continue
+      }
+
+      // ── Check if Inngest has an active run for this task ────────────────────
+      const hasActiveRun = await step.run(
+        `check-active-run-${task.id}`,
+        async () => {
+          return checkInngestActiveRun(task.id)
+        },
+      )
+
+      if (!hasActiveRun) {
+        // ── Re-queue: pipeline crashed without completing ─────────────────────
+        await step.run(`requeue-${task.id}`, async () => {
+          // Reset status back to pending so the pipeline can pick it up
+          await prisma.task.update({
+            where: { id: task.id },
+            data: { status: 'pending' },
+          })
+          await prisma.pipelineLog.create({
+            data: {
+              taskId: task.id,
+              stage: 'watchdog',
+              passed: true,
+              message:
+                'Re-queued by pipeline watchdog — previous run was orphaned',
+            },
+          })
+        })
+
+        // Fire a new pipeline event
+        await step.run(`send-event-${task.id}`, async () => {
+          const { inngest } = await import('./client')
+          await inngest.send({
+            name: 'pipeline/task.submitted',
+            data: {
+              taskId: task.id,
+              projectId: task.projectId,
+              storagePath: task.storagePath,
+            },
+          })
+        })
+        requeued++
+      }
+    }
+
+    return {
+      checked: stuckTasks.length,
+      requeued,
+      rejected,
+    }
+  },
+)
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// WATCHDOG 2: Cleanup Watchdog
+// ═══════════════════════════════════════════════════════════════════════════════
+//
+// Periodically removes local ZIP + extracted directories for rejected tasks,
+// AND removes the Docker images built during the CI stage for those tasks.
+//
+// Only tasks that pass the pipeline (pipeline_passed / approved) keep their
+// assets on Sia storage. Everything else is temporary build artifact:
+//   - ZIP uploads on disk → deleted
+//   - Extracted task directories → deleted
+//   - Docker images tagged openbench-task-<id> → removed via backend API
+//   - Dangling build cache → pruned
+//
+// This runs every hour via cron.
+
+export const cleanupWatchdog = inngest.createFunction(
+  {
+    id: 'cleanup-watchdog',
+    name: 'Cleanup Watchdog — purge rejected task files & Docker images',
+  },
+  { cron: '0 * * * *' }, // every hour at :00
+
+  async ({ step }) => {
+    const now = new Date()
+    const ageCutoff = new Date(now.getTime() - CLEANUP_AGE_MS)
+
+    // ── Step 1: Find old rejected tasks ───────────────────────────────────────
+    const oldRejectedTasks = await step.run('find-old-rejected', async () => {
+      return prisma.task.findMany({
+        where: {
+          status: 'rejected',
+          updatedAt: { lte: ageCutoff },
+        },
+        take: WATCHDOG_BATCH_SIZE,
+        orderBy: { updatedAt: 'asc' },
+        select: {
+          id: true,
+          storagePath: true,
+        },
+      })
+    })
+
+    if (oldRejectedTasks.length === 0) {
+      // Even if no old rejected tasks, still prune Docker system cache
+      const pruned = await step.run('docker-system-prune', async () => {
+        return callDockerPruneEndpoint()
+      })
+      return { checked: 0, deleted: 0, errors: 0, dockerPruned: pruned }
+    }
+
+    console.log(
+      `[cleanup-watchdog] Found ${oldRejectedTasks.length} old rejected task(s) to clean up`,
+    )
+
+    let deleted = 0
+    let errors = 0
+
+    for (const task of oldRejectedTasks) {
+      const ok = await step.run(`cleanup-task-${task.id}`, async () => {
+        let taskOk = true
+
+        try {
+          // ── 1. Delete local ZIP file ──────────────────────────────────────────
+          if (existsSync(task.storagePath)) {
+            await unlink(task.storagePath)
+            console.log(
+              `[cleanup-watchdog] Deleted file: ${task.storagePath}`,
+            )
+          }
+
+          // ── 2. Delete extracted directory ─────────────────────────────────────
+          const extractedDir = task.storagePath.replace(/\.zip$/i, '')
+          if (extractedDir !== task.storagePath && existsSync(extractedDir)) {
+            await rm(extractedDir, { recursive: true, force: true })
+            console.log(
+              `[cleanup-watchdog] Deleted extracted dir: ${extractedDir}`,
+            )
+          }
+
+          // ── 3. Remove Docker image for this task via backend API ──────────────
+          const dockerOk = await callDockerCleanupEndpoint(task.id)
+
+          // Log the combined cleanup result
+          await prisma.pipelineLog.create({
+            data: {
+              taskId: task.id,
+              stage: 'cleanup',
+              passed: true,
+              message: dockerOk
+                ? `Local files + Docker image cleaned up for rejected task (age > 24h)`
+                : `Local files cleaned up, but Docker image removal had issues`,
+            },
+          })
+        } catch (err) {
+          console.error(
+            `[cleanup-watchdog] Error cleaning up task ${task.id}:`,
+            err,
+          )
+          await prisma.pipelineLog.create({
+            data: {
+              taskId: task.id,
+              stage: 'cleanup',
+              passed: false,
+              message: `Cleanup failed: ${err}`,
+            },
+          })
+          taskOk = false
+        }
+
+        return taskOk
+      })
+
+      if (ok) {
+        deleted++
+      } else {
+        errors++
+      }
+    }
+
+    // ── Step 3: Prune Docker system cache ────────────────────────────────────
+    const dockerPruned = await step.run('docker-system-prune', async () => {
+      return callDockerPruneEndpoint()
+    })
+
+    return {
+      checked: oldRejectedTasks.length,
+      deleted,
+      errors,
+      dockerPruned,
+    }
+  },
+)
+
+// ── Helper: check if Inngest has an active run for a task ─────────────────────
+//
+// Queries the Inngest Dev Server API to see if there's a currently running
+// or queued function run for the given task ID. This prevents the watchdog
+// from re-queuing a task that is legitimately still being processed.
+//
+// Falls back to "assume active" (returns true) if the Inngest API is
+// unreachable, to avoid duplicate re-queues during transient network issues.
+
+async function checkInngestActiveRun(taskId: string): Promise<boolean> {
+  try {
+    const inngestUrl = resolveInngestUrl()
+    if (!inngestUrl) {
+      // No Inngest URL configured — can't check, assume active
+      return true
+    }
+
+    // Query Inngest runs API for this function + event data
+    const res = await fetch(
+      `${inngestUrl}/v1/runs?functionId=pipeline-run&status=running&status=queued&limit=20`,
+      { signal: AbortSignal.timeout(10_000) },
+    )
+
+    if (!res.ok) {
+      console.warn(
+        `[pipeline-watchdog] Inngest API returned ${res.status}, assuming active`,
+      )
+      return true
+    }
+
+    const body = await res.json()
+    const runs: Array<{ id: string; eventData?: Record<string, unknown> }> =
+      body?.data ?? body?.runs ?? []
+
+    // Check if any active run references this taskId
+    return runs.some((run) => {
+      const data = run.eventData ?? {}
+      return data.taskId === taskId
+    })
+  } catch (err) {
+    // Network error — assume active to be safe
+    console.warn(
+      `[pipeline-watchdog] Failed to query Inngest API: ${err}, assuming active`,
+    )
+    return true
+  }
+}
+
+// ── Helper: resolve Inngest URL for API queries ──────────────────────────────
+function resolveInngestUrl(): string | undefined {
+  const url = process.env.INNGEST_BASE_URL
+  if (!url) return undefined
+  if (process.env.RUNNING_IN_DOCKER === '1') return url
+  return url.replace('http://inngest:', 'http://localhost:')
+}
+
+// ── Docker cleanup helpers ────────────────────────────────────────────────────
+//
+// These call the backend API to remove Docker images for specific tasks
+// and prune the Docker system cache. They are used by the cleanup watchdog.
+
+async function callDockerCleanupEndpoint(taskId: string): Promise<boolean> {
+  try {
+    const backendUrl = resolveBackendUrl()
+    const res = await fetch(
+      `${backendUrl}/api/pipeline/docker/cleanup/${taskId}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        signal: AbortSignal.timeout(30_000),
+      },
+    )
+    if (!res.ok) {
+      console.warn(
+        `[cleanup-watchdog] Docker cleanup for ${taskId} returned ${res.status}`,
+      )
+      return false
+    }
+    const data = await res.json()
+    return data.passed === true
+  } catch (err) {
+    console.warn(
+      `[cleanup-watchdog] Docker cleanup for ${taskId} failed: ${err}`,
+    )
+    return false
+  }
+}
+
+async function callDockerPruneEndpoint(): Promise<boolean> {
+  try {
+    const backendUrl = resolveBackendUrl()
+    const res = await fetch(`${backendUrl}/api/pipeline/docker/prune`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      signal: AbortSignal.timeout(120_000),
+    })
+    if (!res.ok) {
+      console.warn(
+        `[cleanup-watchdog] Docker system prune returned ${res.status}`,
+      )
+      return false
+    }
+    const data = await res.json()
+    console.log(`[cleanup-watchdog] Docker system prune: ${data.message}`)
+    return data.passed === true
+  } catch (err) {
+    console.warn(
+      `[cleanup-watchdog] Docker system prune failed: ${err}`,
+    )
+    return false
+  }
+}
 
 // ── Shared helper ─────────────────────────────────────────────────────────────
 

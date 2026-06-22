@@ -46,10 +46,8 @@ const nextConfig = {
       },
     ],
   },
-  experimental: {
-    // Enable MCP server
-    mcpServer: true,
-  },
+  // FIX: Removed `experimental.mcpServer: true` — this is not a real Next.js
+  // experimental flag and causes a build warning / potential config parse error.
 }
 
 module.exports = nextConfig

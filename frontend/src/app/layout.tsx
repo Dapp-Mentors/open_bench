@@ -8,7 +8,7 @@ import { auth } from "@/lib/auth";
 
 export const metadata: Metadata = {
   title: "OpenBench",
-  description: "Open infrastructure for reproducible AI benchmark curation and evaluation",
+  description: "An AI dataset curation and evaluation platform for AI model trainings",
 };
 
 export const dynamic = "force-dynamic";

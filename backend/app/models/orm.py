@@ -115,3 +115,24 @@ class ModelConfig(Base):
     modelId   = Column(String, nullable=False)
     modelName = Column(String, default="")
     updatedAt = Column(DateTime(timezone=True))
+
+
+class AppSettings(Base):
+    """Mirrors the frontend Prisma schema AppSettings table.
+
+    Stores the outcome of the first-run setup wizard so the backend
+    can read the OpenRouter API key and Sia config without .env vars.
+    There is exactly one row (id = 'default').
+    """
+
+    __tablename__ = "AppSettings"
+
+    id                = Column(String, primary_key=True, default="default")
+    setupComplete     = Column(Boolean, default=False)
+    siaConnected      = Column(Boolean, default=False)
+    siaIndexerUrl     = Column(String, nullable=True)
+    siaAppId          = Column(String, nullable=True)
+    siaAppName        = Column(String, nullable=True)
+    siaAppDescription = Column(String, nullable=True)
+    openrouterKey     = Column(String, nullable=True)
+    updatedAt         = Column(DateTime(timezone=True))

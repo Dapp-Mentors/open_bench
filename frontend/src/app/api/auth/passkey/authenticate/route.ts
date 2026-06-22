@@ -25,12 +25,24 @@ export async function POST(request: Request) {
 
         // Use NextAuth's signIn with the passkey credentials provider.
         // This creates a proper JWT session cookie that the middleware can decode.
-        await signIn("passkey", {
+        const signInResponse = await signIn("passkey", {
             userId: user.id,
             redirect: false,
         });
 
-        return NextResponse.json({ success: true });
+        // Forward the Set-Cookie header from the signIn response so the
+        // browser receives the session JWT cookie.
+        // signIn may return a Response (has headers) or a plain object/string,
+        // so guard against primitives before using the `in` operator.
+        const jsonResponse = NextResponse.json({ success: true });
+        if (signInResponse && typeof signInResponse === "object" && "headers" in signInResponse) {
+            const setCookie = (signInResponse as Response).headers.get("set-cookie");
+            if (setCookie) {
+                jsonResponse.headers.set("set-cookie", setCookie);
+            }
+        }
+
+        return jsonResponse;
     } catch (err) {
         const message = err instanceof Error ? err.message : "Authentication failed";
         return NextResponse.json({ error: message }, { status: 401 });

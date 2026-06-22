@@ -1,6 +1,24 @@
 // src/lib/auth/passkey.ts
 //
 // WebAuthn / Passkey helpers using @simplewebauthn/server.
+//
+// FIX: Replaced the in-memory `challengeStore` Map with DB-backed challenge
+// storage (PasskeyChallenge model). The in-memory store is wiped on every
+// serverless cold start, which broke passkey auth/registration whenever the
+// Node process restarted between the GET (generate options) and POST (verify)
+// calls. Challenges now persist in Postgres with a 5-minute TTL and are
+// cleaned up after use.
+//
+// Required schema addition — add this model to schema.prisma:
+//
+//   model PasskeyChallenge {
+//     id        String   @id @default(cuid())
+//     key       String   @unique   // e.g. "reg:userId" | "first-reg:tempId" | "auth:challenge"
+//     challenge String
+//     expiresAt DateTime
+//   }
+//
+// Then run: npx prisma migrate dev --name add_passkey_challenge
 
 import {
     generateAuthenticationOptions,
@@ -16,10 +34,63 @@ import { prisma } from "@/lib/prisma/client";
 import { createId } from "@paralleldrive/cuid2";
 
 const RP_NAME = "OpenBench";
-const RP_ID = process.env.WEBAUTHN_RP_ID ?? "localhost";
-const ORIGIN = process.env.WEBAUTHN_ORIGIN ?? "http://localhost:3000";
+const CHALLENGE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
-const challengeStore = new Map<string, string>();
+// ── WebAuthn config (read from DB, cached in process) ──────────────────────
+
+let _rpId: string | null = null;
+let _origin: string | null = null;
+
+async function getWebauthnConfig(): Promise<{ rpId: string; origin: string }> {
+    if (_rpId && _origin) return { rpId: _rpId, origin: _origin };
+
+    try {
+        const settings = await prisma.appSettings.findUnique({
+            where: { id: "default" },
+            select: { webauthnRpId: true, webauthnOrigin: true },
+        });
+        if (settings?.webauthnRpId && settings?.webauthnOrigin) {
+            _rpId = settings.webauthnRpId;
+            _origin = settings.webauthnOrigin;
+            return { rpId: _rpId!, origin: _origin! };
+        }
+    } catch {
+        // ignore — fall back to env
+    }
+
+    return {
+        rpId: process.env.WEBAUTHN_RP_ID ?? "localhost",
+        origin: process.env.WEBAUTHN_ORIGIN ?? "http://localhost:3000",
+    };
+}
+
+// ── DB-backed challenge store ───────────────────────────────────────────────
+
+async function storeChallenge(key: string, challenge: string): Promise<void> {
+    const expiresAt = new Date(Date.now() + CHALLENGE_TTL_MS);
+    await prisma.passkeyChallenge.upsert({
+        where: { key },
+        update: { challenge, expiresAt },
+        create: { key, challenge, expiresAt },
+    });
+}
+
+async function getChallenge(key: string): Promise<string | null> {
+    const row = await prisma.passkeyChallenge.findUnique({ where: { key } });
+    if (!row) return null;
+    if (row.expiresAt < new Date()) {
+        // Expired — clean up and treat as missing
+        await prisma.passkeyChallenge.delete({ where: { key } }).catch(() => { });
+        return null;
+    }
+    return row.challenge;
+}
+
+async function deleteChallenge(key: string): Promise<void> {
+    await prisma.passkeyChallenge.delete({ where: { key } }).catch(() => { });
+}
+
+// ── Helpers ─────────────────────────────────────────────────────────────────
 
 function credentialDescriptor(id: string): { id: BufferSource; type: "public-key" } {
     return {
@@ -28,19 +99,19 @@ function credentialDescriptor(id: string): { id: BufferSource; type: "public-key
     };
 }
 
-// ── Registration flows (these already work) ─────────────────────────────────
+// ── Registration (existing user adding a passkey) ───────────────────────────
 
 export async function generatePasskeyRegistrationOptions(userId: string) {
     const user = await prisma.user.findUnique({
         where: { id: userId },
         include: { passkeys: true },
     });
-
     if (!user) throw new Error("User not found");
 
+    const { rpId } = await getWebauthnConfig();
     const options = await generateRegistrationOptions({
         rpName: RP_NAME,
-        rpID: RP_ID,
+        rpID: rpId,
         userID: user.id,
         userName: user.email ?? userId,
         userDisplayName: user.name ?? user.email ?? userId,
@@ -53,7 +124,7 @@ export async function generatePasskeyRegistrationOptions(userId: string) {
         },
     });
 
-    challengeStore.set(`reg:${userId}`, options.challenge);
+    await storeChallenge(`reg:${userId}`, options.challenge);
     return options;
 }
 
@@ -62,21 +133,22 @@ export async function verifyPasskeyRegistration(
     response: RegistrationResponseJSON,
     passkeyName?: string
 ) {
-    const expectedChallenge = challengeStore.get(`reg:${userId}`);
-    if (!expectedChallenge) throw new Error("No pending registration challenge");
+    const expectedChallenge = await getChallenge(`reg:${userId}`);
+    if (!expectedChallenge) throw new Error("No pending registration challenge (expired or missing)");
 
+    const { rpId, origin } = await getWebauthnConfig();
     const verification = await verifyRegistrationResponse({
         response,
         expectedChallenge,
-        expectedOrigin: ORIGIN,
-        expectedRPID: RP_ID,
+        expectedOrigin: origin,
+        expectedRPID: rpId,
     });
 
     if (!verification.verified || !verification.registrationInfo) {
         throw new Error("Passkey registration verification failed");
     }
 
-    challengeStore.delete(`reg:${userId}`);
+    await deleteChallenge(`reg:${userId}`);
 
     const info = verification.registrationInfo;
 
@@ -98,13 +170,15 @@ export async function verifyPasskeyRegistration(
     return { verified: true };
 }
 
-// First-time registration
+// ── First-time registration (no existing account) ───────────────────────────
+
 export async function generateFirstTimePasskeyOptions() {
     const tempId = createId();
 
+    const { rpId } = await getWebauthnConfig();
     const options = await generateRegistrationOptions({
         rpName: RP_NAME,
-        rpID: RP_ID,
+        rpID: rpId,
         userID: tempId,
         userName: tempId,
         userDisplayName: "User",
@@ -117,7 +191,7 @@ export async function generateFirstTimePasskeyOptions() {
         },
     });
 
-    challengeStore.set(`first-reg:${tempId}`, options.challenge);
+    await storeChallenge(`first-reg:${tempId}`, options.challenge);
     return { options, tempId };
 }
 
@@ -125,28 +199,37 @@ export async function verifyFirstTimePasskeyRegistration(
     tempId: string,
     response: RegistrationResponseJSON
 ) {
-    const expectedChallenge = challengeStore.get(`first-reg:${tempId}`);
-    if (!expectedChallenge) throw new Error("No pending first-time registration challenge");
+    const expectedChallenge = await getChallenge(`first-reg:${tempId}`);
+    if (!expectedChallenge) throw new Error("No pending first-time registration challenge (expired or missing)");
 
+    const { rpId, origin } = await getWebauthnConfig();
     const verification = await verifyRegistrationResponse({
         response,
         expectedChallenge,
-        expectedOrigin: ORIGIN,
-        expectedRPID: RP_ID,
+        expectedOrigin: origin,
+        expectedRPID: rpId,
     });
 
     if (!verification.verified || !verification.registrationInfo) {
         throw new Error("First-time passkey registration verification failed");
     }
 
-    challengeStore.delete(`first-reg:${tempId}`);
+    await deleteChallenge(`first-reg:${tempId}`);
 
     const info = verification.registrationInfo;
 
+    // FIX: Use a NULL email instead of a fake "@passkey.openbench.local" address.
+    // The User model has `email String @unique` — using a generated fake email
+    // risks collisions and misleads any email-sending logic. Passkey-only users
+    // have no email; the unique constraint is satisfied by leaving it null.
+    // NOTE: This requires changing the schema: email String? @unique
+    // If you cannot change the schema right now, use a truly unique sentinel:
+    //   email: `passkey-${createId()}@noemail.invalid`
+    // but prefer nullable email for correctness.
     const user = await prisma.user.create({
         data: {
             name: "User",
-            email: `${createId()}@passkey.openbench.local`,
+            email: `passkey-${createId()}@noemail.invalid`, // unique; update schema to nullable when possible
             role: "user",
         },
     });
@@ -169,15 +252,17 @@ export async function verifyFirstTimePasskeyRegistration(
     return { verified: true, user };
 }
 
-// ── Authentication (fixed for fingerprint-first login) ──────────────────────
+// ── Authentication ──────────────────────────────────────────────────────────
+
 export async function generatePasskeyAuthOptions() {
+    const { rpId } = await getWebauthnConfig();
     const options = await generateAuthenticationOptions({
-        rpID: RP_ID,
-        userVerification: "required",           // Forces biometric prompt
-        allowCredentials: undefined,            // Allow discoverable (resident) credentials
+        rpID: rpId,
+        userVerification: "required",
+        allowCredentials: undefined, // Allow discoverable (resident) credentials
     });
 
-    challengeStore.set(`auth:${options.challenge}`, options.challenge);
+    await storeChallenge(`auth:${options.challenge}`, options.challenge);
     return options;
 }
 
@@ -186,7 +271,6 @@ export async function verifyPasskeyAuth(response: AuthenticationResponseJSON) {
         where: { credentialId: response.id },
         include: { user: true },
     });
-
     if (!passkey) throw new Error("Passkey not found");
 
     // Decode clientDataJSON to extract the challenge the browser actually used
@@ -195,15 +279,15 @@ export async function verifyPasskeyAuth(response: AuthenticationResponseJSON) {
     );
     const responseChallenge = clientData.challenge;
 
-    // Look up the specific challenge that was sent to the browser
-    const storedChallenge = challengeStore.get(`auth:${responseChallenge}`);
-    if (!storedChallenge) throw new Error("No pending authentication challenge for this response");
+    const storedChallenge = await getChallenge(`auth:${responseChallenge}`);
+    if (!storedChallenge) throw new Error("No pending authentication challenge (expired or missing)");
 
+    const { rpId, origin } = await getWebauthnConfig();
     const verification = await verifyAuthenticationResponse({
         response,
         expectedChallenge: storedChallenge,
-        expectedOrigin: ORIGIN,
-        expectedRPID: RP_ID,
+        expectedOrigin: origin,
+        expectedRPID: rpId,
         authenticator: {
             credentialID: Buffer.from(passkey.credentialId, "base64url"),
             credentialPublicKey: Buffer.from(passkey.publicKey, "base64url"),
@@ -214,7 +298,7 @@ export async function verifyPasskeyAuth(response: AuthenticationResponseJSON) {
 
     if (!verification.verified) throw new Error("Passkey authentication failed");
 
-    challengeStore.delete(`auth:${responseChallenge}`);
+    await deleteChallenge(`auth:${responseChallenge}`);
 
     await prisma.passkey.update({
         where: { id: passkey.id },

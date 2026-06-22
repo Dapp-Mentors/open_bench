@@ -609,3 +609,76 @@ def unzip_task(zip_path: str, dest_dir: str) -> str:
             )
         zf.extractall(dest_dir)
         return os.path.join(dest_dir, roots.pop())
+
+
+# ── Docker cleanup helpers ────────────────────────────────────────────────────
+
+def remove_task_image(task_id: str) -> Tuple[bool, str]:
+    """
+    Remove the Docker image built for a specific task.
+    Also prunes unused build cache to prevent disk bloat.
+
+    Intended to be called after a task is rejected (or after pipeline completes)
+    so build artifacts from the CI stage don't accumulate.
+    """
+    tag = _image_tag(task_id)
+    client = _docker_client()
+    removed = False
+
+    try:
+        image = client.images.get(tag)
+        client.images.remove(image.id, force=True, noprompt=True)
+        removed = True
+        _diag(f"Removed Docker image {tag}")
+    except ImageNotFound:
+        _diag(f"Docker image {tag} not found — nothing to remove")
+    except Exception as e:
+        return False, f"Failed to remove image {tag}: {e}"
+
+    # Also prune dangling build cache to free up intermediate layers
+    try:
+        client.images.prune(filters={"dangling": True})
+        _diag("Pruned dangling Docker images")
+    except Exception as e:
+        _diag(f"Docker prune warning: {e}")
+
+    if removed:
+        return True, f"Removed Docker image {tag} and pruned build cache"
+    return True, f"No Docker image found for {tag}"
+
+
+def prune_docker_system() -> Tuple[int, str]:
+    """
+    Aggressive Docker system prune.
+    Removes all unused containers, networks, images (not just dangling),
+    and build cache.
+
+    This is a heavier operation intended for periodic cron runs (e.g. daily)
+    to prevent long-term disk bloat from accumulated task builds.
+    """
+    try:
+        client = _docker_client()
+
+        # Prune images (all unused, not just dangling)
+        img_report = client.images.prune(filters={"dangling": False})
+        images_reclaimed = img_report.get("SpaceReclaimed", 0)
+
+        # Prune build cache
+        import subprocess as sp
+        build_result = sp.run(
+            ["docker", "builder", "prune", "--all", "--force"],
+            capture_output=True, text=True, timeout=120,
+        )
+
+        # Prune containers
+        ctn_report = client.containers.prune()
+        containers_reclaimed = ctn_report.get("SpaceReclaimed", 0)
+
+        total_mb = (images_reclaimed + containers_reclaimed) / (1024 * 1024)
+        return 0, (
+            f"Docker system prune complete: "
+            f"{total_mb:.1f} MB reclaimed, "
+            f"build cache pruned"
+        )
+    except Exception as e:
+        return 1, f"Docker system prune failed: {e}"
