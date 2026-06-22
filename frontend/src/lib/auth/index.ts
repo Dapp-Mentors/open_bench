@@ -1,11 +1,16 @@
 // src/lib/auth/index.ts
 //
 // NextAuth.js v5 (next-auth@beta) configuration.
-// Supports: Google OAuth, GitHub OAuth, Passkeys (WebAuthn).
-// OAuth client IDs & secrets are read from the AppSettings table
-// (configured through the setup wizard) instead of env vars.
-// Session strategy: JWT — required so that middleware (edge runtime)
-// can verify sessions without a database connection.
+//
+// FIXES:
+//   1. jwt callback now re-reads role from DB on every new sign-in (user != null).
+//      This ensures the "first user → super_admin" promotion that happens in the
+//      createUser event is reflected in the JWT immediately, without requiring a
+//      sign-out/sign-in cycle.
+//
+//   2. Auth config cache is invalidated when OAuth provider credentials change
+//      (e.g. after the setup wizard saves them). A fingerprint of the client IDs
+//      is stored alongside the cached instance.
 
 import NextAuth from "next-auth";
 import Google from "next-auth/providers/google";
@@ -15,12 +20,9 @@ import { PrismaAdapter } from "@auth/prisma-adapter";
 import { prisma } from "@/lib/prisma/client";
 import type { Role } from "@prisma/client";
 
-// We read client IDs/secrets from the DB at build/startup.
-// If the DB row doesn't exist yet, auth providers will be disabled
-// until the setup wizard is completed.
 async function getProviderConfig() {
   try {
-    const settings = await prisma.appSettings.findUnique({
+    return await prisma.appSettings.findUnique({
       where: { id: "default" },
       select: {
         googleClientId: true,
@@ -29,7 +31,6 @@ async function getProviderConfig() {
         githubClientSecret: true,
       },
     });
-    return settings;
   } catch {
     return null;
   }
@@ -37,7 +38,6 @@ async function getProviderConfig() {
 
 export async function createAuthConfig() {
   const providerConfig = await getProviderConfig();
-
   const providers = [];
 
   if (providerConfig?.googleClientId && providerConfig?.googleClientSecret) {
@@ -46,10 +46,7 @@ export async function createAuthConfig() {
         clientId: providerConfig.googleClientId,
         clientSecret: providerConfig.googleClientSecret,
         authorization: {
-          params: {
-            scope: "openid email profile",
-            prompt: "select_account",
-          },
+          params: { scope: "openid email profile", prompt: "select_account" },
         },
         allowDangerousEmailAccountLinking: true,
       })
@@ -66,27 +63,18 @@ export async function createAuthConfig() {
     );
   }
 
-  // Always include passkey credentials provider
   providers.push(
     Credentials({
       id: "passkey",
       name: "Passkey",
-      credentials: {
-        userId: { label: "User ID", type: "text" },
-      },
+      credentials: { userId: { label: "User ID", type: "text" } },
       async authorize(credentials) {
         if (!credentials?.userId) return null;
         const user = await prisma.user.findUnique({
           where: { id: credentials.userId as string },
         });
         if (!user) return null;
-        return {
-          id: user.id,
-          name: user.name,
-          email: user.email,
-          role: user.role,
-          image: user.image,
-        };
+        return { id: user.id, name: user.name, email: user.email, role: user.role, image: user.image };
       },
     })
   );
@@ -95,15 +83,21 @@ export async function createAuthConfig() {
     adapter: PrismaAdapter(prisma),
     session: { strategy: "jwt" as const },
     providers,
-    pages: {
-      signIn: "/login",
-      error: "/login",
-    },
+    pages: { signIn: "/login", error: "/login" },
     callbacks: {
       async jwt({ token, user }: { token: any; user?: any }) {
         if (user) {
+          // user is only set on the initial sign-in. Re-read from DB to pick up
+          // any role that was assigned during the createUser event (e.g. the
+          // first-user → super_admin promotion), which fires *before* this
+          // callback but after the user object was fetched by the provider.
           token.id = user.id;
-          token.role = (user as { role: Role }).role;
+
+          const fresh = await prisma.user.findUnique({
+            where: { id: user.id },
+            select: { role: true },
+          });
+          token.role = fresh?.role ?? user.role ?? "user";
         }
         return token;
       },
@@ -138,31 +132,39 @@ export async function createAuthConfig() {
   };
 }
 
-// Export a lazily-initialised auth that reads config from DB on first call.
+// ── Cache with config-fingerprint invalidation ──────────────────────────────
+
 let _auth: ReturnType<typeof NextAuth> | null = null;
+let _configFingerprint: string | null = null;
+
+async function configFingerprint(): Promise<string> {
+  const cfg = await getProviderConfig();
+  return JSON.stringify({
+    g: cfg?.googleClientId ?? "",
+    gh: cfg?.githubClientId ?? "",
+  });
+}
 
 async function getAuth() {
-  if (!_auth) {
+  const fp = await configFingerprint();
+  if (!_auth || fp !== _configFingerprint) {
     const config = await createAuthConfig();
     _auth = NextAuth(config);
+    _configFingerprint = fp;
   }
   return _auth;
 }
 
-// Re-export the standard NextAuth helpers. They internally call getAuth().
-// auth() can be called with no arguments (default middleware usage) or with a request.
+// ── Exports ─────────────────────────────────────────────────────────────────
+
 export async function auth(...args: any[]) {
   const a = await getAuth();
   return (a.auth as any)(...args);
 }
 
-// Handlers are wrapped to lazily initialise NextAuth with DB provider config.
-// NextAuth v5 route handlers accept (req, ctx) but some overloads only accept req.
-// We directly invoke the response without spreading ctx to avoid type mismatches.
 export const handlers = {
   GET: async (req: Request, ...rest: any[]) => {
     const a = await getAuth();
-    // The handlers may accept 1 or 2 arguments; cast to Function to work with both
     return (a.handlers.GET as any)(req, ...rest);
   },
   POST: async (req: Request, ...rest: any[]) => {

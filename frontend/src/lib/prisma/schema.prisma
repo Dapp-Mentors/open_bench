@@ -298,3 +298,26 @@ model ModelConfig {
   modelName String   @default("")
   updatedAt DateTime @updatedAt
 }
+
+// ADD THIS MODEL to your existing schema.prisma
+// Then run: npx prisma migrate dev --name add_passkey_challenge
+//
+// This replaces the in-memory challengeStore Map in passkey.ts,
+// which was wiped on every serverless cold start / process restart.
+
+model PasskeyChallenge {
+  id        String   @id @default(cuid())
+  key       String   @unique   // "reg:{userId}" | "first-reg:{tempId}" | "auth:{challenge}"
+  challenge String
+  expiresAt DateTime
+
+  @@index([expiresAt]) // for future cleanup jobs
+}
+
+// ── OPTIONAL (recommended): make User.email nullable for passkey-only accounts ──
+// Change:  email  String   @unique
+// To:      email  String?  @unique
+//
+// This avoids the fake "@noemail.invalid" sentinel email that passkey.ts
+// currently writes for first-time registrations. Only do this if your
+// codebase handles nullable emails everywhere (check all email ?? "" guards).

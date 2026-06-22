@@ -47,14 +47,24 @@ export async function POST(request: Request) {
       );
     }
 
-    // Use NextAuth's signIn with the passkey credentials provider.
-    // This creates a proper JWT session cookie that the middleware can decode.
-    await signIn("passkey", {
-      userId: result.user.id,
-      redirect: false,
-    });
+        // Use NextAuth's signIn with the passkey credentials provider.
+        // This creates a proper JWT session cookie that the middleware can decode.
+        const signInResponse = await signIn("passkey", {
+            userId: result.user.id,
+            redirect: false,
+        });
 
-    return NextResponse.json({ success: true, userId: result.user.id });
+        // Forward the Set-Cookie header from the signIn response so the
+        // browser receives the session JWT cookie.
+        const jsonResponse = NextResponse.json({ success: true, userId: result.user.id });
+        if (signInResponse && "headers" in signInResponse) {
+            const setCookie = (signInResponse as Response).headers.get("set-cookie");
+            if (setCookie) {
+                jsonResponse.headers.set("set-cookie", setCookie);
+            }
+        }
+
+        return jsonResponse;
   } catch (err) {
     const message = err instanceof Error ? err.message : "Registration failed";
     return NextResponse.json({ error: message }, { status: 400 });
