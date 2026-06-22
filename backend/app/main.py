@@ -18,6 +18,12 @@ from app.services.sse import sia_event_generator
 async def lifespan(app: FastAPI):
     # Prisma (frontend) owns the schema — we never call create_all here.
 
+    # ── Load all settings from DB (setup wizard) ────────────────────────────
+    # Reads OpenRouter key, Sia indexer URL, app ID, name, and description
+    # from the AppSettings table. No .env fallback for these values.
+    print("[Config] Loading settings from DB (setup wizard)…")
+    await settings.load_db_settings()
+
     # ── Eagerly initialise the Sia client on boot ────────────────────────────
     # This triggers the approval flow (if needed) immediately so the operator
     # sees the ACTION REQUIRED URL without having to approve a task first.

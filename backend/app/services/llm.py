@@ -62,8 +62,8 @@ async def chat_completion(
 
     if not api_key:
         raise RuntimeError(
-            "No OPENROUTER_API_KEY configured. "
-            "Set OPENROUTER_API_KEY in your .env file."
+            "No OpenRouter API key configured. "
+            "Set it via the setup wizard at /setup."
         )
 
     messages = [

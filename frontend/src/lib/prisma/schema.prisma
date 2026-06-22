@@ -98,6 +98,30 @@ model Passkey {
   @@index([userId])
 }
 
+// ─── App-wide settings (setup wizard) ──────────────────────────────────────────
+// Stores the outcome of the first-run setup wizard so the app knows whether
+// Sia has been connected and an OpenRouter API key has been provided.
+// There is exactly one row (id = "default") in this table.
+
+model AppSettings {
+  id                 String   @id @default("default")
+  setupComplete      Boolean  @default(false)
+  // Sia configuration (set via setup wizard — no .env fallback)
+  siaConnected       Boolean  @default(false)
+  siaIndexerUrl      String?  // e.g. https://sia.storage
+  siaAppId           String?  // App ID for the indexer
+  siaAppName         String?  // e.g. OpenBench
+  siaAppDescription  String?  // Description shown during approval
+  // OpenRouter API key (set via setup wizard — no .env fallback)
+  openrouterKey      String?  // stored key for all LLM calls
+  // Social login provider keys (set via setup wizard — no .env fallback)
+  googleClientId     String?  // Google OAuth client ID
+  googleClientSecret String?  // Google OAuth client secret
+  githubClientId     String?  // GitHub OAuth client ID
+  githubClientSecret String?  // GitHub OAuth client secret
+  updatedAt          DateTime @updatedAt
+}
+
 // ─── Project ──────────────────────────────────────────────────────────────────
 
 model Project {

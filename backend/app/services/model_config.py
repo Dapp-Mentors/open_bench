@@ -170,9 +170,9 @@ async def fetch_openrouter_models() -> list[dict]:
     Fetch available models from the OpenRouter API.
     Returns a simplified list with id, name, context length, and pricing info.
     """
-    api_key = settings.OPENROUTER_API_KEY
+    api_key = settings.llm_api_key()
     if not api_key:
-        _log("No OPENROUTER_API_KEY configured — returning curated list only")
+        _log("No OpenRouter API key configured — returning curated list only")
         return TOP_MODELS
 
     url = "https://openrouter.ai/api/v1/models"

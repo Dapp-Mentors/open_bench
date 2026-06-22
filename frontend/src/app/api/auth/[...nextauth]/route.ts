@@ -10,5 +10,7 @@
 
 import { handlers } from "@/lib/auth";
 
+// The handlers are async functions that lazily initialise NextAuth
+// with provider config from the database.
 export const GET = handlers.GET;
 export const POST = handlers.POST;

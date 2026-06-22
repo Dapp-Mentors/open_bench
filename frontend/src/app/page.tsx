@@ -7,6 +7,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
 
 const PIPELINE_STAGES = [
   { label: "Similarity", desc: "Embedding cosine check rejects tasks too close to existing ones (cosine > 0.85 → rejected). Keeps the benchmark diverse." },
@@ -42,6 +43,19 @@ export default async function Home() {
   const session = await auth();
 
   if (session?.user) {
+    // Check if setup is complete — if not, redirect to setup wizard
+    try {
+      const settings = await prisma.appSettings.findUnique({
+        where: { id: "default" },
+        select: { setupComplete: true },
+      });
+      if (!settings?.setupComplete) {
+        redirect("/setup");
+      }
+    } catch {
+      // AppSettings table may not exist yet (fresh DB), redirect to setup
+      redirect("/setup");
+    }
     redirect("/dashboard");
   }
 
