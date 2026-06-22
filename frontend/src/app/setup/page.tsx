@@ -7,7 +7,7 @@
 // Persists completed steps to the DB so refreshing the page restores
 // progress. Each completed step shows a checkmark and can be re-done.
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import {
@@ -52,6 +52,9 @@ export default function SetupPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [step, setStep] = useState<Step>("sia");
+
+  // Guard against rapid double-clicks on submit buttons
+  const submittingRef = useRef(false);
 
   // ── Persisted completion flags (loaded from DB on mount) ─────────────────
   const [status, setStatus] = useState<SetupStatus | null>(null);

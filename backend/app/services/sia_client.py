@@ -116,6 +116,13 @@ async def registration_start(recovery_phrase: str) -> dict:
     if _SIA_MODE == "demo":
         return {"ok": False, "error": "Sia is in demo mode — registration not available"}
 
+    # If a registration flow is already pending, return the existing approval URL
+    # instead of creating a new one. This prevents double-submit from the frontend
+    # from overwriting the flow and invalidating the user's pending approval.
+    if _registration_flow["step"] == "pending_approval" and _registration_flow["approval_url"]:
+        print(f"[Sia] Registration already pending — reusing existing approval URL")
+        return {"ok": True, "approval_url": _registration_flow["approval_url"]}
+
     # Validate the recovery phrase before proceeding
     try:
         validate_recovery_phrase(recovery_phrase)
