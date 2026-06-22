@@ -1,6 +1,6 @@
 // src/app/api/setup/providers/route.ts
-// POST — stores Google/GitHub OAuth client IDs and secrets
-// GET  — returns whether social providers have been configured
+// POST — stores Google/GitHub OAuth client IDs/secrets AND WebAuthn config
+// GET  — returns whether providers and WebAuthn have been configured
 
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
@@ -16,16 +16,33 @@ export async function GET() {
         !!(settings?.googleClientId && settings?.googleClientSecret),
       hasGitHub:
         !!(settings?.githubClientId && settings?.githubClientSecret),
+      hasWebauthn:
+        !!(settings?.webauthnRpId && settings?.webauthnOrigin),
+      webauthnRpId: settings?.webauthnRpId ?? null,
+      webauthnOrigin: settings?.webauthnOrigin ?? null,
     });
   } catch {
-    return NextResponse.json({ hasGoogle: false, hasGitHub: false });
+    return NextResponse.json({
+      hasGoogle: false,
+      hasGitHub: false,
+      hasWebauthn: false,
+      webauthnRpId: null,
+      webauthnOrigin: null,
+    });
   }
 }
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { googleClientId, googleClientSecret, githubClientId, githubClientSecret } = body;
+    const {
+      googleClientId,
+      googleClientSecret,
+      githubClientId,
+      githubClientSecret,
+      webauthnRpId,
+      webauthnOrigin,
+    } = body;
 
     // Validate that at least Google or GitHub is provided
     if (!googleClientId && !googleClientSecret && !githubClientId && !githubClientSecret) {
@@ -56,6 +73,8 @@ export async function POST(request: Request) {
         googleClientSecret: googleClientSecret?.trim() || null,
         githubClientId: githubClientId?.trim() || null,
         githubClientSecret: githubClientSecret?.trim() || null,
+        webauthnRpId: webauthnRpId?.trim() || null,
+        webauthnOrigin: webauthnOrigin?.trim() || null,
       },
       create: {
         id: "default",
@@ -63,6 +82,8 @@ export async function POST(request: Request) {
         googleClientSecret: googleClientSecret?.trim() || null,
         githubClientId: githubClientId?.trim() || null,
         githubClientSecret: githubClientSecret?.trim() || null,
+        webauthnRpId: webauthnRpId?.trim() || null,
+        webauthnOrigin: webauthnOrigin?.trim() || null,
         siaConnected: false,
       },
     });

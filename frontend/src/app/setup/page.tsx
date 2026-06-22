@@ -3,8 +3,11 @@
 // src/app/setup/page.tsx
 // First-run setup wizard: Sia → OpenRouter → Social Providers → Sign Up
 // Auth is the last step — the first user to sign up becomes super_admin.
+//
+// Persists completed steps to the DB so refreshing the page restores
+// progress. Each completed step shows a checkmark and can be re-done.
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import {
@@ -13,29 +16,48 @@ import {
   Loader2,
   ExternalLink,
   KeyRound,
-  Wifi,
   ChevronRight,
   ArrowLeft,
+  ArrowRight,
   Sparkles,
   Github,
   Globe,
+  RefreshCw,
 } from "lucide-react";
 
 type Step = "sia" | "openrouter" | "providers" | "signup";
 
+const STEP_ORDER: Step[] = ["sia", "openrouter", "providers", "signup"];
+
 interface SetupStatus {
   setupComplete: boolean;
+  // Sia
   siaConnected: boolean;
+  siaIndexerUrl: string | null;
+  siaAppId: string | null;
+  siaAppName: string | null;
+  siaAppDescription: string | null;
+  // OpenRouter
   hasOpenrouterKey: boolean;
-  userCount: number;
+  // Providers
+  hasGoogle: boolean;
+  hasGitHub: boolean;
+  hasWebauthn: boolean;
+  webauthnRpId: string | null;
+  webauthnOrigin: string | null;
 }
 
 export default function SetupPage() {
   const { data: session } = useSession();
   const router = useRouter();
-  const [step, setStep] = useState<Step>("sia");
-  const [status, setStatus] = useState<SetupStatus | null>(null);
   const [loading, setLoading] = useState(true);
+  const [step, setStep] = useState<Step>("sia");
+
+  // ── Persisted completion flags (loaded from DB on mount) ─────────────────
+  const [status, setStatus] = useState<SetupStatus | null>(null);
+  const [siaConfirmed, setSiaConfirmed] = useState(false);
+  const [orConfirmed, setOrConfirmed] = useState(false);
+  const [provConfirmed, setProvConfirmed] = useState(false);
 
   // Sia state
   const [siaIndexerUrl, setSiaIndexerUrl] = useState("https://sia.storage");
@@ -43,7 +65,6 @@ export default function SetupPage() {
   const [siaAppName, setSiaAppName] = useState("OpenBench");
   const [siaAppDescription, setSiaAppDescription] = useState("");
   const [siaRecoveryPhrase, setSiaRecoveryPhrase] = useState("");
-  const [siaConfirmed, setSiaConfirmed] = useState(false);
   const [siaLoading, setSiaLoading] = useState(false);
   const [siaError, setSiaError] = useState<string | null>(null);
   const [approvalUrl, setApprovalUrl] = useState<string | null>(null);
@@ -53,38 +74,70 @@ export default function SetupPage() {
   const [apiKey, setApiKey] = useState("");
   const [orLoading, setOrLoading] = useState(false);
   const [orError, setOrError] = useState<string | null>(null);
-  const [orConfirmed, setOrConfirmed] = useState(false);
 
   // Social providers state
   const [googleClientId, setGoogleClientId] = useState("");
   const [googleClientSecret, setGoogleClientSecret] = useState("");
   const [githubClientId, setGithubClientId] = useState("");
   const [githubClientSecret, setGithubClientSecret] = useState("");
+  const [webauthnRpId, setWebauthnRpId] = useState("");
+  const [webauthnOrigin, setWebauthnOrigin] = useState("");
   const [provLoading, setProvLoading] = useState(false);
   const [provError, setProvError] = useState<string | null>(null);
-  const [provConfirmed, setProvConfirmed] = useState(false);
 
   // Finishing state
   const [finishing, setFinishing] = useState(false);
 
-  useEffect(() => {
-    async function fetchStatus() {
+  // ── Load persisted state from DB on mount ─────────────────────────────────
+  const loadPersistedState = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await fetch("/api/setup/status");
+      const data: SetupStatus = await res.json();
+
+      if (data.setupComplete) {
+        router.push("/dashboard");
+        return;
+      }
+
+      setStatus(data);
+
+      // Restore Sia state
+      if (data.siaConnected) {
+        setSiaConfirmed(true);
+        if (data.siaIndexerUrl) setSiaIndexerUrl(data.siaIndexerUrl);
+        if (data.siaAppId) setSiaAppId(data.siaAppId);
+        if (data.siaAppName) setSiaAppName(data.siaAppName);
+        if (data.siaAppDescription) setSiaAppDescription(data.siaAppDescription);
+      }
+
+      // Restore OpenRouter state
+      if (data.hasOpenrouterKey) {
+        setOrConfirmed(true);
+      }
+
+      // Restore providers state — also fetch details
       try {
-        const res = await fetch("/api/setup/status");
-        const data = await res.json();
-        setStatus(data);
-        if (data.setupComplete) {
-          router.push("/dashboard");
-          return;
+        const provRes = await fetch("/api/setup/providers");
+        const provData = await provRes.json();
+        if (provData.hasGoogle || provData.hasGitHub || provData.hasWebauthn) {
+          setProvConfirmed(true);
+          if (provData.webauthnRpId) setWebauthnRpId(provData.webauthnRpId);
+          if (provData.webauthnOrigin) setWebauthnOrigin(provData.webauthnOrigin);
         }
       } catch {
         // ignore
-      } finally {
-        setLoading(false);
       }
+    } catch {
+      // DB may not exist yet
+    } finally {
+      setLoading(false);
     }
-    fetchStatus();
   }, [router]);
+
+  useEffect(() => {
+    loadPersistedState();
+  }, [loadPersistedState]);
 
   // When user signs in, redirect to dashboard (setup is complete)
   useEffect(() => {
@@ -92,6 +145,15 @@ export default function SetupPage() {
       router.push("/dashboard");
     }
   }, [session, status, router]);
+
+  function goTo(s: Step) {
+    setStep(s);
+    setSiaError(null);
+    setOrError(null);
+    setProvError(null);
+  }
+
+  // ── Handlers ─────────────────────────────────────────────────────────────
 
   async function handleSiaSubmit() {
     if (!siaIndexerUrl.trim() || !siaAppId.trim() || !siaAppName.trim()) return;
@@ -102,24 +164,23 @@ export default function SetupPage() {
       const res = await fetch("/api/setup/sia", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        siaIndexerUrl: siaIndexerUrl.trim(),
-        siaAppId: siaAppId.trim(),
-        siaAppName: siaAppName.trim(),
-        siaAppDescription: siaAppDescription.trim(),
-        recovery_phrase: siaRecoveryPhrase.trim(),
-      }),
+        body: JSON.stringify({
+          siaIndexerUrl: siaIndexerUrl.trim(),
+          siaAppId: siaAppId.trim(),
+          siaAppName: siaAppName.trim(),
+          siaAppDescription: siaAppDescription.trim(),
+          recovery_phrase: siaRecoveryPhrase.trim(),
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Failed to save");
 
       if (data.approval_url) {
-        // Show the SDK-generated approval URL
         setApprovalUrl(data.approval_url);
         return;
       }
 
-      // Backend unavailable — config saved, skip for now
+      // Already connected or backend unavailable
       setSiaConfirmed(true);
     } catch (err) {
       setSiaError(err instanceof Error ? err.message : "Something went wrong");
@@ -140,7 +201,6 @@ export default function SetupPage() {
         setSiaConfirmed(true);
         setApprovalUrl(null);
       } else {
-        // Still pending — show a brief error so user can try again
         setSiaError("Approval not yet detected. Make sure you've approved the app on the Sia indexer, then try again.");
         setTimeout(() => setSiaError(null), 5000);
       }
@@ -185,6 +245,8 @@ export default function SetupPage() {
           googleClientSecret: googleClientSecret.trim() || undefined,
           githubClientId: githubClientId.trim() || undefined,
           githubClientSecret: githubClientSecret.trim() || undefined,
+          webauthnRpId: webauthnRpId.trim() || undefined,
+          webauthnOrigin: webauthnOrigin.trim() || undefined,
         }),
       });
       const data = await res.json();
@@ -201,12 +263,13 @@ export default function SetupPage() {
     setFinishing(true);
     try {
       await fetch("/api/setup/status", { method: "POST" });
-      // Redirect to login so the user can sign up
       router.push("/login?callbackUrl=/dashboard");
     } catch {
       router.push("/login?callbackUrl=/dashboard");
     }
   }
+
+  // ── Loading state ────────────────────────────────────────────────────────
 
   if (loading) {
     return (
@@ -217,17 +280,38 @@ export default function SetupPage() {
   }
 
   if (status?.setupComplete) {
-    return null; // will redirect
+    return null;
   }
 
-  const steps: Step[] = ["sia", "openrouter", "providers", "signup"];
-  const stepIndex = steps.indexOf(step);
+  const stepIndex = STEP_ORDER.indexOf(step);
+
+  // Determine which steps are completed (from DB-persisted state)
+  const stepsState: Record<Step, boolean> = {
+    sia: siaConfirmed,
+    openrouter: orConfirmed,
+    providers: provConfirmed,
+    signup: false,
+  };
+
+  // The current step index determines what's "done" for the step indicator line
+  const stepsDoneBeforeMap = STEP_ORDER.reduce((acc, s) => {
+    let count = 0;
+    for (const st of STEP_ORDER) {
+      if (st === s) break;
+      if (stepsState[st]) count++;
+    }
+    acc[s] = count;
+    return acc;
+  }, {} as Record<Step, number>);
+
+  // ── Render ───────────────────────────────────────────────────────────────
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4" style={{ background: "var(--bg)" }}>
+    <div className="min-h-screen flex items-start justify-center pt-12 px-4 pb-12" style={{ background: "var(--bg)" }}>
       <div className="w-full max-w-lg">
+
         {/* Header logo */}
-        <div className="flex flex-col items-center mb-10 gap-3">
+        <div className="flex flex-col items-center mb-8 gap-3">
           <div
             className="w-14 h-14 flex items-center justify-center rounded-2xl"
             style={{
@@ -250,15 +334,17 @@ export default function SetupPage() {
           </div>
         </div>
 
-        {/* Step indicators */}
+        {/* ── Interactive step indicators ── */}
         <div className="flex items-center justify-center gap-2 mb-8">
-          {steps.map((s, i) => {
+          {STEP_ORDER.map((s, i) => {
+            const isDone = stepsState[s];
             const isActive = step === s;
-            const isDone = i < stepIndex;
             return (
               <div key={s} className="flex items-center gap-2">
-                <div
-                  className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-mono font-bold transition-all"
+                <button
+                  type="button"
+                  onClick={() => goTo(s)}
+                  className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-mono font-bold transition-all cursor-pointer"
                   style={{
                     background: isDone
                       ? "var(--green)"
@@ -268,28 +354,53 @@ export default function SetupPage() {
                     color: isDone ? "#0a0b0d" : isActive ? "var(--green)" : "var(--subtle)",
                     border: isActive ? "1px solid rgba(0,230,118,0.4)" : "1px solid transparent",
                   }}
+                  title={
+                    isDone
+                      ? `${s} — completed (click to re-do)`
+                      : isActive
+                        ? `${s} — current step`
+                        : s
+                  }
                 >
                   {isDone ? <CheckCircle2 className="w-3.5 h-3.5" /> : i + 1}
-                </div>
-                {i < steps.length - 1 && (
-                  <div className="w-8 h-px" style={{ background: isDone ? "var(--green)" : "var(--border)" }} />
+                </button>
+                {i < STEP_ORDER.length - 1 && (
+                  <div
+                    className="w-8 h-px"
+                    style={{ background: stepsState[STEP_ORDER[i]] ? "var(--green)" : "var(--border)" }}
+                  />
                 )}
               </div>
             );
           })}
         </div>
 
+        {/* Subtitle showing what's completed */}
+        <div className="text-center mb-6">
+          <p className="font-mono text-[10px]" style={{ color: "var(--muted)" }}>
+            {siaConfirmed && "✔ Sia connected "}
+            {(siaConfirmed && orConfirmed) && "• "}
+            {orConfirmed && "✔ OpenRouter key set "}
+            {(orConfirmed && provConfirmed) && "• "}
+            {provConfirmed && "✔ Providers configured "}
+            {!siaConfirmed && !orConfirmed && !provConfirmed && "No steps completed yet"}
+          </p>
+        </div>
+
         {/* ── Sia Step ── */}
         {step === "sia" && (
           <div className="space-y-6">
-            <div className="text-center">
-              <h1 className="font-mono text-xl font-semibold mb-2" style={{ color: "var(--text)" }}>
-                Connect Sia Storage
-              </h1>
-              <p className="font-mono text-sm leading-relaxed" style={{ color: "var(--subtle)" }}>
-                Enter your Sia indexer URL, app ID, and app details to enable decentralized
-                storage for task artifacts and benchmark results.
-              </p>
+            <div className="flex items-center justify-between">
+              <div className="text-center flex-1">
+                <h1 className="font-mono text-xl font-semibold mb-2" style={{ color: "var(--text)" }}>
+                  Connect Sia Storage
+                </h1>
+                <p className="font-mono text-sm leading-relaxed" style={{ color: "var(--subtle)" }}>
+                  {siaConfirmed
+                    ? "Sia is already configured. You can update the settings below."
+                    : "Enter your Sia indexer URL, app ID, and app details to enable decentralized storage for task artifacts and benchmark results."}
+                </p>
+              </div>
             </div>
 
             <div className="space-y-4">
@@ -302,13 +413,13 @@ export default function SetupPage() {
                   value={siaIndexerUrl}
                   onChange={(e) => setSiaIndexerUrl(e.target.value)}
                   placeholder="https://sia.storage"
-                  disabled={siaConfirmed}
+                  disabled={siaLoading}
                   className="w-full px-3 py-2.5 rounded-lg font-mono text-sm outline-none"
                   style={{
                     background: "var(--surface)",
                     border: "1px solid var(--border)",
                     color: "var(--text)",
-                    opacity: siaConfirmed ? 0.6 : 1,
+                    opacity: siaConfirmed && !siaLoading ? 0.6 : 1,
                   }}
                 />
               </div>
@@ -323,13 +434,13 @@ export default function SetupPage() {
                     value={siaAppId}
                     onChange={(e) => setSiaAppId(e.target.value)}
                     placeholder="64-character hex app ID"
-                    disabled={siaConfirmed}
+                    disabled={siaLoading}
                     className="flex-1 px-3 py-2.5 rounded-lg font-mono text-sm outline-none"
                     style={{
                       background: "var(--surface)",
                       border: "1px solid var(--border)",
                       color: "var(--text)",
-                      opacity: siaConfirmed ? 0.6 : 1,
+                      opacity: siaConfirmed && !siaLoading ? 0.6 : 1,
                     }}
                   />
                   <button
@@ -340,7 +451,7 @@ export default function SetupPage() {
                       ).join("");
                       setSiaAppId(hex);
                     }}
-                    disabled={siaConfirmed}
+                    disabled={siaLoading}
                     className="flex items-center gap-1.5 px-3 py-2.5 rounded-lg font-mono text-xs font-semibold whitespace-nowrap transition-all disabled:opacity-40"
                     style={{
                       background: "rgba(0,230,118,0.1)",
@@ -366,13 +477,13 @@ export default function SetupPage() {
                   value={siaAppName}
                   onChange={(e) => setSiaAppName(e.target.value)}
                   placeholder="OpenBench"
-                  disabled={siaConfirmed}
+                  disabled={siaLoading}
                   className="w-full px-3 py-2.5 rounded-lg font-mono text-sm outline-none"
                   style={{
                     background: "var(--surface)",
                     border: "1px solid var(--border)",
                     color: "var(--text)",
-                    opacity: siaConfirmed ? 0.6 : 1,
+                    opacity: siaConfirmed && !siaLoading ? 0.6 : 1,
                   }}
                 />
               </div>
@@ -386,40 +497,40 @@ export default function SetupPage() {
                   value={siaAppDescription}
                   onChange={(e) => setSiaAppDescription(e.target.value)}
                   placeholder="OpenBench - Decentralized AI Benchmarking"
-                  disabled={siaConfirmed}
+                  disabled={siaLoading}
                   className="w-full px-3 py-2.5 rounded-lg font-mono text-sm outline-none"
                   style={{
                     background: "var(--surface)",
                     border: "1px solid var(--border)",
                     color: "var(--text)",
-                    opacity: siaConfirmed ? 0.6 : 1,
+                    opacity: siaConfirmed && !siaLoading ? 0.6 : 1,
                   }}
                 />
               </div>
 
-              <div>
-                <label className="block font-mono text-xs mb-1.5" style={{ color: "var(--subtle)" }}>
-                  BIP-39 Recovery Phrase
-                </label>
-                <textarea
-                  value={siaRecoveryPhrase}
-                  onChange={(e) => setSiaRecoveryPhrase(e.target.value)}
-                  placeholder="Enter your 12 or 24-word BIP-39 recovery phrase..."
-                  disabled={siaConfirmed}
-                  rows={3}
-                  className="w-full px-3 py-2.5 rounded-lg font-mono text-sm outline-none resize-none"
-                  style={{
-                    background: "var(--surface)",
-                    border: "1px solid var(--border)",
-                    color: "var(--text)",
-                    opacity: siaConfirmed ? 0.6 : 1,
-                  }}
-                />
-                <p className="font-mono text-[10px] mt-1 leading-relaxed" style={{ color: "var(--muted)" }}>
-                  Your recovery phrase is your master key. It is used only once to derive the App Key
-                  and is <strong className="text-[var(--red)]">never stored</strong> by the application.
-                </p>
-              </div>
+              {!siaConfirmed && (
+                <div>
+                  <label className="block font-mono text-xs mb-1.5" style={{ color: "var(--subtle)" }}>
+                    BIP-39 Recovery Phrase
+                  </label>
+                  <textarea
+                    value={siaRecoveryPhrase}
+                    onChange={(e) => setSiaRecoveryPhrase(e.target.value)}
+                    placeholder="Enter your 12 or 24-word BIP-39 recovery phrase..."
+                    rows={3}
+                    className="w-full px-3 py-2.5 rounded-lg font-mono text-sm outline-none resize-none"
+                    style={{
+                      background: "var(--surface)",
+                      border: "1px solid var(--border)",
+                      color: "var(--text)",
+                    }}
+                  />
+                  <p className="font-mono text-[10px] mt-1 leading-relaxed" style={{ color: "var(--muted)" }}>
+                    Your recovery phrase is your master key. It is used only once to derive the App Key
+                    and is <strong className="text-[var(--red)]">never stored</strong> by the application.
+                  </p>
+                </div>
+              )}
             </div>
 
             {siaError && (
@@ -486,53 +597,65 @@ export default function SetupPage() {
                   </button>
                 </div>
               </div>
-            ) : siaConfirmed && (
+            ) : siaConfirmed && siaConfirmed && (
               <div
-                className="px-4 py-4 rounded-lg space-y-2"
+                className="px-4 py-4 rounded-lg space-y-2 flex items-center gap-2"
                 style={{
                   background: "rgba(0,230,118,0.06)",
                   border: "1px solid rgba(0,230,118,0.2)",
                 }}
               >
-                <div className="flex items-center gap-2">
-                  <CheckCircle2 className="w-4 h-4" style={{ color: "var(--green)" }} />
-                  <span className="font-mono text-xs font-semibold" style={{ color: "var(--green)" }}>
-                    Sia storage configured and connected
-                  </span>
-                </div>
+                <CheckCircle2 className="w-4 h-4" style={{ color: "var(--green)" }} />
+                <span className="font-mono text-xs" style={{ color: "var(--green)" }}>
+                  Sia storage configured and connected
+                </span>
               </div>
             )}
 
-            <div className="flex justify-end">
-              {!siaConfirmed ? (
+            <div className="flex items-center justify-between">
+              <div />
+              <div className="flex items-center gap-3">
+                {siaConfirmed && (
                   <button
-                    onClick={handleSiaSubmit}
-                    disabled={!siaIndexerUrl.trim() || !siaAppId.trim() || !siaAppName.trim() || !siaRecoveryPhrase.trim() || siaLoading}
-                  className="flex items-center gap-2 px-4 py-2 rounded-lg font-mono text-xs font-semibold transition-all disabled:opacity-40"
-                  style={{
-                    background: "var(--green)",
-                    color: "#0a0b0d",
-                  }}
-                >
-                  {siaLoading ? (
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    onClick={() => setSiaConfirmed(false)}
+                    className="flex items-center gap-1.5 font-mono text-xs"
+                    style={{ color: "var(--subtle)" }}
+                  >
+                    <RefreshCw className="w-3 h-3" /> Re-do
+                  </button>
+                )}
+                {approvalUrl && !siaConfirmed ? null : (
+                  siaConfirmed ? (
+                    <button
+                      onClick={() => goTo("openrouter")}
+                      className="flex items-center gap-2 px-4 py-2 rounded-lg font-mono text-xs font-semibold"
+                      style={{
+                        background: "var(--green)",
+                        color: "#0a0b0d",
+                      }}
+                    >
+                      Next step <ChevronRight className="w-3.5 h-3.5" />
+                    </button>
                   ) : (
-                    <ExternalLink className="w-3.5 h-3.5" />
-                  )}
-                  {siaLoading ? "Configuring…" : "Start Sia registration"}
-                </button>
-              ) : (
-                <button
-                  onClick={() => setStep("openrouter")}
-                  className="flex items-center gap-2 px-4 py-2 rounded-lg font-mono text-xs font-semibold"
-                  style={{
-                    background: "var(--green)",
-                    color: "#0a0b0d",
-                  }}
-                >
-                  Next step <ChevronRight className="w-3.5 h-3.5" />
-                </button>
-              )}
+                    <button
+                      onClick={handleSiaSubmit}
+                      disabled={!siaIndexerUrl.trim() || !siaAppId.trim() || !siaAppName.trim() || !siaRecoveryPhrase.trim() || siaLoading}
+                      className="flex items-center gap-2 px-4 py-2 rounded-lg font-mono text-xs font-semibold transition-all disabled:opacity-40"
+                      style={{
+                        background: "var(--green)",
+                        color: "#0a0b0d",
+                      }}
+                    >
+                      {siaLoading ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <ExternalLink className="w-3.5 h-3.5" />
+                      )}
+                      {siaLoading ? "Configuring…" : "Start Sia registration"}
+                    </button>
+                  )
+                )}
+              </div>
             </div>
           </div>
         )}
@@ -545,8 +668,9 @@ export default function SetupPage() {
                 OpenRouter API Key
               </h1>
               <p className="font-mono text-sm leading-relaxed" style={{ color: "var(--subtle)" }}>
-                All LLM calls (quality checks, agent probes) route through OpenRouter.
-                Set your API key here.
+                {orConfirmed
+                  ? "An OpenRouter API key has already been saved. You can update it below."
+                  : "All LLM calls (quality checks, agent probes) route through OpenRouter. Set your API key here."}
               </p>
             </div>
 
@@ -559,13 +683,11 @@ export default function SetupPage() {
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}
                 placeholder="sk-or-v1-..."
-                disabled={orConfirmed}
                 className="w-full px-3 py-2.5 rounded-lg font-mono text-sm outline-none"
                 style={{
                   background: "var(--surface)",
                   border: "1px solid var(--border)",
                   color: "var(--text)",
-                  opacity: orConfirmed ? 0.6 : 1,
                 }}
               />
               <p className="font-mono text-[10px] mt-1" style={{ color: "var(--muted)" }}>
@@ -606,42 +728,52 @@ export default function SetupPage() {
 
             <div className="flex items-center justify-between">
               <button
-                onClick={() => setStep("sia")}
+                onClick={() => goTo("sia")}
                 className="flex items-center gap-1.5 font-mono text-xs"
                 style={{ color: "var(--subtle)" }}
               >
                 <ArrowLeft className="w-3.5 h-3.5" /> Back
               </button>
-
-              {!orConfirmed ? (
-                <button
-                  onClick={handleOpenRouterSubmit}
-                  disabled={!apiKey.trim() || orLoading}
-                  className="flex items-center gap-2 px-4 py-2 rounded-lg font-mono text-xs font-semibold transition-all disabled:opacity-40"
-                  style={{
-                    background: "var(--green)",
-                    color: "#0a0b0d",
-                  }}
-                >
-                  {orLoading ? (
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  ) : (
-                    <KeyRound className="w-3.5 h-3.5" />
-                  )}
-                  {orLoading ? "Saving…" : "Save key"}
-                </button>
-              ) : (
-                <button
-                  onClick={() => setStep("providers")}
-                  className="flex items-center gap-2 px-4 py-2 rounded-lg font-mono text-xs font-semibold"
-                  style={{
-                    background: "var(--green)",
-                    color: "#0a0b0d",
-                  }}
-                >
-                  Next step <ChevronRight className="w-3.5 h-3.5" />
-                </button>
-              )}
+              <div className="flex items-center gap-3">
+                {orConfirmed && (
+                  <button
+                    onClick={() => setOrConfirmed(false)}
+                    className="flex items-center gap-1.5 font-mono text-xs"
+                    style={{ color: "var(--subtle)" }}
+                  >
+                    <RefreshCw className="w-3 h-3" /> Re-do
+                  </button>
+                )}
+                {!orConfirmed ? (
+                  <button
+                    onClick={handleOpenRouterSubmit}
+                    disabled={!apiKey.trim() || orLoading}
+                    className="flex items-center gap-2 px-4 py-2 rounded-lg font-mono text-xs font-semibold transition-all disabled:opacity-40"
+                    style={{
+                      background: "var(--green)",
+                      color: "#0a0b0d",
+                    }}
+                  >
+                    {orLoading ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <KeyRound className="w-3.5 h-3.5" />
+                    )}
+                    {orLoading ? "Saving…" : "Save key"}
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => goTo("providers")}
+                    className="flex items-center gap-2 px-4 py-2 rounded-lg font-mono text-xs font-semibold"
+                    style={{
+                      background: "var(--green)",
+                      color: "#0a0b0d",
+                    }}
+                  >
+                    Next step <ChevronRight className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         )}
@@ -654,12 +786,66 @@ export default function SetupPage() {
                 Social Login Providers
               </h1>
               <p className="font-mono text-sm leading-relaxed" style={{ color: "var(--subtle)" }}>
-                Configure at least one OAuth provider so users can sign in.
-                Get these credentials from the respective developer consoles.
+                {provConfirmed
+                  ? "Providers have been configured. You can update them below."
+                  : "Configure at least one OAuth provider so users can sign in. Get these credentials from the respective developer consoles, and set the callback URL shown below in your provider's OAuth settings."}
               </p>
             </div>
 
             <div className="space-y-6">
+              {/* WebAuthn / Passkey */}
+              <div
+                className="p-4 rounded-lg"
+                style={{ border: "1px solid var(--border)", background: "var(--surface)" }}
+              >
+                <div className="flex items-center gap-2 mb-3">
+                  <KeyRound className="w-4 h-4" style={{ color: "var(--subtle)" }} />
+                  <span className="font-mono text-xs font-semibold" style={{ color: "var(--text)" }}>
+                    Passkey (WebAuthn)
+                  </span>
+                </div>
+                    <p className="font-mono text-[10px] mb-3 leading-relaxed" style={{ color: "var(--subtle)" }}>
+                      Configure the Relying Party ID and Origin for WebAuthn passkey authentication.
+                      These must match your deployment domain.
+                    </p>
+                    <div className="space-y-3">
+                      <div>
+                        <label className="block font-mono text-[10px] mb-1" style={{ color: "var(--subtle)" }}>
+                      Relying Party ID (WEBAUTHN_RP_ID)
+                    </label>
+                    <input
+                      type="text"
+                      value={webauthnRpId}
+                      onChange={(e) => setWebauthnRpId(e.target.value)}
+                      placeholder="localhost"
+                      className="w-full px-3 py-2 rounded-lg font-mono text-xs outline-none"
+                      style={{
+                        background: "var(--bg)",
+                        border: "1px solid var(--border)",
+                        color: "var(--text)",
+                      }}
+                    />
+                  </div>
+                  <div>
+                        <label className="block font-mono text-[10px] mb-1" style={{ color: "var(--subtle)" }}>
+                          Allowed Origin (WEBAUTHN_ORIGIN)
+                    </label>
+                    <input
+                      type="text"
+                      value={webauthnOrigin}
+                      onChange={(e) => setWebauthnOrigin(e.target.value)}
+                      placeholder="http://localhost:3000"
+                      className="w-full px-3 py-2 rounded-lg font-mono text-xs outline-none"
+                      style={{
+                        background: "var(--bg)",
+                        border: "1px solid var(--border)",
+                        color: "var(--text)",
+                      }}
+                    />
+                  </div>
+                </div>
+              </div>
+
               {/* Google */}
               <div
                 className="p-4 rounded-lg"
@@ -671,95 +857,109 @@ export default function SetupPage() {
                     Google OAuth
                   </span>
                 </div>
-                <div className="space-y-3">
-                  <div>
-                    <label className="block font-mono text-[10px] mb-1" style={{ color: "var(--muted)" }}>
-                      Client ID
+                <div
+                  className="px-3 py-2 rounded-lg mb-3 font-mono text-[10px]"
+                  style={{
+                    background: "rgba(59,130,246,0.08)",
+                    border: "1px solid rgba(59,130,246,0.2)",
+                    color: "var(--blue)",
+                  }}
+                >
+                  Set the callback URL in Google Cloud Console to:<br />
+                  <strong className="select-all">{typeof window !== "undefined" ? window.location.origin : "http://localhost:3000"}/api/auth/callback/google</strong>
+                </div>
+                    <div className="space-y-3">
+                      <div>
+                        <label className="block font-mono text-[10px] mb-1" style={{ color: "var(--subtle)" }}>
+                          Client ID
                     </label>
                     <input
                       type="text"
                       value={googleClientId}
                       onChange={(e) => setGoogleClientId(e.target.value)}
                       placeholder="xxx.apps.googleusercontent.com"
-                      disabled={provConfirmed}
                       className="w-full px-3 py-2 rounded-lg font-mono text-xs outline-none"
                       style={{
                         background: "var(--bg)",
                         border: "1px solid var(--border)",
                         color: "var(--text)",
-                        opacity: provConfirmed ? 0.6 : 1,
                       }}
                     />
                   </div>
                   <div>
-                    <label className="block font-mono text-[10px] mb-1" style={{ color: "var(--muted)" }}>
-                      Client Secret
-                    </label>
-                    <input
-                      type="password"
-                      value={googleClientSecret}
-                      onChange={(e) => setGoogleClientSecret(e.target.value)}
-                      placeholder="GOCSX-..."
-                      disabled={provConfirmed}
-                      className="w-full px-3 py-2 rounded-lg font-mono text-xs outline-none"
-                      style={{
-                        background: "var(--bg)",
-                        border: "1px solid var(--border)",
-                        color: "var(--text)",
-                        opacity: provConfirmed ? 0.6 : 1,
-                      }}
-                    />
+                        <label className="block font-mono text-[10px] mb-1" style={{ color: "var(--subtle)" }}>
+                          Client Secret
+                        </label>
+                        <input
+                          type="password"
+                          value={googleClientSecret}
+                          onChange={(e) => setGoogleClientSecret(e.target.value)}
+                          placeholder="GOCSX-..."
+                          className="w-full px-3 py-2 rounded-lg font-mono text-xs outline-none"
+                          style={{
+                            background: "var(--bg)",
+                            border: "1px solid var(--border)",
+                            color: "var(--text)",
+                          }}
+                        />
+                      </div>
+                    </div>
                   </div>
-                </div>
-              </div>
 
-              {/* GitHub */}
-              <div
-                className="p-4 rounded-lg"
-                style={{ border: "1px solid var(--border)", background: "var(--surface)" }}
-              >
-                <div className="flex items-center gap-2 mb-3">
-                  <Github className="w-4 h-4" style={{ color: "var(--subtle)" }} />
-                  <span className="font-mono text-xs font-semibold" style={{ color: "var(--text)" }}>
-                    GitHub OAuth
-                  </span>
-                </div>
-                <div className="space-y-3">
-                  <div>
-                    <label className="block font-mono text-[10px] mb-1" style={{ color: "var(--muted)" }}>
-                      Client ID
-                    </label>
-                    <input
-                      type="text"
-                      value={githubClientId}
-                      onChange={(e) => setGithubClientId(e.target.value)}
-                      placeholder="Ov23..."
-                      disabled={provConfirmed}
-                      className="w-full px-3 py-2 rounded-lg font-mono text-xs outline-none"
+                  {/* GitHub */}
+                  <div
+                    className="p-4 rounded-lg"
+                    style={{ border: "1px solid var(--border)", background: "var(--surface)" }}
+                  >
+                    <div className="flex items-center gap-2 mb-3">
+                      <Github className="w-4 h-4" style={{ color: "var(--subtle)" }} />
+                      <span className="font-mono text-xs font-semibold" style={{ color: "var(--text)" }}>
+                        GitHub OAuth
+                      </span>
+                    </div>
+                    <div
+                      className="px-3 py-2 rounded-lg mb-3 font-mono text-[10px]"
                       style={{
-                        background: "var(--bg)",
-                        border: "1px solid var(--border)",
-                        color: "var(--text)",
-                        opacity: provConfirmed ? 0.6 : 1,
+                        background: "rgba(59,130,246,0.08)",
+                        border: "1px solid rgba(59,130,246,0.2)",
+                        color: "var(--blue)",
                       }}
-                    />
-                  </div>
-                  <div>
-                    <label className="block font-mono text-[10px] mb-1" style={{ color: "var(--muted)" }}>
-                      Client Secret
+                    >
+                      Set the callback URL in GitHub OAuth settings to:<br />
+                      <strong className="select-all">{typeof window !== "undefined" ? window.location.origin : "http://localhost:3000"}/api/auth/callback/github</strong>
+                    </div>
+                    <div className="space-y-3">
+                      <div>
+                        <label className="block font-mono text-[10px] mb-1" style={{ color: "var(--subtle)" }}>
+                          Client ID
+                        </label>
+                        <input
+                          type="text"
+                          value={githubClientId}
+                          onChange={(e) => setGithubClientId(e.target.value)}
+                          placeholder="Ov23..."
+                          className="w-full px-3 py-2 rounded-lg font-mono text-xs outline-none"
+                          style={{
+                            background: "var(--bg)",
+                            border: "1px solid var(--border)",
+                            color: "var(--text)",
+                          }}
+                        />
+                      </div>
+                      <div>
+                        <label className="block font-mono text-[10px] mb-1" style={{ color: "var(--subtle)" }}>
+                          Client Secret
                     </label>
                     <input
                       type="password"
                       value={githubClientSecret}
                       onChange={(e) => setGithubClientSecret(e.target.value)}
                       placeholder="cf14..."
-                      disabled={provConfirmed}
                       className="w-full px-3 py-2 rounded-lg font-mono text-xs outline-none"
                       style={{
                         background: "var(--bg)",
                         border: "1px solid var(--border)",
                         color: "var(--text)",
-                        opacity: provConfirmed ? 0.6 : 1,
                       }}
                     />
                   </div>
@@ -797,42 +997,52 @@ export default function SetupPage() {
 
             <div className="flex items-center justify-between">
               <button
-                onClick={() => setStep("openrouter")}
+                onClick={() => goTo("openrouter")}
                 className="flex items-center gap-1.5 font-mono text-xs"
                 style={{ color: "var(--subtle)" }}
               >
                 <ArrowLeft className="w-3.5 h-3.5" /> Back
               </button>
-
-              {!provConfirmed ? (
-                <button
-                  onClick={handleProvidersSubmit}
-                  disabled={(!googleClientId.trim() && !githubClientId.trim()) || provLoading}
-                  className="flex items-center gap-2 px-4 py-2 rounded-lg font-mono text-xs font-semibold transition-all disabled:opacity-40"
-                  style={{
-                    background: "var(--green)",
-                    color: "#0a0b0d",
-                  }}
-                >
-                  {provLoading ? (
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  ) : (
-                    <Globe className="w-3.5 h-3.5" />
-                  )}
-                  {provLoading ? "Saving…" : "Save providers"}
-                </button>
-              ) : (
-                <button
-                  onClick={() => setStep("signup")}
-                  className="flex items-center gap-2 px-4 py-2 rounded-lg font-mono text-xs font-semibold"
-                  style={{
-                    background: "var(--green)",
-                    color: "#0a0b0d",
-                  }}
-                >
-                  Next step <ChevronRight className="w-3.5 h-3.5" />
-                </button>
-              )}
+              <div className="flex items-center gap-3">
+                {provConfirmed && (
+                  <button
+                    onClick={() => setProvConfirmed(false)}
+                    className="flex items-center gap-1.5 font-mono text-xs"
+                    style={{ color: "var(--subtle)" }}
+                  >
+                    <RefreshCw className="w-3 h-3" /> Re-do
+                  </button>
+                )}
+                {!provConfirmed ? (
+                  <button
+                    onClick={handleProvidersSubmit}
+                    disabled={(!googleClientId.trim() && !githubClientId.trim()) || provLoading}
+                    className="flex items-center gap-2 px-4 py-2 rounded-lg font-mono text-xs font-semibold transition-all disabled:opacity-40"
+                    style={{
+                      background: "var(--green)",
+                      color: "#0a0b0d",
+                    }}
+                  >
+                    {provLoading ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Globe className="w-3.5 h-3.5" />
+                    )}
+                    {provLoading ? "Saving…" : "Save providers"}
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => goTo("signup")}
+                    className="flex items-center gap-2 px-4 py-2 rounded-lg font-mono text-xs font-semibold"
+                    style={{
+                      background: "var(--green)",
+                      color: "#0a0b0d",
+                    }}
+                  >
+                    Next step <ChevronRight className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         )}
@@ -862,9 +1072,9 @@ export default function SetupPage() {
 
             <div className="space-y-2 text-left">
               {[
-                { label: "Sia storage configured", done: !!siaConfirmed },
-                { label: "OpenRouter API key saved", done: !!orConfirmed },
-                { label: "Social login providers configured", done: !!provConfirmed },
+                { label: "Sia storage configured", done: siaConfirmed },
+                { label: "OpenRouter API key saved", done: orConfirmed },
+                { label: "Social login providers configured", done: provConfirmed },
               ].map((item) => (
                 <div key={item.label} className="flex items-center gap-2">
                   {item.done ? (
@@ -882,22 +1092,31 @@ export default function SetupPage() {
               ))}
             </div>
 
-            <button
-              onClick={handleFinish}
-              disabled={finishing}
-              className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg font-mono text-sm font-semibold transition-all disabled:opacity-40"
-              style={{
-                background: "var(--green)",
-                color: "#0a0b0d",
-              }}
-            >
-              {finishing ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <Activity className="w-4 h-4" />
-              )}
-              {finishing ? "Redirecting…" : "Create your account →"}
-            </button>
+            <div className="flex items-center justify-between">
+              <button
+                onClick={() => goTo("providers")}
+                className="flex items-center gap-1.5 font-mono text-xs"
+                style={{ color: "var(--subtle)" }}
+              >
+                <ArrowLeft className="w-3.5 h-3.5" /> Back
+              </button>
+              <button
+                onClick={handleFinish}
+                disabled={finishing}
+                className="flex items-center justify-center gap-2 px-4 py-3 rounded-lg font-mono text-sm font-semibold transition-all disabled:opacity-40"
+                style={{
+                  background: "var(--green)",
+                  color: "#0a0b0d",
+                }}
+              >
+                {finishing ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Activity className="w-4 h-4" />
+                )}
+                {finishing ? "Redirecting…" : "Create your account →"}
+              </button>
+            </div>
           </div>
         )}
       </div>

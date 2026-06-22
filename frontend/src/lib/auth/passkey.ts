@@ -16,8 +16,34 @@ import { prisma } from "@/lib/prisma/client";
 import { createId } from "@paralleldrive/cuid2";
 
 const RP_NAME = "OpenBench";
-const RP_ID = process.env.WEBAUTHN_RP_ID ?? "localhost";
-const ORIGIN = process.env.WEBAUTHN_ORIGIN ?? "http://localhost:3000";
+
+// Read WebAuthn config from AppSettings DB (set via setup wizard).
+// Falls back to env vars during development.
+let _rpId: string | null = null;
+let _origin: string | null = null;
+
+async function getWebauthnConfig(): Promise<{ rpId: string; origin: string }> {
+  if (_rpId && _origin) return { rpId: _rpId, origin: _origin };
+
+  try {
+    const settings = await prisma.appSettings.findUnique({
+      where: { id: "default" },
+      select: { webauthnRpId: true, webauthnOrigin: true },
+    });
+    if (settings?.webauthnRpId && settings?.webauthnOrigin) {
+      _rpId = settings.webauthnRpId;
+      _origin = settings.webauthnOrigin;
+      return { rpId: _rpId!, origin: _origin! };
+    }
+  } catch {
+    // ignore — fall back to env
+  }
+
+  return {
+    rpId: process.env.WEBAUTHN_RP_ID ?? "localhost",
+    origin: process.env.WEBAUTHN_ORIGIN ?? "http://localhost:3000",
+  };
+}
 
 const challengeStore = new Map<string, string>();
 
@@ -38,9 +64,10 @@ export async function generatePasskeyRegistrationOptions(userId: string) {
 
     if (!user) throw new Error("User not found");
 
+    const { rpId, origin } = await getWebauthnConfig();
     const options = await generateRegistrationOptions({
         rpName: RP_NAME,
-        rpID: RP_ID,
+        rpID: rpId,
         userID: user.id,
         userName: user.email ?? userId,
         userDisplayName: user.name ?? user.email ?? userId,
@@ -65,11 +92,12 @@ export async function verifyPasskeyRegistration(
     const expectedChallenge = challengeStore.get(`reg:${userId}`);
     if (!expectedChallenge) throw new Error("No pending registration challenge");
 
+    const { rpId, origin } = await getWebauthnConfig();
     const verification = await verifyRegistrationResponse({
         response,
         expectedChallenge,
-        expectedOrigin: ORIGIN,
-        expectedRPID: RP_ID,
+        expectedOrigin: origin,
+        expectedRPID: rpId,
     });
 
     if (!verification.verified || !verification.registrationInfo) {
@@ -102,9 +130,10 @@ export async function verifyPasskeyRegistration(
 export async function generateFirstTimePasskeyOptions() {
     const tempId = createId();
 
+    const { rpId, origin } = await getWebauthnConfig();
     const options = await generateRegistrationOptions({
         rpName: RP_NAME,
-        rpID: RP_ID,
+        rpID: rpId,
         userID: tempId,
         userName: tempId,
         userDisplayName: "User",
@@ -128,11 +157,12 @@ export async function verifyFirstTimePasskeyRegistration(
     const expectedChallenge = challengeStore.get(`first-reg:${tempId}`);
     if (!expectedChallenge) throw new Error("No pending first-time registration challenge");
 
+    const { rpId, origin } = await getWebauthnConfig();
     const verification = await verifyRegistrationResponse({
         response,
         expectedChallenge,
-        expectedOrigin: ORIGIN,
-        expectedRPID: RP_ID,
+        expectedOrigin: origin,
+        expectedRPID: rpId,
     });
 
     if (!verification.verified || !verification.registrationInfo) {
@@ -171,8 +201,9 @@ export async function verifyFirstTimePasskeyRegistration(
 
 // ── Authentication (fixed for fingerprint-first login) ──────────────────────
 export async function generatePasskeyAuthOptions() {
+    const { rpId, origin } = await getWebauthnConfig();
     const options = await generateAuthenticationOptions({
-        rpID: RP_ID,
+        rpID: rpId,
         userVerification: "required",           // Forces biometric prompt
         allowCredentials: undefined,            // Allow discoverable (resident) credentials
     });
@@ -199,11 +230,12 @@ export async function verifyPasskeyAuth(response: AuthenticationResponseJSON) {
     const storedChallenge = challengeStore.get(`auth:${responseChallenge}`);
     if (!storedChallenge) throw new Error("No pending authentication challenge for this response");
 
+    const { rpId, origin } = await getWebauthnConfig();
     const verification = await verifyAuthenticationResponse({
         response,
         expectedChallenge: storedChallenge,
-        expectedOrigin: ORIGIN,
-        expectedRPID: RP_ID,
+        expectedOrigin: origin,
+        expectedRPID: rpId,
         authenticator: {
             credentialID: Buffer.from(passkey.credentialId, "base64url"),
             credentialPublicKey: Buffer.from(passkey.publicKey, "base64url"),
