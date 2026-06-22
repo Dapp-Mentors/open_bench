@@ -94,8 +94,8 @@ export default function Whitepaper() {
                         className="font-mono text-3xl sm:text-4xl font-semibold mb-4"
                         style={{ color: "var(--text)", letterSpacing: "-0.02em" }}
                     >
-                        OpenBench: Open Infrastructure<br />
-                        for AI Training Data Curation & Evaluation
+                        OpenBench: An AI Dataset Curation<br />
+                        and Evaluation Platform for AI Model Trainings
                     </h1>
 
                     <p
@@ -236,7 +236,7 @@ export default function Whitepaper() {
                     </div>
 
                     <p className="mt-4">
-                        Container execution uses the host Docker socket. Benchmark tasks run in sibling
+                        Container execution uses the host Docker socket. Training tasks run in sibling
                         containers (not children of the backend container), which keeps resource isolation
                         clean and lets the backend manage container lifecycle without privileged access
                         beyond the socket mount.
@@ -264,7 +264,7 @@ export default function Whitepaper() {
                         {[
                             {
                                 n: "01", name: "Similarity & Diversity",
-                                detail: "Generates an embedding of the task instruction using nomic-embed-text (running locally via Ollama) and computes cosine similarity against all approved tasks in the registry. Tasks with cosine > 0.85 against any existing task are rejected. This prevents benchmark contamination through near-duplicate submissions.",
+                                detail: "Generates an embedding of the task instruction using nomic-embed-text (running locally via Ollama) and computes cosine similarity against all approved tasks in the registry. Tasks with cosine > 0.85 against any existing task are rejected. This prevents training data contamination through near-duplicate submissions.",
                                 threshold: "cosine ≤ 0.85"
                             },
                             {
@@ -399,8 +399,8 @@ export default function Whitepaper() {
                     <p>
                         Stage 6 uses the easiness model (a fast, inexpensive model configured in admin settings).
                         Stage 7 uses the frontier model (the strongest available). The intention is that a good
-                        benchmark task should be solvable by the strong model sometimes but not always. If the
-                        frontier model passes every run, the task isn't worth including.
+                        training example should be solvable by the strong model sometimes but not always. If the
+                        frontier model passes every run, the task isn't worth including as a training example.
                     </p>
                     <p>
                         All model calls go through OpenRouter, which provides access to hundreds of models
@@ -541,7 +541,7 @@ export default function Whitepaper() {
                             ["BIP-39 phrase storage", "The current implementation stores the auto-generated recovery phrase on disk, which is a security risk in production. Future versions should prompt the operator for their own phrase."],
                             ["OpenRouter dependency", "All LLM calls go through OpenRouter. If OpenRouter has an outage, the quality assessment and calibration stages can't complete. A fallback provider layer is on the roadmap."],
                             ["Human approval bottleneck", "After the pipeline passes, a human reviewer must approve the task for the registry. This is intentional as a quality gate, but it introduces latency. Tooling to make the review process faster is a near-term priority."],
-                            ["Benchmark type coverage", "The current task format is optimized for terminal-based software engineering challenges. Extending the format to support other benchmark types, including General Knowledge, Mathematical Reasoning, Multimodal, Long-Context & Retrieval, Safety & Alignment, Instruction Following, Domain-Specific, Creative & Open-Ended, and Efficiency & Deployment, requires design work for each category."],
+                            ["Training data type coverage", "The current task format is optimized for terminal-based software engineering training examples. Extending the format to support other training data types, including General Knowledge, Mathematical Reasoning, Multimodal, Long-Context & Retrieval, Safety & Alignment, Instruction Following, Domain-Specific, Creative & Open-Ended, and Efficiency & Deployment, requires design work for each category."],
                             ["Scale testing", "The pipeline has been tested with individual tasks and small batches. Behavior under high submission volume (many concurrent pipeline runs, many parallel CrewAI probes) hasn't been formally characterized."],
                         ].map(([title, desc]) => (
                             <div
@@ -569,24 +569,24 @@ export default function Whitepaper() {
                 <Section id="roadmap" eyebrow="§10" title="Future Plans">
                     <p>
                         After the initial launch milestone, the focus will shift to broadening the
-                        types of benchmarks the platform supports. The current terminal-based format
-                        is well suited for software engineering tasks, but the evaluation infrastructure
-                        is designed to be extensible. Every new benchmark category will follow the same
+                        types of training data and evaluations the platform supports. The current terminal-based format
+                        is well suited for software engineering training examples, but the curation infrastructure
+                        is designed to be extensible. Every new training data category will follow the same
                         storage model: all task datasets, evaluation artifacts, and results will be
                         permanently archived on the Sia Network. The following categories are planned:
                     </p>
                     <div className="space-y-2 mt-2">
                         {[
-                            ["General Knowledge", "Tasks that test a model's breadth of factual knowledge across domains, with verifiable answer keys."],
-                            ["Mathematical Reasoning", "Multi-step math problems, proofs, and quantitative reasoning tasks with deterministic grading."],
-                            ["Multimodal", "Tasks combining images, code, and text inputs that require understanding across modalities."],
-                            ["Agentic & Tool Use", "Tasks requiring agents to interact with APIs, databases, browsers, and other external tools to accomplish goals."],
-                            ["Long-Context & Retrieval", "Tasks that test a model's ability to handle large contexts, retrieve relevant information, and reason across long documents."],
-                            ["Safety & Alignment", "Red-teaming, prompt injection detection, and alignment evaluation tasks with structured scoring rubrics."],
-                            ["Instruction Following", "Tasks that test how precisely a model follows multi-part, constrained instructions with clear success criteria."],
-                            ["Domain-Specific", "Specialized benchmarks for fields like medicine, law, finance, and engineering with expert-validated ground truth."],
-                            ["Creative & Open-Ended", "Tasks evaluating creative writing, brainstorming, and open-ended problem solving with structured human evaluation."],
-                            ["Efficiency & Deployment", "Benchmarks measuring inference speed, memory usage, token efficiency, and deployment characteristics."],
+                            ["General Knowledge", "Training examples that test a model's breadth of factual knowledge across domains, with verifiable answer keys."],
+                            ["Mathematical Reasoning", "Multi-step math problems, proofs, and quantitative reasoning training examples with deterministic grading."],
+                            ["Multimodal", "Training data combining images, code, and text inputs that require understanding across modalities."],
+                            ["Agentic & Tool Use", "Training examples requiring agents to interact with APIs, databases, browsers, and other external tools to accomplish goals."],
+                            ["Long-Context & Retrieval", "Training examples that test a model's ability to handle large contexts, retrieve relevant information, and reason across long documents."],
+                            ["Safety & Alignment", "Red-teaming, prompt injection detection, and alignment training examples with structured scoring rubrics."],
+                            ["Instruction Following", "Training examples that test how precisely a model follows multi-part, constrained instructions with clear success criteria."],
+                            ["Domain-Specific", "Specialized training data for fields like medicine, law, finance, and engineering with expert-validated ground truth."],
+                            ["Creative & Open-Ended", "Training examples evaluating creative writing, brainstorming, and open-ended problem solving with structured evaluation."],
+                            ["Efficiency & Deployment", "Training data measuring inference speed, memory usage, token efficiency, and deployment characteristics."],
                         ].map(([title, desc]) => (
                             <div
                                 key={title}

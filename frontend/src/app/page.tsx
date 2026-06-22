@@ -10,15 +10,15 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 const PIPELINE_STAGES = [
-  { label: "Similarity", desc: "Embedding cosine check rejects tasks too close to existing ones (cosine > 0.85 → rejected). Keeps the benchmark diverse." },
-  { label: "CI Checks", desc: "Bash syntax validation, Python compilation, Docker build. A task that won't build can't be benchmarked." },
+  { label: "Similarity", desc: "Embedding cosine check rejects tasks too close to existing ones (cosine > 0.85 → rejected). Keeps the training dataset diverse." },
+  { label: "CI Checks", desc: "Bash syntax validation, Python compilation, Docker build. A task that won't build can't be used as a training example." },
   { label: "Quality", desc: "LLM-as-judge scores the task across 11 criteria (realism, clarity, verifiability). Average must meet ≥ 0.6." },
   { label: "Preflight", desc: "Runs pytest --collect-only inside the built image. At least 6 test functions required before any agent touches the task." },
   { label: "Oracle / NOP", desc: "Two containers run. NOP (no solution) must write reward = 0. Oracle (solve.sh + tests) must write reward = 1. Both must hold." },
-  { label: "Easiness", desc: "CrewAI multi-agent probe runs 5 times with a fast model. 1–4 passing = calibrated. 0/5 means too hard; 5/5 means too easy." },
-  { label: "Difficulty", desc: "Same probe, 5 runs, but now with the frontier model. Target: 1–3/5 passing. Ensures the task challenges state-of-the-art." },
+  { label: "Easiness", desc: "CrewAI multi-agent probe runs 5 times with a fast model. 1–4 passing = calibrated. 0/5 means too hard; 5/5 means too easy for training." },
+  { label: "Difficulty", desc: "Same probe, 5 runs, but now with the frontier model. Target: 1–3/5 passing. Ensures the task challenges state-of-the-art models." },
   { label: "Agent Quality", desc: "LLM-as-judge checks instruction realism, absence of leaked assertions, and whether the task is actually actionable." },
-  { label: "Sia Upload", desc: "Approved task is uploaded to Sia Network: immutable, content-addressed, publicly verifiable. The receipt is stored forever." },
+  { label: "Sia Upload", desc: "Approved training example is uploaded to Sia Network: immutable, content-addressed, publicly verifiable. The receipt is stored forever." },
 ];
 
 const PROBLEMS = [
@@ -90,8 +90,8 @@ export default async function Home() {
             className="font-mono text-4xl sm:text-6xl font-semibold leading-none mb-6"
             style={{ color: "var(--text)", letterSpacing: "-0.02em" }}
           >
-            Training data you can<br />
-            <span style={{ color: "var(--green)" }}>actually trust.</span>
+            AI dataset curation<br />
+            <span style={{ color: "var(--green)" }}>for model trainings.</span>
           </h1>
 
           <p
@@ -106,9 +106,9 @@ export default async function Home() {
             className="font-mono text-sm sm:text-base leading-relaxed max-w-2xl mx-auto mb-10"
             style={{ color: "var(--text-muted)" }}
           >
-            OpenBench is a data curation pipeline that doesn't let bad examples through. A 9-stage
+            OpenBench is an AI dataset curation and evaluation platform for AI model trainings. A 9-stage
             automated pipeline validates every task for syntactic correctness, instructional quality,
-            solvability, and calibrated difficulty before it reaches the registry. Every approved
+            solvability, and calibrated difficulty before it reaches the training data registry. Every approved
             task is a verified, production-grade training example, permanently archived on the
             Sia Network. The same infrastructure also supports running benchmark evaluations.
           </p>
@@ -439,23 +439,23 @@ export default async function Home() {
             {[
               {
                 role: "Data Curators",
-                desc: "You want to contribute tasks that become verified training examples for an AI Project or the community. Submit a task, and the pipeline certifies its quality through 9 automated stages with measurable thresholds.",
+                desc: "You want to contribute tasks that become verified training examples for the community. Submit a task, and the pipeline certifies its quality through 9 automated stages with measurable thresholds before it enters the training data registry.",
               },
               {
                 role: "AI Trainers",
-                desc: "You need high-quality, verified training data to improve model performance. Every approved task is a certified training example with documented quality scores, difficulty calibration, and proven solvability.",
+                desc: "You need high-quality, verified training data to improve model performance. Every approved task is a certified training sample with documented quality scores, difficulty calibration, and proven solvability.",
               },
               {
                 role: "AI Researchers",
-                desc: "You need evaluation tasks that hold up under scrutiny. The pipeline gives you a formal audit trail for every task in your benchmark set.",
+                desc: "You need evaluation tasks that hold up under scrutiny. The curation pipeline gives you a formal audit trail for every task in your training or evaluation set.",
               },
               {
                 role: "ML Engineers",
-                desc: "You're running evals against specific models and need to know the task set isn't leaking answers or skewing difficulty. Calibration is enforced, not assumed.",
+                desc: "You're training models and need confidence that your training examples aren't leaking answers or skewing difficulty. Calibration is enforced, not assumed.",
               },
               {
                 role: "Lab Evaluators",
-                desc: "You're comparing models across time and need results that are reproducible by anyone who asks. Sia storage means the record is always there.",
+                desc: "You're comparing models across time and need verifiable training data and results. Sia storage on the decentralized network means the record is always there.",
               },
 
             ].map((item) => (
@@ -556,7 +556,7 @@ export default async function Home() {
             className="font-mono text-[11px]"
             style={{ color: "var(--subtle)" }}
           >
-            OpenBench - open infrastructure for reproducible AI evaluation
+            OpenBench - an AI dataset curation and evaluation platform for AI model trainings
           </span>
           <div className="flex items-center gap-6">
             <Link

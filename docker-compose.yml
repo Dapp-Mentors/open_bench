@@ -98,20 +98,13 @@ services:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-openbench}:${POSTGRES_PASSWORD:-openbench_secret}@postgres:5432/${POSTGRES_DB:-openbench}
 
       OLLAMA_BASE_URL: http://ollama:11434
-      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
 
       CORS_ORIGINS: '["http://localhost:3000"]'
 
       UPLOADS_DIR: /uploads
 
       # ── Sia Storage ──────────────────────────────────────
-      SIA_MODE: ${SIA_MODE:-auto}
-      SIA_INDEXER_URL: ${SIA_INDEXER_URL:-https://sia.storage}
-      SIA_APP_ID: ${SIA_APP_ID:-8f70656e62656e63686d61726b0000000000000000000000000000000000000000}
-      SIA_APP_NAME: ${SIA_APP_NAME:-OpenBench}
       SIA_APP_SERVICE_URL: ${SIA_APP_SERVICE_URL:-http://backend:8000}
-      SIA_KEY_PATH: ${SIA_KEY_PATH:-/app/data/appkey.hex}
-      SIA_PHRASE_PATH: ${SIA_PHRASE_PATH:-/app/data/phrase.enc}
 
     volumes:
       - ./backend:/app
@@ -150,6 +143,8 @@ services:
       INNGEST_BASE_URL: http://inngest:8288
       BACKEND_URL: http://backend:8000
       NEXT_PUBLIC_BACKEND_URL: http://localhost:8000
+      AUTH_SECRET: lTtDZlfpNjrSIA2EocS7GEAaH3SHLsOr41X4udYY1k4=
+      AUTH_URL: http://localhost:3000
       NODE_ENV: production
       NEXT_TELEMETRY_DISABLED: "1"
       HOSTNAME: 0.0.0.0

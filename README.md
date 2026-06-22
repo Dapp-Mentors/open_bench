@@ -1,18 +1,18 @@
 # OpenBench
 
-Open infrastructure for curating and producing high-quality AI training datasets. Each task is a realistic command-line challenge, a broken build, a failing service, a bad config. AI agents solve it through the terminal. Tests verify it. Every approved task is a verified training example, and every dataset and artifact lives on the Sia Network forever.
+OpenBench is an AI dataset curation and evaluation platform for AI model trainings. Each curated task is a realistic command-line challenge — a broken build, a failing service, a bad config — that AI agents solve through the terminal. A 9-stage automated pipeline verifies every submission for syntactic correctness, instructional quality, solvability, and calibrated difficulty before it enters the training data registry. Every approved task is a verified, production-grade training example; every dataset and artifact lives on the Sia Network forever. The same infrastructure also supports running benchmark evaluations.
 
 ---
 
-## What it shows
+## What it does
 
-Submit a task ZIP, watch it move through 9 automated curation pipeline stages, approve it to the registry. Every approved task is a verified, production-grade training example. Every task dataset, evaluation artifact, and result is content-addressed and stored permanently on the Sia Network. The same infrastructure also supports running benchmark evaluations.
+Submit a task ZIP and watch it move through 9 automated curation pipeline stages. Every approved task becomes a verified, production-grade training example for AI model training. Every task dataset, evaluation artifact, and result is content-addressed and stored permanently on the Sia Network. The same infrastructure can also be used to run benchmark evaluations against curated tasks, but the pipeline's primary mission is producing high-quality, certifiably valid training data.
 
 ```
 Submit -> Similarity -> CI Checks -> Quality -> Preflight -> Oracle/NOP -> Easiness -> Difficulty -> Agent Quality -> Sia Upload -> Registry
 ```
 
-Every stage is a durable Inngest function that survives crashes and restarts. Failed stages report exactly what to fix. The pipeline's primary purpose is certifying tasks as high-quality training data; the same validated tasks also serve as reliable benchmarks.
+Every stage is a durable Inngest function that survives crashes and restarts. Failed stages report exactly what to fix. The pipeline exists to certify tasks as high-quality training data for AI model trainings; the same validated tasks also serve as reliable benchmarks.
 
 Stages 6 (Easiness) and 7 (Difficulty) use a **CrewAI multi-agent probe**, four sequential agents (Task Analyst -> Solution Architect -> Code Implementer -> Test Verifier) run in staggered parallel across 5 attempts. The easiness stage uses a fast/cheap model; the difficulty stage uses the frontier model. Early-exit logic cancels remaining runs the moment the outcome is decided, saving cost.
 
@@ -194,7 +194,9 @@ task-name/
 
 ---
 
-## Running a Benchmark
+## Running a Benchmark Evaluation
+
+Because every curated task is a verified, executable training example, the same infrastructure also supports running benchmark evaluations against those tasks:
 
 1. All pipeline stages pass, including the Sia upload (Stage 9). A human reviewer then approves the task for the registry.
 2. Configure a model via OpenRouter in the admin dashboard (the sole LLM provider, any model available on OpenRouter can be used). This avoids the technical debt of building separate integration modules for each LLM and lets you swap between Claude Opus, GPT, DeepSeek, Grok, and others from the UI with no backend changes.
@@ -421,24 +423,24 @@ Projects are categorized by benchmark type (e.g., Coding & Software, Mathematica
 
 ## Future Plans
 
-After the initial launch milestone, the focus will shift to broadening the types of benchmarks the platform supports. The current terminal-based format is well suited for software engineering and coding tasks, but the evaluation infrastructure is designed to be extensible. The following benchmark categories are planned:
+After the initial launch milestone, the focus will shift to broadening the types of training data and evaluations the platform supports. The current terminal-based format is well suited for software engineering and coding training examples, but the curation infrastructure is designed to be extensible. The following training data categories are planned:
 
 | Category | Description |
 |----------|-------------|
 | Coding & Software | The current focus: terminal-based software engineering challenges with broken builds, misconfigured services, and failing tests. |
-| General Knowledge | Tasks that test a model's breadth of factual knowledge across domains, with verifiable answer keys. |
-| Mathematical Reasoning | Multi-step math problems, proofs, and quantitative reasoning tasks with deterministic grading. |
-| Multimodal | Tasks combining images, code, and text inputs that require understanding across modalities. |
-| Agentic & Tool Use | Tasks requiring agents to interact with APIs, databases, browsers, and other external tools to accomplish goals. |
-| Long-Context & Retrieval | Tasks that test a model's ability to handle large contexts, retrieve relevant information, and reason across long documents. |
-| Safety & Alignment | Red-teaming, prompt injection detection, and alignment evaluation tasks with structured scoring rubrics. |
-| Instruction Following | Tasks that test how precisely a model follows multi-part, constrained instructions with clear success criteria. |
-| Domain-Specific | Specialized benchmarks for fields like medicine, law, finance, and engineering with expert-validated ground truth. |
-| Creative & Open-Ended | Tasks evaluating creative writing, brainstorming, and open-ended problem solving with structured human evaluation. |
-| Efficiency & Deployment | Benchmarks measuring inference speed, memory usage, token efficiency, and deployment characteristics. |
+| General Knowledge | Training examples that test a model's breadth of factual knowledge across domains, with verifiable answer keys. |
+| Mathematical Reasoning | Multi-step math problems, proofs, and quantitative reasoning training examples with deterministic grading. |
+| Multimodal | Training data combining images, code, and text inputs that require understanding across modalities. |
+| Agentic & Tool Use | Training examples requiring agents to interact with APIs, databases, browsers, and other external tools to accomplish goals. |
+| Long-Context & Retrieval | Training examples that test a model's ability to handle large contexts, retrieve relevant information, and reason across long documents. |
+| Safety & Alignment | Red-teaming, prompt injection detection, and alignment training examples with structured scoring rubrics. |
+| Instruction Following | Training examples that test how precisely a model follows multi-part, constrained instructions with clear success criteria. |
+| Domain-Specific | Specialized training data for fields like medicine, law, finance, and engineering with expert-validated ground truth. |
+| Creative & Open-Ended | Training examples evaluating creative writing, brainstorming, and open-ended problem solving with structured evaluation. |
+| Efficiency & Deployment | Training data measuring inference speed, memory usage, token efficiency, and deployment characteristics. |
 
-Each category will require its own task format specification, quality criteria, and calibration thresholds, but the core pipeline and verification infrastructure will remain shared. All datasets and artifacts across every benchmark category will be permanently archived on the Sia Network and will serve as both benchmarks and training data.
+Each category will require its own task format specification, quality criteria, and calibration thresholds, but the core pipeline and verification infrastructure will remain shared. All datasets and artifacts across every category will be permanently archived on the Sia Network and will serve primarily as training data, with the same examples also available for use as benchmarks.
 
 ---
 
-*Built in the open. Tasks are reproducible, shareable, and forkable. Anyone can run the same benchmark and verify the result.*
+*Built in the open. Training examples are reproducible, shareable, and forkable. Anyone can run the same curation pipeline and verify the results for themselves.*
