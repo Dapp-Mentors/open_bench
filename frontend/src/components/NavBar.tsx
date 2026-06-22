@@ -108,6 +108,12 @@ export function NavBar() {
   const [sia, setSia] = useState<SiaConnectionStatus | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const imageRef = useRef<HTMLImageElement>(null);
+
+  // Reset avatarError when the image URL changes
+  useEffect(() => {
+    setAvatarError(false);
+  }, [session?.user?.image]);
 
   const role = session?.user?.role;
   const isSuperAdmin = role === "super_admin";
@@ -226,6 +232,8 @@ export function NavBar() {
                 >
                   {session.user.image && !avatarError ? (
                     <img
+                      ref={imageRef}
+                      key={session.user.image}
                       src={session.user.image}
                       alt={session.user.name ?? "avatar"}
                       className="w-6 h-6 rounded-full object-cover flex-shrink-0"

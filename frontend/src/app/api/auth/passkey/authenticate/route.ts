@@ -32,8 +32,10 @@ export async function POST(request: Request) {
 
         // Forward the Set-Cookie header from the signIn response so the
         // browser receives the session JWT cookie.
+        // signIn may return a Response (has headers) or a plain object/string,
+        // so guard against primitives before using the `in` operator.
         const jsonResponse = NextResponse.json({ success: true });
-        if (signInResponse && "headers" in signInResponse) {
+        if (signInResponse && typeof signInResponse === "object" && "headers" in signInResponse) {
             const setCookie = (signInResponse as Response).headers.get("set-cookie");
             if (setCookie) {
                 jsonResponse.headers.set("set-cookie", setCookie);
