@@ -172,16 +172,37 @@ export default function SetupPage() {
           recovery_phrase: siaRecoveryPhrase.trim(),
         }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Failed to save");
 
+      if (!res.ok) {
+        let errorMsg = "Failed to save Sia configuration";
+        try {
+          const errData = await res.json();
+          if (errData?.error) errorMsg = errData.error;
+        } catch {
+          // ignore parse errors
+        }
+        throw new Error(errorMsg);
+      }
+
+      const data = await res.json();
+
+      // If the backend returned an approval URL, show it to the user
       if (data.approval_url) {
         setApprovalUrl(data.approval_url);
         return;
       }
 
-      // Already connected or backend unavailable
-      setSiaConfirmed(true);
+      // If the backend returned already_connected with a stored key, this means
+      // registration already happened. We should not silently mark as confirmed
+      // during setup — the user needs to see the approval flow. Force a re-init.
+      if (data.already_connected) {
+        setSiaError("A stored app key was found but the approval URL could not be generated. Please reset the stored key and try again.");
+        return;
+      }
+
+      // Backend returned ok but no approval_url and no already_connected —
+      // this means something went wrong on the backend side.
+      setSiaError("Backend did not return an approval URL. Check that the pipeline service has Sia configured correctly.");
     } catch (err) {
       setSiaError(err instanceof Error ? err.message : "Something went wrong");
     } finally {

@@ -74,22 +74,33 @@ export async function POST(request: Request) {
 
     // Step 2: Call the backend's Sia SDK to start the registration flow
     // using the user's recovery phrase.
-    const backendRes = await fetch(`${BACKEND_URL}/api/sia/register/init`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ recovery_phrase }),
-    });
+    let backendRes: Response;
+    try {
+      backendRes = await fetch(`${BACKEND_URL}/api/sia/register/init`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ recovery_phrase }),
+      });
+    } catch {
+      // Backend is not reachable at all — config is saved but registration cannot proceed
+      return NextResponse.json(
+        { error: "Backend service is unreachable. Ensure the pipeline service is running." },
+        { status: 502 }
+      );
+    }
 
     if (!backendRes.ok) {
-      // Backend may not be running — config is saved, registration will
-      // happen on next restart.
-      console.warn("[SETUP-SIA] Backend registration unavailable — config saved for later");
-      return NextResponse.json({
-        ok: true,
-        backend_available: false,
-        siaAppId,
-        siaAppName,
-      });
+      let errorMsg = "Sia registration backend returned an error";
+      try {
+        const errData = await backendRes.json();
+        if (errData?.error) errorMsg = errData.error;
+      } catch {
+        // ignore parse errors
+      }
+      return NextResponse.json(
+        { error: errorMsg },
+        { status: 502 }
+      );
     }
 
     const data = await backendRes.json();
@@ -99,6 +110,23 @@ export async function POST(request: Request) {
         { error: data.error ?? "Sia registration failed", siaRegistrationFailed: true },
         { status: 500 }
       );
+    }
+
+    // If the backend says "already_connected", reset the flow so the user
+    // must re-authorize — the approval URL should always be presented to
+    // the user during first-run setup.
+    if (data.already_connected) {
+      // Tell the frontend to still show the approval (actually the backend
+      // should generate a fresh approval URL — but if stored key worked,
+      // the user may need to re-approve. We'll return the stored key status
+      // and let the frontend decide.)
+      return NextResponse.json({
+        ok: true,
+        already_connected: true,
+        backend_available: true,
+        siaAppId,
+        siaAppName,
+      });
     }
 
     // Return the SDK-generated approval URL to the frontend
@@ -113,13 +141,11 @@ export async function POST(request: Request) {
   } catch (error) {
     console.error("[SETUP-SIA] Error:", error);
 
-    // If the backend isn't reachable, the config is still saved —
-    // registration will happen when the backend restarts.
-    return NextResponse.json({
-      ok: true,
-      backend_available: false,
-      siaAppId: null,
-      siaAppName: null,
-    });
+    // Return a proper error response instead of silently faking success
+    const message = error instanceof Error ? error.message : "An unexpected error occurred";
+    return NextResponse.json(
+      { error: message },
+      { status: 500 }
+    );
   }
 }
