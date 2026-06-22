@@ -6,8 +6,12 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
-// The backend FastAPI service (must match the deployed URL)
-const BACKEND_URL = process.env.NEXT_PUBLIC_APP_URL?.replace(":3000", ":8000") ?? "http://localhost:8000";
+// The backend FastAPI service.
+// In Docker, BACKEND_URL env is set to http://backend:8000.
+// Fallback: derive from NEXT_PUBLIC_APP_URL (Codespaces) or localhost.
+const BACKEND_URL = process.env.BACKEND_URL
+  ?? process.env.NEXT_PUBLIC_APP_URL?.replace(":3000", ":8000")
+  ?? "http://localhost:8000";
 
 export async function GET() {
   try {
