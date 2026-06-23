@@ -40,7 +40,7 @@ from app.core.config import settings
 
 _SIA_MODE     = os.getenv("SIA_MODE",             "auto").lower()
 _KEY_PATH     = Path(os.getenv("SIA_KEY_PATH",    "./data/appkey.hex"))
-_APP_SVC_URL  = os.getenv("SIA_APP_SERVICE_URL",  "http://localhost:8000")
+_APP_SVC_URL  = os.getenv("BACKEND_URL",  "http://localhost:8000")
 
 # ── Module state ────────────────────────────────────────────────────────────────
 
