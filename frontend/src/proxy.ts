@@ -83,19 +83,29 @@ async function getSession(req: NextRequest): Promise<{ id?: string; role?: Role 
   const secret = process.env.AUTH_SECRET ?? "";
   if (!secret) return null;
 
-  // NextAuth v5 uses "authjs.session-token" (HTTP) or "__Secure-authjs.session-token" (HTTPS)
-  const token =
-    req.cookies.get("authjs.session-token")?.value ??
-    req.cookies.get("__Secure-authjs.session-token")?.value;
+  // NextAuth v5 uses "authjs.session-token" (HTTP) or "__Secure-authjs.session-token" (HTTPS).
+  // CRITICAL: The cookie NAME must be used as the salt for HKDF key derivation — they must match.
+  // Using the wrong salt (e.g. the HTTP name when the HTTPS cookie was set) causes decode() to
+  // throw every time, making every session look null and producing the login redirect loop.
+  const SECURE_COOKIE = "__Secure-authjs.session-token";
+  const PLAIN_COOKIE = "authjs.session-token";
+
+  const secureCookieValue = req.cookies.get(SECURE_COOKIE)?.value;
+  const plainCookieValue = req.cookies.get(PLAIN_COOKIE)?.value;
+
+  // Prefer the __Secure- variant (set on HTTPS). Fall back to plain (HTTP / localhost).
+  const token = secureCookieValue ?? plainCookieValue;
+  const salt = secureCookieValue ? SECURE_COOKIE : PLAIN_COOKIE;
+
   if (!token) return null;
 
   try {
-    // Use @auth/core/jwt decode which handles the HKDF key derivation,
-    // kid/thumbprint matching, and the JWE decryption algorithm correctly.
+    // decode() uses the salt for HKDF key derivation — it MUST match the name of the
+    // cookie that NextAuth used when it encrypted the JWT.
     const payload = await decode({
       token,
       secret,
-      salt: "authjs.session-token",
+      salt,
     });
     return {
       id: (payload as any).id as string | undefined,

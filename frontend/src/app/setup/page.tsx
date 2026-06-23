@@ -83,8 +83,12 @@ export default function SetupPage() {
   const [googleClientSecret, setGoogleClientSecret] = useState("");
   const [githubClientId, setGithubClientId] = useState("");
   const [githubClientSecret, setGithubClientSecret] = useState("");
-  const [webauthnRpId, setWebauthnRpId] = useState("");
-  const [webauthnOrigin, setWebauthnOrigin] = useState("");
+  const [webauthnRpId, setWebauthnRpId] = useState(
+    typeof window !== "undefined" ? window.location.hostname : "localhost"
+  );
+  const [webauthnOrigin, setWebauthnOrigin] = useState(
+    typeof window !== "undefined" ? window.location.origin : "http://localhost:3000"
+  );
   const [provLoading, setProvLoading] = useState(false);
   const [provError, setProvError] = useState<string | null>(null);
 
