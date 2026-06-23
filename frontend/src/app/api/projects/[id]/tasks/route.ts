@@ -64,8 +64,24 @@ export async function POST(
     )
   }
 
-  // 3. Persist the zip to local storage
-  const uploadDir = join(process.cwd(), 'uploads', id)
+  // 3. Persist the zip to the shared /uploads volume.
+  //
+  //    IMPORTANT: We use the hard-coded /uploads path instead of
+  //    join(process.cwd(), 'uploads', …).  In Docker the frontend
+  //    container mounts the task_uploads volume at  /uploads  and
+  //    the backend container mounts the same volume at  /uploads.
+  //
+  //    Next.js standalone mode changes process.cwd() to
+  //    /app/.next/standalone so join(process.cwd(), 'uploads', …)
+  //    would produce a CONTAINER-LOCAL path that the backend cannot
+  //    see.  Writing to /uploads guarantees both services can reach
+  //    the same file through the shared volume.
+  //
+  //    When running outside Docker (e.g. `next dev`) /uploads falls
+  //    back to a regular filesystem path; adjust your local dev
+  //    environment accordingly or symlink /uploads to a local dir.
+  //
+  const uploadDir = join('/uploads', id)
   await mkdir(uploadDir, { recursive: true })
   const fileName = `${randomUUID()}-${file.name}`
   const filePath = join(uploadDir, fileName)
