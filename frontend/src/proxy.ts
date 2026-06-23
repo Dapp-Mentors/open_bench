@@ -60,6 +60,25 @@ function matchesExact(pathname: string, patterns: string[]): boolean {
   return patterns.some((p) => pathname === p);
 }
 
+/**
+ * Build the public-facing origin from request headers.
+ * In Docker / behind a reverse proxy (e.g. GitHub Codespaces),
+ * req.nextUrl.origin is the internal address (0.0.0.0:3000).
+ * We read the Host header (or x-forwarded-host) instead to get
+ * the real public hostname the browser is talking to.
+ */
+function getPublicOrigin(req: NextRequest): string {
+  const host =
+    req.headers.get("x-forwarded-host") ??
+    req.headers.get("host") ??
+    req.nextUrl.host;
+  const proto =
+    req.headers.get("x-forwarded-proto") ??
+    req.nextUrl.protocol?.replace(":", "") ??
+    "http";
+  return `${proto}://${host}`;
+}
+
 async function getSession(req: NextRequest): Promise<{ id?: string; role?: Role } | null> {
   const secret = process.env.AUTH_SECRET ?? "";
   if (!secret) return null;
@@ -89,6 +108,7 @@ async function getSession(req: NextRequest): Promise<{ id?: string; role?: Role 
 
 export default async function proxy(req: NextRequest, _event: NextFetchEvent) {
   const { pathname } = req.nextUrl;
+  const origin = getPublicOrigin(req);
 
   // ── 1. Setup paths always pass through ────────────────────────────────────
   if (matchesAny(pathname, SETUP_PATHS)) {
@@ -111,14 +131,14 @@ export default async function proxy(req: NextRequest, _event: NextFetchEvent) {
   // plants the cookie — self-healing for existing completed installations.
   const setupDone = req.cookies.get("setup_complete")?.value === "true";
   if (!setupDone) {
-    return NextResponse.redirect(new URL("/setup", req.url));
+    return NextResponse.redirect(new URL("/setup", origin));
   }
 
   // ── 4. Auth check ──────────────────────────────────────────────────────────
   const session = await getSession(req);
   if (!session) {
-    const loginUrl = new URL("/login", req.url);
-    loginUrl.searchParams.set("callbackUrl", req.url);
+    const loginUrl = new URL("/login", origin);
+    loginUrl.searchParams.set("callbackUrl", `${origin}${pathname}`);
     return NextResponse.redirect(loginUrl);
   }
 
