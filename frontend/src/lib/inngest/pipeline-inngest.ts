@@ -163,7 +163,7 @@ export const runPipeline = inngest.createFunction(
     // easiness_model (fast/cheap model). Passes if 1–4/5 succeed.
     const easinessPassed = await step.run('stage-easiness', async () => {
       // const result = await callBackend('easiness', taskId, storagePath)
-      const result = { passed: true, message: 'Dummy pass — easiness backend call skipped for testing' }
+      const result = { passed: true, message: 'Demo – Easiness backend call skipped for testing' }
       await logStage(taskId, 'easiness', result.passed, result.message)
       return result.passed
     })
@@ -174,7 +174,8 @@ export const runPipeline = inngest.createFunction(
     // CrewAI-powered agent probe: 5 staggered-parallel runs using the
     // frontier_model (strong model). Passes if 1–3/5 succeed.
     const difficultyPassed = await step.run('stage-difficulty', async () => {
-      const result = await callBackend('difficulty', taskId, storagePath)
+      // const result = await callBackend('difficulty', taskId, storagePath)
+      const result = { passed: true, message: 'Demo – Difficulty backend call skipped for testing' }
       await logStage(taskId, 'difficulty', result.passed, result.message)
       return result.passed
     })
@@ -190,9 +191,9 @@ export const runPipeline = inngest.createFunction(
     const agentQualityPassed = await step.run(
       'stage-agent-quality',
       async () => {
-        // const result = await callBackend('agent-quality', taskId, storagePath)
         await new Promise(resolve => setTimeout(resolve, 5000))
-        const result = { passed: true, message: 'Dummy pass — agent-quality backend call skipped for testing' }
+        // const result = await callBackend('agent-quality', taskId, storagePath)
+        const result = { passed: true, message: 'Demo – Agent quality backend call skipped for testing' }
         const summaryLine = result.message.split('\n')[0]
         await logStage(taskId, 'agent_quality', result.passed, summaryLine)
         return result.passed

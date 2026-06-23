@@ -104,6 +104,7 @@ Create your local env files:
 # Frontend — these are the only variables needed locally
 cat > frontend/.env << 'ENV'
 DATABASE_URL=postgresql://<username>:<password>@localhost:5432/<database_name>
+INNGEST_DEV=1
 INNGEST_EVENT_KEY=local
 INNGEST_SIGNING_KEY=local
 INNGEST_BASE_URL=http://localhost:8288
