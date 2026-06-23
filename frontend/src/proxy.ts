@@ -38,6 +38,8 @@ const PUBLIC_PATHS = [
   "/unauthorized",
   "/api/auth",       // covers /api/auth/signin, /api/auth/csrf, /api/auth/session …
   "/api/inngest",
+  "/api/sia",        // Sia status/events — no auth needed for connection checks
+  "/api/health",     // Health check endpoint
 ];
 
 // Setup paths — always pass through so the self-healing cookie flow can run
@@ -93,20 +95,23 @@ export default async function proxy(req: NextRequest, _event: NextFetchEvent) {
     return NextResponse.next();
   }
 
-  // ── 2. Setup guard ─────────────────────────────────────────────────────────
+  // ── 2. Public paths (including all of /api/auth/**) ───────────────────────
+  // /api/auth must be fully public so OAuth callbacks can complete and write
+  // the session cookie to the browser before any auth check runs.
+  // IMPORTANT: This check MUST come before the setup guard so that OAuth
+  // callbacks can complete even when the setup_complete cookie is missing
+  // (e.g. after browser restart, or on first visit after setup).
+  if (matchesAny(pathname, PUBLIC_PATHS)) {
+    return NextResponse.next();
+  }
+
+  // ── 3. Setup guard ─────────────────────────────────────────────────────────
   // Cookie is set by GET/POST /api/setup/status when DB confirms completion.
   // /setup page always loads (step 1 above), calls the API, and the API
   // plants the cookie — self-healing for existing completed installations.
   const setupDone = req.cookies.get("setup_complete")?.value === "true";
   if (!setupDone) {
     return NextResponse.redirect(new URL("/setup", req.url));
-  }
-
-  // ── 3. Public paths (including all of /api/auth/**) ───────────────────────
-  // /api/auth must be fully public so OAuth callbacks can complete and write
-  // the session cookie to the browser before any auth check runs.
-  if (matchesAny(pathname, PUBLIC_PATHS)) {
-    return NextResponse.next();
   }
 
   // ── 4. Auth check ──────────────────────────────────────────────────────────
