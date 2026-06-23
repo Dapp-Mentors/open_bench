@@ -19,7 +19,7 @@ function withSetupCookie(res: NextResponse): NextResponse {
     httpOnly: true,    // not needed by JS — only read by middleware via req.cookies
     sameSite: "lax",
     path: "/",
-    // No maxAge → session cookie (clears on browser close).
+    maxAge: 60 * 60 * 24 * 365, // 1 year — survives browser restarts
     // Add `secure: true` for HTTPS production deployments.
   });
   return res;

@@ -2,9 +2,9 @@
 
 // src/app/login/page.tsx
 
-import { useState, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { signIn } from "next-auth/react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import { Loader2, Fingerprint, Chrome, KeyRound, Info, Github, Activity } from "lucide-react";
 
 type AuthMethod = "google" | "github" | "passkey" | "register-passkey";
@@ -20,9 +20,25 @@ const ERROR_MESSAGES: Record<string, string> = {
 
 export default function LoginPage() {
     const searchParams = useSearchParams();
+    const router = useRouter();
     const callbackUrl = searchParams.get("callbackUrl") ?? "/dashboard";
     const rawError = searchParams.get("error");
     const errorMessage = rawError ? (ERROR_MESSAGES[rawError] ?? ERROR_MESSAGES.Default) : null;
+    const [checkingSetup, setCheckingSetup] = useState(true);
+
+    // On mount, check if setup is complete. If not, redirect to /setup.
+    useEffect(() => {
+        fetch("/api/setup/status")
+            .then((r) => r.json())
+            .then((data) => {
+                if (!data.setupComplete) {
+                    router.replace("/setup");
+                } else {
+                    setCheckingSetup(false);
+                }
+            })
+            .catch(() => setCheckingSetup(false));
+    }, [router]);
 
     const [loading, setLoading] = useState<AuthMethod | null>(null);
     const [passkeyError, setPasskeyError] = useState<string | null>(null);
@@ -114,6 +130,14 @@ export default function LoginPage() {
             setLoading(null);
         }
     }, [callbackUrl]);
+
+    if (checkingSetup) {
+        return (
+            <div className="min-h-screen flex items-center justify-center" style={{ background: "var(--bg)" }}>
+                <Loader2 className="w-6 h-6 animate-spin" style={{ color: "var(--subtle)" }} />
+            </div>
+        );
+    }
 
     return (
         <div

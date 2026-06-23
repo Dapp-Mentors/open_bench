@@ -99,7 +99,8 @@ services:
 
       OLLAMA_BASE_URL: http://ollama:11434
 
-      CORS_ORIGINS: '["http://localhost:3000"]'
+      # JSON array — pydantic-settings parses it natively
+      CORS_ORIGINS: ${CORS_ORIGINS:-["http://localhost:3000"]}
 
       UPLOADS_DIR: /uploads
 
@@ -142,9 +143,8 @@ services:
       INNGEST_SIGNING_KEY: ${INNGEST_SIGNING_KEY:-local}
       INNGEST_BASE_URL: http://inngest:8288
       BACKEND_URL: http://backend:8000
-      NEXT_PUBLIC_BACKEND_URL: http://localhost:8000
       AUTH_SECRET: lTtDZlfpNjrSIA2EocS7GEAaH3SHLsOr41X4udYY1k4=
-      AUTH_URL: http://localhost:3000
+      AUTH_URL: ${AUTH_URL:-http://localhost:3000}
       NODE_ENV: production
       NEXT_TELEMETRY_DISABLED: "1"
       HOSTNAME: 0.0.0.0

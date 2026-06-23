@@ -42,20 +42,24 @@ const PROBLEMS = [
 export default async function Home() {
   const session = await auth();
 
-  if (session?.user) {
-    // Check if setup is complete — if not, redirect to setup wizard
-    try {
-      const settings = await prisma.appSettings.findUnique({
-        where: { id: "default" },
-        select: { setupComplete: true },
-      });
-      if (!settings?.setupComplete) {
-        redirect("/setup");
-      }
-    } catch {
-      // AppSettings table may not exist yet (fresh DB), redirect to setup
+  // Check if setup is complete — if not, redirect to setup wizard.
+  // This applies to BOTH authenticated and unauthenticated visitors:
+  // there's nothing to see on the landing or login pages until the
+  // platform has been configured by a super admin.
+  try {
+    const settings = await prisma.appSettings.findUnique({
+      where: { id: "default" },
+      select: { setupComplete: true },
+    });
+    if (!settings?.setupComplete) {
       redirect("/setup");
     }
+  } catch {
+    // AppSettings table may not exist yet (fresh DB), redirect to setup
+    redirect("/setup");
+  }
+
+  if (session?.user) {
     redirect("/dashboard");
   }
 
