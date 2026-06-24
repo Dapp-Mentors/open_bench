@@ -293,17 +293,19 @@ def _ci_checks_sync(task_id: str, storage_path: str) -> Tuple[bool, str]:
         with tempfile.TemporaryDirectory() as tmp_root:
             staging_path = _build_staging_context(task_dir, tmp_root)
             client.images.build(
-                path=staging_path,  # flat context: env contents + tests/ + solution/
-                dockerfile="Dockerfile",  # now at staging root (copied from environment/)
+                path=staging_path,
+                dockerfile="Dockerfile",
                 tag=_image_tag(task_id),
                 rm=True,
                 forcerm=True,
-                nocache=True,  # prevents stale Debian GPG failures
+                nocache=True,
             )
     except BuildError as e:
         log_lines = [l.get("stream", "") for l in e.build_log if isinstance(l, dict)]
+        _cleanup_task_image(task_id)  # ← ADD: prune failed/partial build immediately
         return False, "Docker build failed:\n" + "".join(log_lines)[-2000:]
     except Exception as e:
+        _cleanup_task_image(task_id)  # ← ADD: prune on any build error
         return False, f"Docker build error: {e}"
 
     return True, "Syntax checks passed, Docker build succeeded"
@@ -474,51 +476,51 @@ async def run_oracle_nop(task_id: str, storage_path: str) -> Tuple[bool, str]:
 
 
 def _oracle_nop_sync(task_id: str, storage_path: str) -> Tuple[bool, str]:
-    """
-    NOP run:    run test.sh only → reward.txt must contain "0"
-    Oracle run: run solve.sh then test.sh → reward.txt must contain "1"
-
-    tests/ and solution/ are baked into the image (see _ci_checks_sync).
-    No bind-mounts for those directories — only /logs/verifier is mounted.
-    """
     task_dir = _task_dir(storage_path)
     image_tag = _image_tag(task_id)
     task_meta = _read_task_toml(task_dir)
 
-    nop_reward, nop_logs = _run_container_stage(
-        task_id, "nop", task_dir, image_tag, oracle=False, task_meta=task_meta
-    )
-    oracle_reward, ora_logs = _run_container_stage(
-        task_id, "oracle", task_dir, image_tag, oracle=True, task_meta=task_meta
-    )
-
-    _diag(f"NOP    reward={nop_reward!r}  logs_tail={nop_logs[-200:]!r}")
-    _diag(f"Oracle reward={oracle_reward!r}  logs_tail={ora_logs[-200:]!r}")
-
-    if nop_reward is None:
-        return (
-            False,
-            f"NOP run failed to produce reward.txt. Container output: {nop_logs[-400:]}",
+    try:
+        nop_reward, nop_logs = _run_container_stage(
+            task_id, "nop", task_dir, image_tag, oracle=False, task_meta=task_meta
         )
-    if oracle_reward is None:
-        return (
-            False,
-            f"Oracle run failed to produce reward.txt. Container output: {ora_logs[-400:]}",
-        )
-    if nop_reward != "0":
-        return (
-            False,
-            f"NOP check failed — tests passed before solve.sh ran (reward={nop_reward!r}). "
-            f"Tests must fail on the unmodified code.\nContainer output: {nop_logs[-300:]}",
-        )
-    if oracle_reward != "1":
-        return (
-            False,
-            f"Oracle check failed — tests did not pass after solve.sh ran (reward={oracle_reward!r}). "
-            f"Check that solve.sh correctly fixes the code.\nContainer output: {ora_logs[-300:]}",
+        oracle_reward, ora_logs = _run_container_stage(
+            task_id, "oracle", task_dir, image_tag, oracle=True, task_meta=task_meta
         )
 
-    return True, "NOP reward=0 ✓  Oracle reward=1 ✓"
+        _diag(f"NOP    reward={nop_reward!r}  logs_tail={nop_logs[-200:]!r}")
+        _diag(f"Oracle reward={oracle_reward!r}  logs_tail={ora_logs[-200:]!r}")
+
+        if nop_reward is None:
+            return (
+                False,
+                f"NOP run failed to produce reward.txt. Container output: {nop_logs[-400:]}",
+            )
+        if oracle_reward is None:
+            return (
+                False,
+                f"Oracle run failed to produce reward.txt. Container output: {ora_logs[-400:]}",
+            )
+        if nop_reward != "0":
+            return (
+                False,
+                f"NOP check failed — tests passed before solve.sh ran (reward={nop_reward!r}). "
+                f"Tests must fail on the unmodified code.\nContainer output: {nop_logs[-300:]}",
+            )
+        if oracle_reward != "1":
+            return (
+                False,
+                f"Oracle check failed — tests did not pass after solve.sh ran (reward={oracle_reward!r}). "
+                f"Check that solve.sh correctly fixes the code.\nContainer output: {ora_logs[-300:]}",
+            )
+
+        return True, "NOP reward=0 ✓  Oracle reward=1 ✓"
+
+    finally:
+        # ← ADD: always remove the task image after oracle/nop regardless of outcome.
+        # This is the last stage that needs the image. Keeping it wastes disk and
+        # will eventually freeze Postgres when the volume fills up.
+        _cleanup_task_image(task_id)
 
 
 def _run_container_stage(
@@ -811,3 +813,25 @@ def prune_docker_system() -> Tuple[int, str]:
         )
     except Exception as e:
         return 1, f"Docker system prune failed: {e}"
+
+
+def _cleanup_task_image(task_id: str) -> None:
+    """
+    Remove the task image and prune dangling layers immediately after use.
+    Called after oracle/nop (last stage needing the image) and on CI build failure.
+    Swallows all errors — cleanup must never crash the pipeline.
+    """
+    tag = _image_tag(task_id)
+    try:
+        client = _docker_client()
+        try:
+            image = client.images.get(tag)
+            client.images.remove(image.id, force=True, noprune=False)
+            _diag(f"[cleanup] Removed task image {tag}")
+        except ImageNotFound:
+            pass  # already gone, nothing to do
+        # Prune dangling layers left behind by the removed image
+        client.images.prune(filters={"dangling": True})
+        _diag(f"[cleanup] Pruned dangling layers after {tag}")
+    except Exception as e:
+        _diag(f"[cleanup] Warning: could not remove image {tag}: {e}")
