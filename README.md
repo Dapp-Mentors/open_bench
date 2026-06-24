@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="./demo.png" alt="OpenBench Demo" width="800" />
+</p>
+
 # OpenBench
 
 OpenBench is an AI dataset curation and evaluation platform for AI model trainings. Each curated task is a realistic command-line challenge — a broken build, a failing service, a bad config — that AI agents solve through the terminal. A 9-stage automated pipeline verifies every submission for syntactic correctness, instructional quality, solvability, and calibrated difficulty before it enters the training data registry. Every approved task is a verified, production-grade training example; every dataset and artifact lives on the Sia Network forever. The same infrastructure also supports running benchmark evaluations.
