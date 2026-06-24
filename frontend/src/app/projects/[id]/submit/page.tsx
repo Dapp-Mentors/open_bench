@@ -253,13 +253,20 @@ export default function SubmitTaskPage({ params }: SubmitTaskPageProps) {
                 body: fd,
             });
 
-            const data = await res.json();
+            let data: { id?: string; error?: string } = {}
+            const contentType = res.headers.get('content-type') ?? ''
+            if (contentType.includes('application/json')) {
+                data = await res.json()
+            } else {
+                const text = await res.text()
+                data = { error: text || `Server error ${res.status}` }
+            }
 
             if (!res.ok) {
                 throw new Error(data.error ?? `Upload failed (${res.status})`);
             }
 
-            setTaskId(data.id);
+            setTaskId(data.id ?? null);
             setState("success");
         } catch (err: unknown) {
             setError(err instanceof Error ? err.message : "Something went wrong");

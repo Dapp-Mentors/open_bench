@@ -65,22 +65,6 @@ export async function POST(
   }
 
   // 3. Persist the zip to the shared /uploads volume.
-  //
-  //    IMPORTANT: We use the hard-coded /uploads path instead of
-  //    join(process.cwd(), 'uploads', …).  In Docker the frontend
-  //    container mounts the task_uploads volume at  /uploads  and
-  //    the backend container mounts the same volume at  /uploads.
-  //
-  //    Next.js standalone mode changes process.cwd() to
-  //    /app/.next/standalone so join(process.cwd(), 'uploads', …)
-  //    would produce a CONTAINER-LOCAL path that the backend cannot
-  //    see.  Writing to /uploads guarantees both services can reach
-  //    the same file through the shared volume.
-  //
-  //    When running outside Docker (e.g. `next dev`) /uploads falls
-  //    back to a regular filesystem path; adjust your local dev
-  //    environment accordingly or symlink /uploads to a local dir.
-  //
   const uploadDir = join('/uploads', id)
   await mkdir(uploadDir, { recursive: true })
   const fileName = `${randomUUID()}-${file.name}`
@@ -119,8 +103,12 @@ export async function POST(
       name: 'pipeline/task.submitted',
       data: { taskId: task.id, projectId: id, storagePath: filePath },
     })
-  } catch (err) {
-    console.error('[inngest] Failed to send pipeline/task.submitted:', err)
+  } catch (error) {
+    console.error('[tasks] submission error:', error)
+    return Response.json(
+      { error: error instanceof Error ? error.message : 'Internal server error' },
+      { status: 500 }
+    )
   }
 
   return NextResponse.json({ id: task.id, title }, { status: 201 })
