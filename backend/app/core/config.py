@@ -18,8 +18,10 @@ class Settings(BaseSettings):
     # There is no .env fallback — the key must be configured through the UI.
     OPENROUTER_BASE_URL: str = "https://openrouter.ai/api/v1"
 
-    # Where uploaded task ZIPs land (mounted shared volume)
-    UPLOADS_DIR: str = "/uploads"
+    # Where uploaded task ZIPs land.
+    # Docker: /uploads (set via docker-compose.yml → mounted task_uploads volume)
+    # Local:  ../frontend/uploads (relative to WORKDIR /app, or set in backend/.env)
+    UPLOADS_DIR: str = "../frontend/uploads"
 
     # ── Sia Storage ────────────────────────────────────────────────────────────
     # All Sia config is read from the AppSettings table (set via setup wizard).

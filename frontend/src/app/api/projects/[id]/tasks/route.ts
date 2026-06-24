@@ -7,6 +7,7 @@ import { inngest } from '@/lib/inngest/client'
 import { writeFile, mkdir } from 'fs/promises'
 import { join } from 'path'
 import { randomUUID } from 'crypto'
+import { UPLOADS_DIR } from '@/lib/uploads'
 
 export async function GET(
   _: Request,
@@ -64,8 +65,8 @@ export async function POST(
     )
   }
 
-  // 3. Persist the zip to the shared /uploads volume.
-  const uploadDir = join('/uploads', id)
+  // 3. Persist the zip to the shared uploads directory.
+  const uploadDir = join(UPLOADS_DIR, id)
   await mkdir(uploadDir, { recursive: true })
   const fileName = `${randomUUID()}-${file.name}`
   const filePath = join(uploadDir, fileName)
