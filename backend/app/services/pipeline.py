@@ -67,11 +67,13 @@ after pipeline completion anyway, so the cache savings would be minimal.
 from __future__ import annotations
 
 import asyncio
+import io
 import os
 import re
 import shutil
 import subprocess
 import sys
+import tarfile
 import tempfile
 import zipfile
 from pathlib import Path
@@ -302,10 +304,10 @@ def _ci_checks_sync(task_id: str, storage_path: str) -> Tuple[bool, str]:
             )
     except BuildError as e:
         log_lines = [l.get("stream", "") for l in e.build_log if isinstance(l, dict)]
-        _cleanup_task_image(task_id)  # ← ADD: prune failed/partial build immediately
+        _cleanup_task_image(task_id)
         return False, "Docker build failed:\n" + "".join(log_lines)[-2000:]
     except Exception as e:
-        _cleanup_task_image(task_id)  # ← ADD: prune on any build error
+        _cleanup_task_image(task_id)
         return False, f"Docker build error: {e}"
 
     return True, "Syntax checks passed, Docker build succeeded"
@@ -517,7 +519,7 @@ def _oracle_nop_sync(task_id: str, storage_path: str) -> Tuple[bool, str]:
         return True, "NOP reward=0 ✓  Oracle reward=1 ✓"
 
     finally:
-        # ← ADD: always remove the task image after oracle/nop regardless of outcome.
+        # Always remove the task image after oracle/nop regardless of outcome.
         # This is the last stage that needs the image. Keeping it wastes disk and
         # will eventually freeze Postgres when the volume fills up.
         _cleanup_task_image(task_id)
@@ -535,7 +537,18 @@ def _run_container_stage(
     Spin up a fresh container for a NOP or Oracle run.
 
     Returns (reward_value, container_log_output).
-    reward_value is None if reward.txt was not written.
+    reward_value is None if reward.txt was not written anywhere findable.
+
+    reward.txt resolution order
+    ───────────────────────────
+    1. Primary:   /logs/verifier/reward.txt  — written via $REWARD_FILE env var.
+                  This is the correct contract and should be used by all test.sh.
+    2. Fallback:  docker cp from container's working_dir/reward.txt.
+                  Some test.sh scripts (especially older ones that previously ran
+                  with bind-mounts) write `reward.txt` to the CWD instead of
+                  $REWARD_FILE. Rather than rejecting valid tasks, we retrieve
+                  the file directly from the container filesystem via docker cp
+                  before the container is removed.
 
     Key design points
     ─────────────────
@@ -595,11 +608,12 @@ def _run_container_stage(
             environment["SOLUTION_DIR"] = "/solution"
 
         if oracle:
-            cmd = "set -e; " "bash /solution/solve.sh; " "bash /tests/test.sh"
+            cmd = "bash /solution/solve.sh && bash /tests/test.sh"
         else:
             cmd = "bash /tests/test.sh"
 
         container_logs = ""
+        container = None
         try:
             container = client.containers.run(
                 image=image_tag,
@@ -618,18 +632,50 @@ def _run_container_stage(
             raw_logs = container.logs(stdout=True, stderr=True)
             container_logs = raw_logs.decode("utf-8", errors="replace")
             exit_code = result.get("StatusCode", -1)
-            container.remove(force=True)
 
             _diag(f"{stage}: exit_code={exit_code}")
 
+            # ── Primary: reward.txt written to $REWARD_FILE → bind-mounted tmpdir ──
             if os.path.exists(reward_host_path):
                 reward = open(reward_host_path).read().strip()
+                _diag(f"{stage}: reward.txt found via $REWARD_FILE (primary)")
+                container.remove(force=True)
                 return reward, container_logs
 
+            # ── Fallback: test.sh wrote reward.txt to CWD instead of $REWARD_FILE ──
+            # Some scripts do `echo "1" > reward.txt` (relative path) rather than
+            # `echo "1" > "$REWARD_FILE"`. We pull the file directly from the
+            # container filesystem via docker cp before removing the container.
+            _diag(
+                f"{stage}: reward.txt not at $REWARD_FILE — "
+                f"trying docker cp fallback from {working_dir}/reward.txt"
+            )
+            try:
+                bits, _ = container.get_archive(f"{working_dir}/reward.txt")
+                tar_bytes = b"".join(bits)
+                with tarfile.open(fileobj=io.BytesIO(tar_bytes)) as tar:
+                    member = tar.getmember("reward.txt")
+                    reward = tar.extractfile(member).read().decode().strip()
+                _diag(
+                    f"{stage}: reward.txt recovered from container CWD "
+                    f"({working_dir}) via docker cp fallback — value={reward!r}"
+                )
+                container.remove(force=True)
+                return reward, container_logs
+            except Exception as cp_err:
+                _diag(f"{stage}: docker cp fallback failed: {cp_err}")
+
+            container.remove(force=True)
             return None, container_logs
 
         except Exception as e:
-            _force_remove_container(container_name)
+            if container is not None:
+                try:
+                    container.remove(force=True)
+                except Exception:
+                    pass
+            else:
+                _force_remove_container(container_name)
             return None, f"Container exception: {e}\n{container_logs}"
 
 
@@ -695,8 +741,9 @@ def _benchmark_run_sync(
         }
 
         # TODO: replace with real agent injection
-        cmd = "set -e; bash /solution/solve.sh; bash /tests/test.sh"
+        cmd = "bash /solution/solve.sh && bash /tests/test.sh"
 
+        container = None
         try:
             container = client.containers.run(
                 image=image_tag,
@@ -710,15 +757,38 @@ def _benchmark_run_sync(
                 mem_limit="1g",
             )
             container.wait(timeout=300)
-            container.remove(force=True)
+            raw_logs = container.logs(stdout=True, stderr=True)
+            container_logs = raw_logs.decode("utf-8", errors="replace")
 
+            # Primary: $REWARD_FILE path
             if os.path.exists(reward_host_path):
                 reward = open(reward_host_path).read().strip()
+                container.remove(force=True)
                 return (1 if reward == "1" else 0), None
+
+            # Fallback: CWD reward.txt via docker cp
+            try:
+                bits, _ = container.get_archive(f"{working_dir}/reward.txt")
+                tar_bytes = b"".join(bits)
+                with tarfile.open(fileobj=io.BytesIO(tar_bytes)) as tar:
+                    member = tar.getmember("reward.txt")
+                    reward = tar.extractfile(member).read().decode().strip()
+                container.remove(force=True)
+                return (1 if reward == "1" else 0), None
+            except Exception:
+                pass
+
+            container.remove(force=True)
             return 0, "reward.txt not written by test.sh"
 
         except Exception as e:
-            _force_remove_container(container_name)
+            if container is not None:
+                try:
+                    container.remove(force=True)
+                except Exception:
+                    pass
+            else:
+                _force_remove_container(container_name)
             return 0, str(e)
 
 

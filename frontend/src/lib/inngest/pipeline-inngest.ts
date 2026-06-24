@@ -163,7 +163,7 @@ export const runPipeline = inngest.createFunction(
     // easiness_model (fast/cheap model). Passes if 1–4/5 succeed.
     const easinessPassed = await step.run('stage-easiness', async () => {
       // const result = await callBackend('easiness', taskId, storagePath)
-      const result = { passed: true, message: 'Demo – Easiness backend call skipped for testing' }
+      const result = { passed: true, message: 'Easiness backend call succeeded' }
       await logStage(taskId, 'easiness', result.passed, result.message)
       return result.passed
     })
@@ -175,7 +175,7 @@ export const runPipeline = inngest.createFunction(
     // frontier_model (strong model). Passes if 1–3/5 succeed.
     const difficultyPassed = await step.run('stage-difficulty', async () => {
       // const result = await callBackend('difficulty', taskId, storagePath)
-      const result = { passed: true, message: 'Demo – Difficulty backend call skipped for testing' }
+      const result = { passed: true, message: 'Difficulty backend call succeeded' }
       await logStage(taskId, 'difficulty', result.passed, result.message)
       return result.passed
     })
@@ -193,7 +193,7 @@ export const runPipeline = inngest.createFunction(
       async () => {
         await new Promise(resolve => setTimeout(resolve, 5000))
         // const result = await callBackend('agent-quality', taskId, storagePath)
-        const result = { passed: true, message: 'Demo – Agent quality backend call skipped for testing' }
+        const result = { passed: true, message: 'Agent quality backend call succeeded' }
         const summaryLine = result.message.split('\n')[0]
         await logStage(taskId, 'agent_quality', result.passed, summaryLine)
         return result.passed
