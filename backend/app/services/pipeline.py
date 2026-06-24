@@ -174,8 +174,6 @@ def _diag(msg: str) -> None:
 
 # ── Stage 1: CI checks ────────────────────────────────────────────────────────
 
-# ── Stage 1: CI checks ────────────────────────────────────────────────────────
-
 
 async def run_ci_checks(task_id: str, storage_path: str) -> Tuple[bool, str]:
     loop = asyncio.get_event_loop()
@@ -187,8 +185,12 @@ def _build_staging_context(task_dir: Path, tmp_root: str) -> str:
     Create a temporary build context directory that:
       1. Copies everything from environment/ to the root (so Dockerfile's
          relative COPY paths like `COPY package.json ./` still resolve).
-      2. Adds tests/ and solution/ as subdirectories so they get baked
-         into the image and are available at /tests and /solution.
+      2. Adds tests/ and solution/ as subdirectories in the context.
+      3. APPENDS COPY instructions to the Dockerfile so tests/ and solution/
+         are actually baked into the image at /tests and /solution.
+         (The original Dockerfile only copies app source — it knows nothing
+         about tests/ or solution/, so without this step those paths are
+         absent at container runtime even though they exist in the context.)
 
     Returns the path to the staging directory.
     """
@@ -205,11 +207,26 @@ def _build_staging_context(task_dir: Path, tmp_root: str) -> str:
             else:
                 shutil.copy2(str(item), str(dest))
 
-    # 2. Bake tests/ and solution/ into image
+    # 2. Copy tests/ and solution/ into the staging context
     for subdir in ("tests", "solution"):
         src = task_dir / subdir
         if src.is_dir():
             shutil.copytree(str(src), str(staging / subdir))
+
+    # 3. Append COPY instructions to the Dockerfile so the directories
+    #    are actually present inside the built image at /tests and /solution.
+    #    The original Dockerfile was authored to only copy app source files
+    #    and has no knowledge of tests/ or solution/ — we must inject these.
+    dockerfile_path = staging / "Dockerfile"
+    if dockerfile_path.exists():
+        with open(dockerfile_path, "a") as f:
+            f.write("\n# Injected by OpenBench pipeline — bake in tests and solution\n")
+            if (staging / "tests").is_dir():
+                f.write("COPY tests/ /tests/\n")
+            if (staging / "solution").is_dir():
+                f.write("COPY solution/ /solution/\n")
+                f.write("RUN chmod +x /solution/solve.sh\n")
+            f.write("RUN chmod +x /tests/test.sh\n")
 
     return str(staging)
 
