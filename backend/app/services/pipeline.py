@@ -533,54 +533,6 @@ def _run_container_stage(
     oracle: bool,
     task_meta: dict,
 ) -> Tuple[str | None, str]:
-    """
-    Spin up a fresh container for a NOP or Oracle run.
-
-    Returns (reward_value, container_log_output).
-    reward_value is None if reward.txt was not written anywhere findable.
-
-    reward.txt resolution order
-    ───────────────────────────
-    1. Primary:   /logs/verifier/reward.txt  — written via $REWARD_FILE env var.
-                  This is the correct contract and should be used by all test.sh.
-    2. Fallback:  docker cp from container's working_dir/reward.txt.
-                  Some test.sh scripts (especially older ones that previously ran
-                  with bind-mounts) write `reward.txt` to the CWD instead of
-                  $REWARD_FILE. Rather than rejecting valid tasks, we retrieve
-                  the file directly from the container filesystem via docker cp
-                  before the container is removed.
-
-    Key design points
-    ─────────────────
-    1. tests/ and solution/ are baked into the image.
-       The CI stage (_ci_checks_sync) builds with the full task_dir as context
-       so these directories exist inside the image at /tests and /solution.
-       No bind-mounts are needed for them — and using bind-mounts here would
-       fail because bind-mount source paths are resolved by the HOST Docker
-       daemon against the HOST filesystem, while task files only exist inside
-       the task_uploads named volume (backend container-local).
-
-    2. Only /logs/verifier is bind-mounted.
-       tmpdir is created by tempfile.TemporaryDirectory() on the backend's own
-       writable filesystem, which the host daemon can access. This lets us read
-       reward.txt back after the container exits.
-
-    3. REWARD_FILE env var:
-       Container gets REWARD_FILE=/logs/verifier/reward.txt so test.sh writes
-       to the right location regardless of working directory.
-
-    4. Working directory:
-       Set to task.toml [task] working_dir (default "/app") so Hardhat / npm
-       commands resolve node_modules correctly.
-
-    5. network_mode:
-       Default "none". Set task.toml [task] network_required = true to enable
-       bridge networking for tasks that fetch packages at runtime.
-
-    6. solve.sh contract (oracle run):
-       solve.sh lives at /solution/solve.sh inside the image. It runs from
-       working_dir and may modify files in the image's own writable layer.
-    """
     container_name = _container_name(task_id, stage)
     client = _docker_client()
 
@@ -591,92 +543,68 @@ def _run_container_stage(
 
     _diag(f"{stage}: working_dir={working_dir} network={network_mode} oracle={oracle}")
 
-    with tempfile.TemporaryDirectory() as tmpdir:
-        reward_host_path = os.path.join(tmpdir, "reward.txt")
+    environment = {
+        "REWARD_FILE": "/logs/verifier/reward.txt",
+        "TESTS_DIR": "/tests",
+    }
+    if oracle:
+        environment["SOLUTION_DIR"] = "/solution"
 
-        # Only the writable /logs/verifier tmpdir is bind-mounted.
-        # tests/ and solution/ are inside the image — no bind-mounts needed.
-        volumes: dict = {
-            tmpdir: {"bind": "/logs/verifier", "mode": "rw"},
-        }
+    if oracle:
+        cmd = "bash /solution/solve.sh && bash /tests/test.sh"
+    else:
+        cmd = "bash /tests/test.sh"
 
-        environment = {
-            "REWARD_FILE": "/logs/verifier/reward.txt",
-            "TESTS_DIR": "/tests",
-        }
-        if oracle:
-            environment["SOLUTION_DIR"] = "/solution"
+    container_logs = ""
+    container = None
+    try:
+        container = client.containers.run(
+            image=image_tag,
+            name=container_name,
+            command=["bash", "-c", cmd],
+            working_dir=working_dir,
+            environment=environment,
+            remove=False,
+            detach=True,
+            mem_limit="1g",
+            network_mode=network_mode,
+            # NO volumes — tmpdir bind-mounts don't resolve on the host daemon
+        )
 
-        if oracle:
-            cmd = "bash /solution/solve.sh && bash /tests/test.sh"
-        else:
-            cmd = "bash /tests/test.sh"
+        result = container.wait(timeout=180)
+        raw_logs = container.logs(stdout=True, stderr=True)
+        container_logs = raw_logs.decode("utf-8", errors="replace")
+        exit_code = result.get("StatusCode", -1)
+        _diag(f"{stage}: exit_code={exit_code}")
 
-        container_logs = ""
-        container = None
-        try:
-            container = client.containers.run(
-                image=image_tag,
-                name=container_name,
-                command=["bash", "-c", cmd],
-                working_dir=working_dir,
-                volumes=volumes,
-                environment=environment,
-                remove=False,
-                detach=True,
-                mem_limit="1g",
-                network_mode=network_mode,
-            )
-
-            result = container.wait(timeout=180)
-            raw_logs = container.logs(stdout=True, stderr=True)
-            container_logs = raw_logs.decode("utf-8", errors="replace")
-            exit_code = result.get("StatusCode", -1)
-
-            _diag(f"{stage}: exit_code={exit_code}")
-
-            # ── Primary: reward.txt written to $REWARD_FILE → bind-mounted tmpdir ──
-            if os.path.exists(reward_host_path):
-                reward = open(reward_host_path).read().strip()
-                _diag(f"{stage}: reward.txt found via $REWARD_FILE (primary)")
-                container.remove(force=True)
-                return reward, container_logs
-
-            # ── Fallback: test.sh wrote reward.txt to CWD instead of $REWARD_FILE ──
-            # Some scripts do `echo "1" > reward.txt` (relative path) rather than
-            # `echo "1" > "$REWARD_FILE"`. We pull the file directly from the
-            # container filesystem via docker cp before removing the container.
-            _diag(
-                f"{stage}: reward.txt not at $REWARD_FILE — "
-                f"trying docker cp fallback from {working_dir}/reward.txt"
-            )
+        # Primary: docker cp from the hardcoded path test.sh writes to
+        for reward_path in ["/logs/verifier/reward.txt", f"{working_dir}/reward.txt"]:
             try:
-                bits, _ = container.get_archive(f"{working_dir}/reward.txt")
+                bits, _ = container.get_archive(reward_path)
                 tar_bytes = b"".join(bits)
                 with tarfile.open(fileobj=io.BytesIO(tar_bytes)) as tar:
-                    member = tar.getmember("reward.txt")
+                    member = tar.getmembers()[0]
                     reward = tar.extractfile(member).read().decode().strip()
                 _diag(
-                    f"{stage}: reward.txt recovered from container CWD "
-                    f"({working_dir}) via docker cp fallback — value={reward!r}"
+                    f"{stage}: reward.txt recovered from {reward_path} — value={reward!r}"
                 )
                 container.remove(force=True)
                 return reward, container_logs
-            except Exception as cp_err:
-                _diag(f"{stage}: docker cp fallback failed: {cp_err}")
+            except Exception:
+                continue
 
-            container.remove(force=True)
-            return None, container_logs
+        container.remove(force=True)
+        return None, container_logs
 
-        except Exception as e:
-            if container is not None:
-                try:
-                    container.remove(force=True)
-                except Exception:
-                    pass
-            else:
-                _force_remove_container(container_name)
-            return None, f"Container exception: {e}\n{container_logs}"
+    except Exception as e:
+        if container is not None:
+            try:
+                container.remove(force=True)
+            except Exception:
+                pass
+        else:
+            _force_remove_container(container_name)
+        return None, f"Container exception: {e}\n{container_logs}"
 
 
 # ── Stage 4: Benchmark run execution ─────────────────────────────────────────
