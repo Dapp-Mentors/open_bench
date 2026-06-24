@@ -313,6 +313,10 @@ async def run_probe(
                 if pass_count > diff_max_pass:
                     early_exit_reason = f"TOO_EASY (pass_count={pass_count} > {diff_max_pass})"
                     break
+                # ACCEPTABLE: at least 1 pass AND at least 1 fail
+                if pass_count >= 1 and fail_count >= 1:
+                    early_exit_reason = f"ACCEPTABLE ({pass_count}P/{fail_count}F)"
+                    break
                 # TOO_HARD: no passes, no runs left
                 if pass_count == 0 and remaining == 0:
                     break
