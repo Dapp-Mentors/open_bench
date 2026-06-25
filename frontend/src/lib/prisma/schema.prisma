@@ -122,6 +122,8 @@ model AppSettings {
   // WebAuthn / Passkey config (set via setup wizard — no .env fallback)
   webauthnRpId       String?  // Relying Party ID (e.g. "localhost" or "yourdomain.com")
   webauthnOrigin     String?  // Allowed origin (e.g. "http://localhost:3000" or "https://yourdomain.com")
+  // Pipeline retry config (admin-managed via settings page)
+  difficultyMaxRetries Int    @default(3)
   updatedAt          DateTime @updatedAt
 }
 
@@ -194,6 +196,8 @@ model Task {
   embeddingJson    String?
 
   siaStatus        String         @default("pending")
+
+  difficultyRetries Int          @default(0)
 
   createdAt        DateTime       @default(now())
   updatedAt        DateTime       @updatedAt

@@ -88,6 +88,7 @@ export interface Task {
   qualityDetails: string | null;
   easinessResult: string | null;
   agentQualityNote: string | null;
+  difficultyRetries: number;
   siaHash: string | null;
   indexdKey: string | null;
   embeddingJson: string | null;

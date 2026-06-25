@@ -334,6 +334,16 @@ export function SideBar({ isOpen, onClose, sia }: SideBarProps) {
                                     if (window.innerWidth < 1024) onClose();
                                 }}
                             />
+                            <SideItem
+                                href="/admin/misc"
+                                label="Misc Settings"
+                                icon={Settings2}
+                                isActive={isActive("/admin/misc")}
+                                accent="amber"
+                                onClick={() => {
+                                    if (window.innerWidth < 1024) onClose();
+                                }}
+                            />
                         </>
                     )}
                 </nav>

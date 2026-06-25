@@ -449,9 +449,10 @@ export default function SubmitTaskPage({ params }: SubmitTaskPageProps) {
                             { n: 3, label: "Quality Check", desc: "LLM score ≥ 0.6 across 11 criteria" },
                             { n: 4, label: "Validation pre-flight", desc: "pytest --collect-only passes" },
                             { n: 5, label: "Oracle / NOP Validation", desc: "Tests fail before, pass after solve.sh" },
-                            { n: 6, label: "Easiness Prefilter", desc: "Sonnet 4.6 must not solve it (pass@5 = 1/5)" },
-                            { n: 7, label: "Opus 4.8 Difficulty Probe", desc: "Must land 1–3/5 passes" },
+                            { n: 6, label: "Easiness Prefilter", desc: "Model must not solve it (pass@5 = 1/5)" },
+                            { n: 7, label: "Difficulty Probe", desc: "Frontier model must land 1–3/5 passes" },
                             { n: 8, label: "Agent Quality Check", desc: "Benchmark designer verdict" },
+                            { n: 9, label: "Sia Network Upload", desc: "Decentralized storage via Sia" },
                         ].map(({ n, label, desc }) => (
                             <li key={n} className="flex items-start gap-3">
                                 <span
