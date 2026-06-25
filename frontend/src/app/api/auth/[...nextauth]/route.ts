@@ -19,8 +19,9 @@
 // redirect_uri becomes correct (e.g. "https://my-app-3000.preview.app.github.dev/...").
 
 import { handlers } from "@/lib/auth";
+import { NextRequest } from "next/server";
 
-function rewriteUrl(req: Request): Request {
+function rewriteUrl(req: NextRequest): NextRequest {
   const host =
     req.headers.get("x-forwarded-host") ??
     req.headers.get("host") ?? 
@@ -36,17 +37,12 @@ function rewriteUrl(req: Request): Request {
   // Only rewrite if the URL doesn't already use the public origin
   if (url.origin !== publicOrigin) {
     const newUrl = `${publicOrigin}${url.pathname}${url.search}`;
-    return new Request(newUrl, req);
+    return new NextRequest(newUrl, req);
   }
   
   return req;
 }
 
-async function withPublicUrl(handler: (req: Request, ...rest: any[]) => Promise<Response>) {
-  return async (req: Request, ...rest: any[]) => {
-    return handler(rewriteUrl(req), ...rest);
-  };
-}
-
-export const GET = withPublicUrl(handlers.GET);
-export const POST = withPublicUrl(handlers.POST);
+// Wrap handlers to rewrite the URL before passing to NextAuth
+export const GET = (req: NextRequest, ...rest: any[]) => handlers.GET(rewriteUrl(req), ...rest);
+export const POST = (req: NextRequest, ...rest: any[]) => handlers.POST(rewriteUrl(req), ...rest);
