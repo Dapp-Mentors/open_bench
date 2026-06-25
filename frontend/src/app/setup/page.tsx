@@ -821,59 +821,6 @@ export default function SetupPage() {
             </div>
 
             <div className="space-y-6">
-              {/* WebAuthn / Passkey */}
-              <div
-                className="p-4 rounded-lg"
-                style={{ border: "1px solid var(--border)", background: "var(--surface)" }}
-              >
-                <div className="flex items-center gap-2 mb-3">
-                  <KeyRound className="w-4 h-4" style={{ color: "var(--subtle)" }} />
-                  <span className="font-mono text-xs font-semibold" style={{ color: "var(--text)" }}>
-                    Passkey (WebAuthn)
-                  </span>
-                </div>
-                    <p className="font-mono text-[10px] mb-3 leading-relaxed" style={{ color: "var(--subtle)" }}>
-                      Configure the Relying Party ID and Origin for WebAuthn passkey authentication.
-                      These must match your deployment domain.
-                    </p>
-                    <div className="space-y-3">
-                      <div>
-                        <label className="block font-mono text-[10px] mb-1" style={{ color: "var(--subtle)" }}>
-                      Relying Party ID (WEBAUTHN_RP_ID)
-                    </label>
-                    <input
-                      type="text"
-                      value={webauthnRpId}
-                      onChange={(e) => setWebauthnRpId(e.target.value)}
-                      placeholder="localhost"
-                      className="w-full px-3 py-2 rounded-lg font-mono text-xs outline-none"
-                      style={{
-                        background: "var(--bg)",
-                        border: "1px solid var(--border)",
-                        color: "var(--text)",
-                      }}
-                    />
-                  </div>
-                  <div>
-                        <label className="block font-mono text-[10px] mb-1" style={{ color: "var(--subtle)" }}>
-                          Allowed Origin (WEBAUTHN_ORIGIN)
-                    </label>
-                    <input
-                      type="text"
-                      value={webauthnOrigin}
-                      onChange={(e) => setWebauthnOrigin(e.target.value)}
-                      placeholder="http://localhost:3000"
-                      className="w-full px-3 py-2 rounded-lg font-mono text-xs outline-none"
-                      style={{
-                        background: "var(--bg)",
-                        border: "1px solid var(--border)",
-                        color: "var(--text)",
-                      }}
-                    />
-                  </div>
-                </div>
-              </div>
-
               {/* Google */}
               <div
                 className="p-4 rounded-lg"

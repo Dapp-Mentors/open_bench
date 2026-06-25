@@ -97,6 +97,12 @@ Create your local env files:
 # Frontend — only the database URL is required (everything else has defaults)
 cat > frontend/.env << 'ENV'
 DATABASE_URL=postgresql://<username>:<password>@localhost:5432/<database_name>
+INNGEST_DEV=1
+INNGEST_EVENT_KEY=local
+INNGEST_SIGNING_KEY=local
+INNGEST_BASE_URL=http://localhost:8288
+NEXT_TELEMETRY_DISABLED=1
+BACKEND_URL=http://localhost:8000
 ENV
 
 # Backend — use the example as-is (or tweak ports)
@@ -111,18 +117,9 @@ ENV
 
 That's it. The frontend `.env` above is the complete set of variables needed for local development. The backend `.env.example` contains defaults for the remaining backend-specific variables (PostgreSQL, CORS, Ollama, port) — adjust as needed.
 
-#### 2. Start the services (one command)
+#### 2. Start services individually
 
-```bash
-chmod +x scripts/start-dev.sh
-./scripts/start-dev.sh
-```
-
-This single script starts all services — PostgreSQL, Ollama, Inngest, the backend (FastAPI), and the frontend (Next.js) — in one terminal. Press `Ctrl+C` to stop everything.
-
-#### 3. Legacy: start services individually
-
-If you prefer to run each service in its own terminal:
+> **⚠️ Prerequisite:** Dev mode requires **PostgreSQL** and **Ollama** already running on your machine. Make sure both are up before starting the application servers. If you don't have them running yet, start them first:
 
 ```bash
 # Terminal 1 — PostgreSQL
@@ -141,7 +138,11 @@ docker run -d --name openbench_ollama \
 
 # Pull the embedding model
 docker exec openbench_ollama ollama pull nomic-embed-text:latest
+```
 
+Once PostgreSQL and Ollama are confirmed running, start the remaining services in separate terminals:
+
+```bash
 # Terminal 3 — Inngest
 npx inngest-cli@latest dev \
   -u http://localhost:3000/api/inngest \
@@ -167,7 +168,7 @@ npm run dev
 
 **First boot:** Open http://localhost:3000 and complete the **Setup Wizard** (Sia → OpenRouter → Social Providers → Sign Up). See the Docker section above for details on each step.
 
-#### 4. Setup wizard (environment variables it saves)
+#### 3. Setup wizard (environment variables it saves)
 
 The wizard persists configuration into the database via these API endpoints:
 
