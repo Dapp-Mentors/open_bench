@@ -75,6 +75,13 @@ RUN chmod +x /app/entrypoint.sh
 
 RUN chown -R nextjs:nodejs /app
 
+# ── Uploads directory ────────────────────────────────────────────
+# The task_uploads volume is mounted at /uploads. Create the mount
+# point in the image so Docker doesn't auto-create it as root-owned.
+# Then grant write permission to the nextjs user so the upload API
+# can persist ZIP files there.
+RUN mkdir -p /uploads && chown nextjs:nodejs /uploads
+
 USER nextjs
 
 EXPOSE 3000

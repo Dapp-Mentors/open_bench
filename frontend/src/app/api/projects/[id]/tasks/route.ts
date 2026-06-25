@@ -7,6 +7,7 @@ import { inngest } from '@/lib/inngest/client'
 import { writeFile, mkdir } from 'fs/promises'
 import { join } from 'path'
 import { randomUUID } from 'crypto'
+import { UPLOADS_DIR } from '@/lib/uploads'
 
 export async function GET(
   _: Request,
@@ -64,8 +65,8 @@ export async function POST(
     )
   }
 
-  // 3. Persist the zip to local storage
-  const uploadDir = join(process.cwd(), 'uploads', id)
+  // 3. Persist the zip to the shared uploads directory.
+  const uploadDir = join(UPLOADS_DIR, id)
   await mkdir(uploadDir, { recursive: true })
   const fileName = `${randomUUID()}-${file.name}`
   const filePath = join(uploadDir, fileName)
@@ -103,8 +104,12 @@ export async function POST(
       name: 'pipeline/task.submitted',
       data: { taskId: task.id, projectId: id, storagePath: filePath },
     })
-  } catch (err) {
-    console.error('[inngest] Failed to send pipeline/task.submitted:', err)
+  } catch (error) {
+    console.error('[tasks] submission error:', error)
+    return Response.json(
+      { error: error instanceof Error ? error.message : 'Internal server error' },
+      { status: 500 }
+    )
   }
 
   return NextResponse.json({ id: task.id, title }, { status: 201 })

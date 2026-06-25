@@ -139,23 +139,19 @@ services:
 
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-openbench}:${POSTGRES_PASSWORD:-openbench_secret}@postgres:5432/${POSTGRES_DB:-openbench}
+      INNGEST_DEV: "1"
       INNGEST_EVENT_KEY: ${INNGEST_EVENT_KEY:-local}
       INNGEST_SIGNING_KEY: ${INNGEST_SIGNING_KEY:-local}
       INNGEST_BASE_URL: http://inngest:8288
       BACKEND_URL: http://backend:8000
-      AUTH_SECRET: lTtDZlfpNjrSIA2EocS7GEAaH3SHLsOr41X4udYY1k4=
-      # AUTH_URL must exactly match the public URL the browser uses (including protocol).
-      # In Codespaces or any HTTPS deployment, set this before running docker compose:
-      #   export AUTH_URL=https://your-codespace-url-3000.app.github.dev
-      # Mismatch between AUTH_URL and actual connection protocol causes:
-      #   1. NextAuth builds OAuth callback URLs for the wrong host
-      #   2. The middleware uses the wrong HKDF salt, breaking session decryption
-      AUTH_URL: ${AUTH_URL:-http://localhost:3000}
+      # AUTH_SECRET: lTtDZlfpNjrSIA2EocS7GEAaH3SHLsOr41X4udYY1k4=
+      # AUTH_TRUST_HOST: "1"
       NODE_ENV: production
       NEXT_TELEMETRY_DISABLED: "1"
       HOSTNAME: 0.0.0.0
       PORT: 3000
       RUNNING_IN_DOCKER: "1"
+      UPLOADS_DIR: /uploads
 
     volumes:
       # Same shared volume so the frontend can write ZIPs here after upload

@@ -4,9 +4,10 @@ import { useState } from "react";
 import {
     ChevronDown, ChevronRight,
     CheckCircle, XCircle, Loader2, Clock,
-    Upload, Database,
+    Upload, Database, RefreshCw,
 } from "lucide-react";
 import type { Task, PipelineLog, BenchmarkRun } from "@/lib/types";
+import { usePipelineRetry } from "@/lib/pipeline-retry-context";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -43,8 +44,8 @@ export const PIPELINE_DEF = [
     { key: "quality", label: "Quality Check (11 criteria)", desc: "LLM score ≥ 0.6 across 11 criteria" },
     { key: "preflight", label: "Validation pre-flight", desc: "pytest --collect-only passes" },
     { key: "oracle_nop", label: "Oracle / NOP Validation", desc: "Tests fail before, pass after solve.sh" },
-    { key: "easiness", label: "Easiness Prefilter", desc: "Sonnet 4.6 must not solve it (pass@5 = 1/5)" },
-    { key: "difficulty", label: "Opus 4.8 Difficulty Probe", desc: "Must land 1–3/5 passes" },
+    { key: "easiness", label: "Easiness Prefilter", desc: "Model must not solve it (pass@5 = 1/5)" },
+    { key: "difficulty", label: "Difficulty Probe", desc: "Frontier model must land 1–3/5 passes" },
     { key: "agent_quality", label: "Agent Quality Check", desc: "Benchmark designer verdict" },
     { key: "sia_upload", label: "Sia Network Upload", desc: "Decentralized storage via Sia" },
 ] as const;
@@ -119,11 +120,21 @@ function EpisodePill({ ep }: { ep: EpisodeRun }) {
     );
 }
 
-function PipelineStageRow({ stage }: { stage: PipelineStageDetail }) {
+function PipelineStageRow({ stage, onRetryDifficulty, difficultyRetries, maxRetries, retrying }: {
+    stage: PipelineStageDetail;
+    onRetryDifficulty?: () => void;
+    difficultyRetries?: number;
+    maxRetries?: number;
+    retrying?: boolean;
+}) {
     const [open, setOpen] = useState(false);
     const hasEpisodes = stage.episodes && stage.episodes.length > 0;
     const passCount = stage.episodes?.filter((e) => e.passed).length ?? 0;
     const totalEps = stage.episodes?.length ?? 0;
+
+    const isDifficulty = stage.key === "difficulty";
+    const isDifficultyFailed = isDifficulty && stage.passed === false;
+    const retriesExhausted = isDifficulty && difficultyRetries !== undefined && maxRetries !== undefined && difficultyRetries >= maxRetries;
 
     return (
         <div
@@ -170,6 +181,18 @@ function PipelineStageRow({ stage }: { stage: PipelineStageDetail }) {
                                 {stage.modelUsed && ` · PASSED (proceeded to Opus probe)`}
                             </span>
                         )}
+                        {isDifficultyFailed && difficultyRetries !== undefined && (
+                            <span
+                                className="font-mono text-xs px-1.5 py-0.5 rounded"
+                                style={{
+                                    background: "rgba(251,191,36,0.1)",
+                                    color: "var(--amber)",
+                                    border: "1px solid rgba(251,191,36,0.2)",
+                                }}
+                            >
+                                retry {difficultyRetries}/{maxRetries ?? 3}
+                            </span>
+                        )}
                     </div>
                     {stage.message && (
                         <p className="font-mono text-xs mt-0.5" style={{ color: "var(--subtle)" }}>
@@ -179,12 +202,45 @@ function PipelineStageRow({ stage }: { stage: PipelineStageDetail }) {
                 </div>
 
                 <div className="flex items-center gap-3 flex-shrink-0">
+                    {isDifficultyFailed && onRetryDifficulty && (
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                onRetryDifficulty();
+                            }}
+                            disabled={retrying || retriesExhausted}
+                            title={
+                                retriesExhausted
+                                    ? `Max retries (${maxRetries}) reached`
+                                    : `Retry difficulty probe (${difficultyRetries ?? 0}/${maxRetries ?? 3})`
+                            }
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-mono transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                            style={{
+                                background: retriesExhausted
+                                    ? "rgba(90,96,114,0.1)"
+                                    : "rgba(251,191,36,0.1)",
+                                border: `1px solid ${
+                                    retriesExhausted
+                                        ? "rgba(90,96,114,0.2)"
+                                        : "rgba(251,191,36,0.3)"
+                                }`,
+                                color: retriesExhausted ? "var(--muted)" : "var(--amber)",
+                            }}
+                        >
+                            {retrying ? (
+                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            ) : (
+                                <RefreshCw className="w-3.5 h-3.5" />
+                            )}
+                            {retriesExhausted ? "Exhausted" : "Retry"}
+                        </button>
+                    )}
                     {hasEpisodes && (
                         <span className="font-mono text-xs" style={{ color: "var(--muted)" }}>
                             {open ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
                         </span>
                     )}
-                    {stage.passed === null && !stage.running && (
+                    {stage.passed === null && !stage.running && !isDifficultyFailed && (
                         <span style={{ color: "var(--muted)", fontSize: "1rem" }}>—</span>
                     )}
                 </div>
@@ -237,19 +293,46 @@ function StatusChip({ status }: { status: string }) {
 
 // ─── TaskRow (main export) ────────────────────────────────────────────────────
 
-export function TaskRow({ task, projectId, onDeleted }: {
+export function TaskRow({ task, projectId, onDeleted, onTaskUpdated }: {
     task: ProjectTask;
     projectId: string;
     onDeleted: (taskId: string) => void;
+    onTaskUpdated?: (taskId: string) => void;
 }) {
     const [open, setOpen] = useState(false);
     const [deleting, setDeleting] = useState(false);
+    const { retryState, retryDifficulty } = usePipelineRetry();
 
-    const stages = buildStages(task.pipelineLogs ?? [], task.status, task.stageDetails);
+    // Read retry state from context — centralized across all TaskRow instances
+    const isRetrying = retryState.retrying[task.id] ?? false;
+    const optimisticStatus = retryState.optimisticStatuses[task.id] ?? null;
+    const optimisticRetryCount = retryState.optimisticRetries[task.id] ?? 0;
+
+    // Use optimistic state if available, otherwise fall back to the prop
+    const displayStatus = optimisticStatus ?? task.status;
+    const displayRetries = (task.difficultyRetries ?? 0) + optimisticRetryCount;
+    const displayPipelineLogs = task.pipelineLogs ?? [];
+
+    // Build stages from logs. When the difficulty retry just fired, override the
+    // difficulty stage to show as running (fresh state, no stale output).
+    const stages = buildStages(displayPipelineLogs, displayStatus, task.stageDetails).map((stage) => {
+        if (stage.key === "difficulty" && isRetrying) {
+            return {
+                ...stage,
+                passed: null,
+                running: true,
+                message: "Re-running difficulty probe…",
+            };
+        }
+        return stage;
+    });
     const passedStages = stages.filter((s) => s.passed === true).length;
-    const isRunning = task.status === "pipeline_running";
-    const isApproved = task.status === "approved";
-    const isRejected = task.status === "rejected";
+    const isRunning = displayStatus === "pipeline_running";
+    const isApproved = displayStatus === "approved";
+    const isRejected = displayStatus === "rejected";
+
+    const MAX_RETRIES = 3;
+    const difficultyRetries = displayRetries;
 
     async function handleDelete() {
         if (!confirm(`Delete "${task.title}"? This can't be undone.`)) return;
@@ -268,6 +351,14 @@ export function TaskRow({ task, projectId, onDeleted }: {
         } catch {
             alert("Something went wrong");
             setDeleting(false);
+        }
+    }
+
+    async function handleRetryDifficulty() {
+        const ok = await retryDifficulty(task.id);
+        if (ok) {
+            // Notify parent to refresh task data in the background
+            onTaskUpdated?.(task.id);
         }
     }
 
@@ -358,7 +449,14 @@ export function TaskRow({ task, projectId, onDeleted }: {
                             </div>
                         </div>
                         {stages.map((stage) => (
-                            <PipelineStageRow key={stage.key} stage={stage} />
+                            <PipelineStageRow
+                                key={stage.key}
+                                stage={stage}
+                                onRetryDifficulty={handleRetryDifficulty}
+                                difficultyRetries={difficultyRetries}
+                                maxRetries={MAX_RETRIES}
+                                retrying={isRetrying}
+                            />
                         ))}
                     </div>
 

@@ -334,17 +334,30 @@ export function NavBar() {
 
                     {/* Super admin: model settings */}
                     {isSuperAdmin && (
-                      <Link
-                        href="/admin/models"
-                        onClick={() => setMenuOpen(false)}
-                        className="flex items-center gap-3 px-4 py-3 font-mono text-[12px] transition-colors"
-                        style={{ color: "var(--subtle)" }}
-                        onMouseEnter={(e) => (e.currentTarget.style.color = "var(--text)")}
-                        onMouseLeave={(e) => (e.currentTarget.style.color = "var(--subtle)")}
-                      >
-                        <Settings2 className="w-4 h-4" />
-                        Model settings
-                      </Link>
+                      <>
+                        <Link
+                          href="/admin/models"
+                          onClick={() => setMenuOpen(false)}
+                          className="flex items-center gap-3 px-4 py-3 font-mono text-[12px] transition-colors"
+                          style={{ color: "var(--subtle)" }}
+                          onMouseEnter={(e) => (e.currentTarget.style.color = "var(--text)")}
+                          onMouseLeave={(e) => (e.currentTarget.style.color = "var(--subtle)")}
+                        >
+                          <Settings2 className="w-4 h-4" />
+                          Model settings
+                        </Link>
+                        <Link
+                          href="/admin/misc"
+                          onClick={() => setMenuOpen(false)}
+                          className="flex items-center gap-3 px-4 py-3 font-mono text-[12px] transition-colors"
+                          style={{ color: "var(--subtle)" }}
+                          onMouseEnter={(e) => (e.currentTarget.style.color = "var(--text)")}
+                          onMouseLeave={(e) => (e.currentTarget.style.color = "var(--subtle)")}
+                        >
+                          <Settings2 className="w-4 h-4" />
+                          Misc settings
+                        </Link>
+                      </>
                     )}
 
                     {/* Passkeys */}

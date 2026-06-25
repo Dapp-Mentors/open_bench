@@ -22,7 +22,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-
 # ── System prompt ─────────────────────────────────────────────────────────────
 
 AGENT_SYSTEM_PROMPT = """\
@@ -77,19 +76,17 @@ Special key sequences (tmux-style):
 
 WORKFLOW RULES:
 1. Start by exploring the repository structure and reading the key files:
-   instruction.md, task.toml, solution/solve.sh, tests/test.sh.
-2. Read the test files to understand exactly what must pass before touching any code.
-3. Read solve.sh carefully — it contains the reference fix; adapt it rather than
-   reinventing from scratch.
-4. Identify the language and toolchain from the project files, then apply the
+   instruction.md and task.toml.
+2. Understand the task requirements from instruction.md before touching any code.
+3. Identify the language and toolchain from the project files, then apply the
    appropriate build and test commands for that stack.
-5. Apply fixes incrementally. After each meaningful change, build and run the
-   tests to confirm progress.
-6. Always run the project's own test harness (tests/test.sh) to verify correctness
-   before marking task_complete — do not rely on your own judgement alone.
-7. If a command hangs, send an empty commands array with a longer duration to
+4. Apply fixes incrementally. After each meaningful change, build the project to
+   confirm your changes compile or parse correctly.
+5. Set task_complete only after you have applied your fix and confirmed the build
+   succeeds. Do not rely on your own judgement about correctness — the grader
+   will run the real test suite externally.
+6. If a command hangs, send an empty commands array with a longer duration to
    wait for it, rather than re-sending the command.
-8. Set task_complete only after you have confirmed the test suite passes.
 
 IMPORTANT: The text inside "keystrokes" is sent verbatim to the terminal.
 Extra text before or after the JSON will generate warnings but be tolerated.
@@ -100,19 +97,24 @@ The commands array may be empty if you want to wait without taking action.
 
 # ── User prompt ───────────────────────────────────────────────────────────────
 
+
 def build_initial_user_prompt(task_dir: Path) -> str:
     """
     Build the first user message sent to the agent.
 
-    Includes the standard zip task files that are always present:
-      - instruction.md      (the task description the agent must solve)
-      - task.toml           (metadata: language, timeout, scoring)
-      - solution/solve.sh   (oracle solution — gives the agent the fix pattern)
-      - tests/test.sh       (how the grader runs tests)
-      - tests/test_outputs.py (what exact assertions the grader makes)
+    Includes ONLY the files the agent is permitted to see:
+      - instruction.md  (the task description the agent must solve)
+      - task.toml       (metadata: language, timeout, scoring)
 
-    Then appends any additional test files found under tests/ so the agent
-    can see the full suite regardless of language or test framework.
+    Intentionally excluded (ground truth — must not leak to the agent):
+      - solution/solve.sh      (oracle solution)
+      - tests/test.sh          (test harness)
+      - tests/test_outputs.py  (exact grader assertions)
+      - tests/**/*             (all other test files)
+
+    The agent must solve the task blind, using only instruction.md.
+    Correctness is verified externally by running the agent's fix
+    through Docker and checking reward.txt.
     """
 
     def _read(rel: str, max_chars: int = 8000) -> str:
@@ -126,62 +128,15 @@ def build_initial_user_prompt(task_dir: Path) -> str:
 
     sections: list[str] = []
 
-    # ── Core task description ─────────────────────────────────────────────────
-    sections.append(
-        "## Task Description (instruction.md)\n" + _read("instruction.md")
-    )
+    # ── Core task description (permitted) ─────────────────────────────────────
+    sections.append("## Task Description (instruction.md)\n" + _read("instruction.md"))
 
-    # ── Metadata ──────────────────────────────────────────────────────────────
-    sections.append(
-        "## Task Metadata (task.toml)\n" + _read("task.toml")
-    )
+    # ── Metadata (permitted) ──────────────────────────────────────────────────
+    sections.append("## Task Metadata (task.toml)\n" + _read("task.toml"))
 
-    # ── Oracle solution — gives agent the fix pattern ─────────────────────────
-    sections.append(
-        "## Oracle Solution (solution/solve.sh)\n"
-        "This is the reference solution. Study it carefully — "
-        "your fix should follow the same approach.\n\n"
-        + _read("solution/solve.sh")
-    )
-
-    # ── Test harness ──────────────────────────────────────────────────────────
-    sections.append(
-        "## Test Runner (tests/test.sh)\n"
-        "This is how the grader executes the tests. "
-        "Run this script to verify your fix before marking task_complete.\n\n"
-        + _read("tests/test.sh")
-    )
-
-    # ── Test assertions ───────────────────────────────────────────────────────
-    sections.append(
-        "## Test Assertions (tests/test_outputs.py)\n"
-        "These are the exact assertions the grader checks. "
-        "Make sure every one of them passes.\n\n"
-        + _read("tests/test_outputs.py")
-    )
-
-    # ── Any additional test files under tests/ ────────────────────────────────
-    # Walk the tests directory and include every file that is NOT already
-    # covered above (test.sh, test_outputs.py) and NOT a cache/metadata file.
-    # This handles arbitrary toolchains: Hardhat JS suites, Rust integration
-    # tests, Go test files, etc. — whatever the task author placed there.
-    tests_dir = task_dir / "tests"
-    already_included = {"test.sh", "test_outputs.py"}
-    skip_dirs = {"__pycache__", ".pytest_cache", "node_modules"}
-
-    if tests_dir.is_dir():
-        for path in sorted(tests_dir.rglob("*")):
-            if not path.is_file():
-                continue
-            # Skip any path that passes through a noise directory
-            if any(part in skip_dirs for part in path.parts):
-                continue
-            if path.name in already_included:
-                continue
-            rel = path.relative_to(task_dir)
-            sections.append(
-                f"## Additional test file ({rel})\n" + _read(str(rel), max_chars=4000)
-            )
+    # NOTE: solution/solve.sh, tests/test.sh, tests/test_outputs.py, and all
+    # other files under tests/ are intentionally NOT included here.
+    # The agent must derive the fix solely from instruction.md.
 
     body = "\n\n---\n\n".join(sections)
 

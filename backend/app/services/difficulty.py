@@ -56,7 +56,7 @@ async def run_difficulty_probe(
     async with lock:
         model_id, provider = await get_model_for_role("frontier_model", db)
 
-        pass_count, results = await run_probe(
+        pass_count, rate_limited_count, results = await run_probe(
             task_id=task_id,
             storage_path=storage_path,
             model_id=model_id,
@@ -69,11 +69,31 @@ async def run_difficulty_probe(
         runs_done = len(results)
 
         if pass_count == 0:
-            msg = (
-                f"Difficulty probe: 0 / {runs_done} — TOO_HARD even for {model_id}.\n"
-                f"PER-RUN EPISODES ({runs_done})\n{detail}"
-            )
-            return False, msg
+            if rate_limited_count == runs_done:
+                msg = (
+                    f"Difficulty probe: 0 / {runs_done} — RATE_LIMITED\n"
+                    f"All {runs_done} runs failed due to OpenRouter rate limiting "
+                    f"(HTTP 429). The frontier model never had a chance to attempt the task.\n"
+                    f"Wait for rate limits to reset, add credits, or use a non-free model.\n"
+                    f"PER-RUN EPISODES ({runs_done})\n{detail}"
+                )
+                return False, msg
+            elif rate_limited_count > 0:
+                msg = (
+                    f"Difficulty probe: 0 / {runs_done} — TOO_HARD / RATE_LIMITED\n"
+                    f"{rate_limited_count} of {runs_done} runs failed due to OpenRouter rate limiting (HTTP 429).\n"
+                    f"{runs_done - rate_limited_count} run(s) failed for other reasons.\n"
+                    f"Wait for rate limits to reset, add credits, or use a non-free model, "
+                    f"then retry for a clearer signal.\n"
+                    f"PER-RUN EPISODES ({runs_done})\n{detail}"
+                )
+                return False, msg
+            else:
+                msg = (
+                    f"Difficulty probe: 0 / {runs_done} — TOO_HARD even for {model_id}.\n"
+                    f"PER-RUN EPISODES ({runs_done})\n{detail}"
+                )
+                return False, msg
 
         if pass_count > DIFF_MAX_PASS:
             msg = (

@@ -6,6 +6,7 @@ import { useSession } from "next-auth/react";
 import { ArrowLeft, Plus, Upload, Pencil, Trash2, AlertTriangle, X, Tag, BookOpen, Code, PauseCircle, Play, MoreVertical } from "lucide-react";
 import { TaskRow, PIPELINE_DEF } from "@/components/TaskRow";
 import type { ProjectTask } from "@/components/TaskRow";
+import { PipelineRetryProvider } from "@/lib/pipeline-retry-context";
 import { MarkdownEditor } from "@/components/MarkdownEditor";
 import { ProjectTypeSelector } from "@/components/ProjectTypeSelector";
 import { TagInput } from "@/components/TagInput";
@@ -743,16 +744,19 @@ export default function ProjectDetail({ params }: { params: Promise<{ id: string
                 </Link>
               </div>
             ) : (
-              <div className="space-y-3">
-                {project.tasks.map((task) => (
-                  <TaskRow
-                    key={task.id}
-                    task={task}
-                    projectId={project.id}
-                    onDeleted={handleTaskDeleted}
-                  />
-                ))}
-              </div>
+              <PipelineRetryProvider>
+                <div className="space-y-3">
+                  {project.tasks.map((task) => (
+                    <TaskRow
+                      key={task.id}
+                      task={task}
+                      projectId={project.id}
+                      onDeleted={handleTaskDeleted}
+                      onTaskUpdated={fetchProject}
+                    />
+                  ))}
+                </div>
+              </PipelineRetryProvider>
             )}
           </>
         )}

@@ -162,8 +162,8 @@ export const runPipeline = inngest.createFunction(
     // CrewAI-powered agent probe: 5 staggered-parallel runs using the
     // easiness_model (fast/cheap model). Passes if 1–4/5 succeed.
     const easinessPassed = await step.run('stage-easiness', async () => {
-      // const result = await callBackend('easiness', taskId, storagePath)
-      const result = { passed: true, message: 'Dummy pass — easiness backend call skipped for testing' }
+      const result = await callBackend('easiness', taskId, storagePath)
+      // const result = { passed: true, message: 'Easiness backend call succeeded' }
       await logStage(taskId, 'easiness', result.passed, result.message)
       return result.passed
     })
@@ -175,6 +175,7 @@ export const runPipeline = inngest.createFunction(
     // frontier_model (strong model). Passes if 1–3/5 succeed.
     const difficultyPassed = await step.run('stage-difficulty', async () => {
       const result = await callBackend('difficulty', taskId, storagePath)
+      // const result = { passed: true, message: 'Difficulty backend call succeeded' }
       await logStage(taskId, 'difficulty', result.passed, result.message)
       return result.passed
     })
@@ -190,9 +191,9 @@ export const runPipeline = inngest.createFunction(
     const agentQualityPassed = await step.run(
       'stage-agent-quality',
       async () => {
-        // const result = await callBackend('agent-quality', taskId, storagePath)
         await new Promise(resolve => setTimeout(resolve, 5000))
-        const result = { passed: true, message: 'Dummy pass — agent-quality backend call skipped for testing' }
+        const result = await callBackend('agent-quality', taskId, storagePath)
+        // const result = { passed: true, message: 'Agent quality backend call succeeded' }
         const summaryLine = result.message.split('\n')[0]
         await logStage(taskId, 'agent_quality', result.passed, summaryLine)
         return result.passed
@@ -655,6 +656,87 @@ async function callDockerPruneEndpoint(): Promise<boolean> {
     return false
   }
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Retry Difficulty Probe — standalone function
+// ═══════════════════════════════════════════════════════════════════════════════
+//
+// Unlike the main pipeline, this function ONLY runs the difficulty probe stage.
+// It is triggered by the difficulty/retry.started event when a user clicks the
+// "Retry" button on a failed Difficulty Probe step.
+//
+// Previously-completed stages (similarity, ci, quality, etc.) are NOT re-run.
+// If the difficulty probe passes, the task continues to agent_quality and
+// sia_upload stages to complete the pipeline from where it left off.
+
+export const retryDifficultyProbe = inngest.createFunction(
+  { id: 'retry-difficulty-probe', name: 'Retry difficulty probe stage only' },
+  { event: 'difficulty/retry.started' },
+
+  async ({ event, step }) => {
+    const { taskId, projectId, storagePath } = event.data
+
+    // Mark task as running
+    await step.run('mark-running', async () => {
+      await prisma.task.update({
+        where: { id: taskId },
+        data: { status: 'pipeline_running' },
+      })
+    })
+
+    // ── Run ONLY the difficulty probe stage ──────────────────────────────────
+    const difficultyPassed = await step.run('stage-difficulty', async () => {
+      const result = await callBackend('difficulty', taskId, storagePath)
+      await logStage(taskId, 'difficulty', result.passed, result.message)
+      return result.passed
+    })
+
+    if (!difficultyPassed) {
+      return await reject(taskId, 'Rejected at difficulty probe')
+    }
+
+    // ── Difficulty passed — run remaining stages: agent_quality, sia_upload ──
+    const agentQualityPassed = await step.run(
+      'stage-agent-quality',
+      async () => {
+        await new Promise(resolve => setTimeout(resolve, 5000))
+        const result = await callBackend('agent-quality', taskId, storagePath)
+        const summaryLine = result.message.split('\n')[0]
+        await logStage(taskId, 'agent_quality', result.passed, summaryLine)
+        return result.passed
+      },
+    )
+    if (!agentQualityPassed) {
+      return await reject(taskId, 'Rejected at agent quality check')
+    }
+
+    // ── Sia upload ───────────────────────────────────────────────────────────
+    const siaPassed = await step.run('stage-sia-upload', async () => {
+      const result = await callBackend('sia-upload', taskId, storagePath)
+      await logStage(taskId, 'sia_upload', result.passed, result.message)
+      return result.passed
+    })
+    if (!siaPassed) {
+      await prisma.task.update({
+        where: { id: taskId },
+        data: { status: 'pipeline_passed' },
+      })
+      return {
+        taskId,
+        result: 'pipeline_passed',
+        warning: 'Sia upload failed, task is pipeline_passed',
+      }
+    }
+
+    // ── All remaining stages passed ──────────────────────────────────────────
+    await prisma.task.update({
+      where: { id: taskId },
+      data: { status: 'pipeline_passed' },
+    })
+
+    return { taskId, result: 'pipeline_passed' }
+  },
+)
 
 // ── Shared helper ─────────────────────────────────────────────────────────────
 

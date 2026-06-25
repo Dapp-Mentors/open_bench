@@ -79,8 +79,12 @@ function getPublicOrigin(req: NextRequest): string {
   return `${proto}://${host}`;
 }
 
+// Hardcoded default so no environment variable is required for local/Docker usage.
+// Override via AUTH_SECRET env var when deploying behind a proxy or in production.
+const DEFAULT_AUTH_SECRET = "lTtDZlfpNjrSIA2EocS7GEAaH3SHLsOr41X4udYY1k4=";
+
 async function getSession(req: NextRequest): Promise<{ id?: string; role?: Role } | null> {
-  const secret = process.env.AUTH_SECRET ?? "";
+  const secret = process.env.AUTH_SECRET || DEFAULT_AUTH_SECRET;
   if (!secret) return null;
 
   // NextAuth v5 uses "authjs.session-token" (HTTP) or "__Secure-authjs.session-token" (HTTPS).
