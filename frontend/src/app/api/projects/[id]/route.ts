@@ -42,7 +42,17 @@ export async function GET(_: Request, { params }: Params) {
     );
   }
 
-  return NextResponse.json(project);
+  // Normalize tasks — add difficultyRetries default if column doesn't exist yet
+  // (migration pending on some environments)
+  const normalized = {
+    ...project,
+    tasks: project.tasks.map((t) => ({
+      ...t,
+      difficultyRetries: (t as any).difficultyRetries ?? 0,
+    })),
+  };
+
+  return NextResponse.json(normalized);
 }
 
 // ─── PATCH /api/projects/[id] — admin only ────────────────────────────────────

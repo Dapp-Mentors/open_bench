@@ -17,14 +17,22 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const settings = await prisma.appSettings.findUnique({
-      where: { id: "default" },
-      select: { difficultyMaxRetries: true },
-    });
+    // Gracefully handle missing column during migration rollout
+    let difficultyMaxRetries = 3;
+    try {
+      const settings = await prisma.appSettings.findUnique({
+        where: { id: "default" },
+        select: { difficultyMaxRetries: true },
+      });
+      if (settings?.difficultyMaxRetries !== undefined) {
+        difficultyMaxRetries = settings.difficultyMaxRetries;
+      }
+    } catch {
+      // Column may not exist yet if migrations haven't run
+      difficultyMaxRetries = 3;
+    }
 
-    return NextResponse.json({
-      difficultyMaxRetries: settings?.difficultyMaxRetries ?? 3,
-    });
+    return NextResponse.json({ difficultyMaxRetries });
   } catch (err) {
     console.error("[admin/settings] GET error:", err);
     return NextResponse.json(
