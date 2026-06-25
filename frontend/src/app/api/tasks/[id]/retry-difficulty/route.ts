@@ -60,7 +60,12 @@ export async function POST(
       );
     }
 
-    // Increment retry counter and reset status to pending so pipeline picks it up
+    // Clear old difficulty PipelineLog entries so the UI shows a fresh slate
+    await prisma.pipelineLog.deleteMany({
+      where: { taskId: task.id, stage: "difficulty" },
+    });
+
+    // Increment retry counter and reset status to pending
     const updatedTask = await prisma.task.update({
       where: { id: task.id },
       data: {
@@ -80,13 +85,13 @@ export async function POST(
         taskId: task.id,
         stage: "difficulty",
         passed: null,
-        message: `Difficulty retry #${updatedTask.difficultyRetries} initiated — re-queuing pipeline`,
+        message: `Difficulty retry #${updatedTask.difficultyRetries} initiated`,
       },
     });
 
-    // Fire a new pipeline event to Inngest
+    // Fire a difficulty-only retry event to Inngest (not the full pipeline)
     await inngest.send({
-      name: "pipeline/task.submitted",
+      name: "difficulty/retry.started",
       data: {
         taskId: task.id,
         projectId: task.projectId,

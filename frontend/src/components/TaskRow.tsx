@@ -7,6 +7,7 @@ import {
     Upload, Database, RefreshCw,
 } from "lucide-react";
 import type { Task, PipelineLog, BenchmarkRun } from "@/lib/types";
+import { usePipelineRetry } from "@/lib/pipeline-retry-context";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -300,15 +301,31 @@ export function TaskRow({ task, projectId, onDeleted, onTaskUpdated }: {
 }) {
     const [open, setOpen] = useState(false);
     const [deleting, setDeleting] = useState(false);
-    const [retrying, setRetrying] = useState(false);
-    const [optimisticStatus, setOptimisticStatus] = useState<string | null>(null);
-    const [optimisticRetries, setOptimisticRetries] = useState<number>(task.difficultyRetries ?? 0);
+    const { retryState, retryDifficulty } = usePipelineRetry();
+
+    // Read retry state from context — centralized across all TaskRow instances
+    const isRetrying = retryState.retrying[task.id] ?? false;
+    const optimisticStatus = retryState.optimisticStatuses[task.id] ?? null;
+    const optimisticRetryCount = retryState.optimisticRetries[task.id] ?? 0;
 
     // Use optimistic state if available, otherwise fall back to the prop
     const displayStatus = optimisticStatus ?? task.status;
-    const displayRetries = optimisticRetries;
+    const displayRetries = (task.difficultyRetries ?? 0) + optimisticRetryCount;
+    const displayPipelineLogs = task.pipelineLogs ?? [];
 
-    const stages = buildStages(task.pipelineLogs ?? [], displayStatus, task.stageDetails);
+    // Build stages from logs. When the difficulty retry just fired, override the
+    // difficulty stage to show as running (fresh state, no stale output).
+    const stages = buildStages(displayPipelineLogs, displayStatus, task.stageDetails).map((stage) => {
+        if (stage.key === "difficulty" && isRetrying) {
+            return {
+                ...stage,
+                passed: null,
+                running: true,
+                message: "Re-running difficulty probe…",
+            };
+        }
+        return stage;
+    });
     const passedStages = stages.filter((s) => s.passed === true).length;
     const isRunning = displayStatus === "pipeline_running";
     const isApproved = displayStatus === "approved";
@@ -338,26 +355,10 @@ export function TaskRow({ task, projectId, onDeleted, onTaskUpdated }: {
     }
 
     async function handleRetryDifficulty() {
-        setRetrying(true);
-        try {
-            const res = await fetch(`/api/tasks/${task.id}/retry-difficulty`, {
-                method: "POST",
-            });
-            if (!res.ok) {
-                const data = await res.json().catch(() => ({}));
-                alert(data.error ?? "Failed to retry difficulty probe");
-                setRetrying(false);
-                return;
-            }
-            // Optimistically update local state — no page reload needed
-            setOptimisticStatus("pending");
-            setOptimisticRetries((prev) => prev + 1);
-            setRetrying(false);
+        const ok = await retryDifficulty(task.id);
+        if (ok) {
             // Notify parent to refresh task data in the background
             onTaskUpdated?.(task.id);
-        } catch {
-            alert("Network error. Failed to retry difficulty probe.");
-            setRetrying(false);
         }
     }
 
@@ -454,7 +455,7 @@ export function TaskRow({ task, projectId, onDeleted, onTaskUpdated }: {
                                 onRetryDifficulty={handleRetryDifficulty}
                                 difficultyRetries={difficultyRetries}
                                 maxRetries={MAX_RETRIES}
-                                retrying={retrying}
+                                retrying={isRetrying}
                             />
                         ))}
                     </div>
