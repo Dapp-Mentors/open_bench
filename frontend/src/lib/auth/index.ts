@@ -79,9 +79,15 @@ export async function createAuthConfig() {
     })
   );
 
+  // Hardcoded defaults so no environment variables are required for local/Docker.
+  // Override via AUTH_SECRET / AUTH_TRUST_HOST env vars when deploying elsewhere.
+  const DEFAULT_AUTH_SECRET = "lTtDZlfpNjrSIA2EocS7GEAaH3SHLsOr41X4udYY1k4=";
+
   return {
     adapter: PrismaAdapter(prisma),
     session: { strategy: "jwt" as const },
+    secret: process.env.AUTH_SECRET || DEFAULT_AUTH_SECRET,
+    trustHost: process.env.AUTH_TRUST_HOST !== "0",
     providers,
     pages: { signIn: "/login", error: "/login" },
     callbacks: {

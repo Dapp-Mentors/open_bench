@@ -81,18 +81,7 @@ docker compose up --build
 
 Steps are persisted to the database — you can close and resume later. After completing the wizard you'll be redirected to the dashboard.
 
-Most environment variables are pre-configured in `docker-compose.yml`. The only one you may need to override is `AUTH_URL` — set it in a `.env` file in the project root before `docker compose up --build`:
-
-```bash
-# ─────────────────────────────────────────
-# Docker Compose
-# ─────────────────────────────────────────
-AUTH_URL=http://localhost:3000
-```
-
-This variable already has a sensible default in `docker-compose.yml`, so the `.env` file is optional unless you're deploying behind a proxy or Codespace (where the URL differs). If `AUTH_URL` does not match the actual connection protocol:
-- NextAuth builds OAuth callback URLs for the wrong host
-- The middleware uses the wrong HKDF salt, breaking session decryption
+All environment variables are pre-configured with sensible defaults in `docker-compose.yml`. No `.env` file is needed — just run `docker compose up --build`.
 
 When the backend boots it eagerly initialises the Sia client. If Sia is unreachable or unapproved, it gracefully falls into **demo mode**. Uploads and pipeline stages are simulated with realistic delays. The UI is identical either way; the mode badge in the top nav tells you which you're in.
 
@@ -105,17 +94,9 @@ When the backend boots it eagerly initialises the Sia client. If Sia is unreacha
 Create your local env files:
 
 ```bash
-# Frontend — these are the only variables needed locally
+# Frontend — only the database URL is required (everything else has defaults)
 cat > frontend/.env << 'ENV'
 DATABASE_URL=postgresql://<username>:<password>@localhost:5432/<database_name>
-INNGEST_DEV=1
-INNGEST_EVENT_KEY=local
-INNGEST_SIGNING_KEY=local
-INNGEST_BASE_URL=http://localhost:8288
-NEXT_TELEMETRY_DISABLED=1
-BACKEND_URL=http://localhost:8000
-AUTH_SECRET=lTtDZlfpNjrSIA2EocS7GEAaH3SHLsOr41X4udYY1k4=
-AUTH_URL=http://localhost:3000
 ENV
 
 # Backend — use the example as-is (or tweak ports)
@@ -130,7 +111,18 @@ ENV
 
 That's it. The frontend `.env` above is the complete set of variables needed for local development. The backend `.env.example` contains defaults for the remaining backend-specific variables (PostgreSQL, CORS, Ollama, port) — adjust as needed.
 
-#### 2. Start the services
+#### 2. Start the services (one command)
+
+```bash
+chmod +x scripts/start-dev.sh
+./scripts/start-dev.sh
+```
+
+This single script starts all services — PostgreSQL, Ollama, Inngest, the backend (FastAPI), and the frontend (Next.js) — in one terminal. Press `Ctrl+C` to stop everything.
+
+#### 3. Legacy: start services individually
+
+If you prefer to run each service in its own terminal:
 
 ```bash
 # Terminal 1 — PostgreSQL
@@ -175,7 +167,7 @@ npm run dev
 
 **First boot:** Open http://localhost:3000 and complete the **Setup Wizard** (Sia → OpenRouter → Social Providers → Sign Up). See the Docker section above for details on each step.
 
-#### 3. Setup wizard (environment variables it saves)
+#### 4. Setup wizard (environment variables it saves)
 
 The wizard persists configuration into the database via these API endpoints:
 

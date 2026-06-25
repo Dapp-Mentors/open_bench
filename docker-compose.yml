@@ -145,7 +145,7 @@ services:
       INNGEST_BASE_URL: http://inngest:8288
       BACKEND_URL: http://backend:8000
       AUTH_SECRET: lTtDZlfpNjrSIA2EocS7GEAaH3SHLsOr41X4udYY1k4=
-      AUTH_URL: ${AUTH_URL:-http://localhost:3000}
+      AUTH_TRUST_HOST: "1"
       NODE_ENV: production
       NEXT_TELEMETRY_DISABLED: "1"
       HOSTNAME: 0.0.0.0
