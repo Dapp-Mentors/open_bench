@@ -25,6 +25,12 @@ from app.services.agent_prompt import (
     build_continuation_user_prompt,
 )
 from app.services.crew_agent import run_crew_probe
+from app.services.probe_types import (
+    RUN_PASS,
+    RUN_FAIL,
+    RUN_RATE_LIMITED,
+    is_rate_limit_error,
+)
 
 
 # ── Config ─────────────────────────────────────────────────────────────────────
@@ -115,10 +121,12 @@ async def run_agent_once(
     model_id: str,
     provider: str,
     start_delay: float = 0.0,
-) -> bool:
+) -> str:
     """
     Original flat-prompt single-agent loop.
     Used when AGENT_ENGINE == "legacy".
+
+    Returns one of RUN_PASS, RUN_FAIL, or RUN_RATE_LIMITED.
     """
     tag = f"run {run_index + 1}"
 
@@ -158,7 +166,9 @@ async def run_agent_once(
             )
         except Exception as exc:
             _log(f"{tag}: LLM error at step {step + 1}: {exc}")
-            return False
+            if is_rate_limit_error(exc):
+                return RUN_RATE_LIMITED
+            return RUN_FAIL
 
         _log(f"{tag}: step {step + 1} response ({len(raw) if raw else 0} chars)")
 
@@ -167,7 +177,7 @@ async def run_agent_once(
             consecutive_parse_failures += 1
             if consecutive_parse_failures > STEP_PARSE_RETRIES:
                 _log(f"{tag}: too many empty responses — marking FAIL")
-                return False
+                return RUN_FAIL
             await asyncio.sleep(STEP_RETRY_DELAY)
             continue
 
@@ -177,7 +187,7 @@ async def run_agent_once(
             consecutive_parse_failures += 1
             if consecutive_parse_failures > STEP_PARSE_RETRIES:
                 _log(f"{tag}: too many parse failures — marking FAIL")
-                return False
+                return RUN_FAIL
             await asyncio.sleep(STEP_RETRY_DELAY)
             continue
 
@@ -186,7 +196,7 @@ async def run_agent_once(
         # ── Task complete? ────────────────────────────────────────────────────
         if parsed.get("task_complete") is True:
             _log(f"{tag}: task_complete=True — PASS ✓")
-            return True
+            return RUN_PASS
 
         # ── Simulate terminal echo for next turn ──────────────────────────────
         commands = parsed.get("commands", [])
@@ -204,7 +214,7 @@ async def run_agent_once(
         step += 1
 
     _log(f"{tag}: reached MAX_STEPS ({MAX_STEPS}) without completing — FAIL")
-    return False
+    return RUN_FAIL
 
 
 # ── Staggered-parallel probe runner ────────────────────────────────────────────
@@ -218,7 +228,7 @@ async def run_probe(
     n: int = TOTAL_RUNS,
     easy_max_pass: int | None = None,
     diff_max_pass: int | None = None,
-) -> tuple[int, list[bool]]:
+) -> tuple[int, int, list[str]]:
     """
     Launch `n` agent runs in staggered parallel: run i starts after
     i * RUN_START_STAGGER seconds.
@@ -226,7 +236,8 @@ async def run_probe(
     Collects results via asyncio.as_completed().  Applies early-exit:
     cancels remaining tasks the moment the outcome is decided.
 
-    Returns (pass_count, results_in_run_order).
+    Returns (pass_count, rate_limited_count, results_in_run_order).
+    results values: RUN_PASS, RUN_FAIL, or RUN_RATE_LIMITED.
     """
     task_dir = _task_dir(storage_path)
 
@@ -267,9 +278,10 @@ async def run_probe(
             for i in range(n)
         }
 
-    results: dict[int, bool] = {}
+    results: dict[int, str] = {}
     pass_count = 0
     fail_count = 0
+    rate_limited_count = 0
     early_exit_reason: str | None = None
 
     try:
@@ -286,16 +298,18 @@ async def run_probe(
                 run_idx = len(results)
 
             results[run_idx] = result
-            if result:
+            if result == RUN_PASS:
                 pass_count += 1
+            elif result == RUN_RATE_LIMITED:
+                rate_limited_count += 1
             else:
                 fail_count += 1
 
             completed = len(results)
             remaining = n - completed
             _log(
-                f"run {run_idx + 1} finished → {'PASS' if result else 'FAIL'} "
-                f"[{pass_count}P/{fail_count}F, {remaining} still running]"
+                f"run {run_idx + 1} finished → {'PASS' if result == RUN_PASS else 'FAIL'} "
+                f"[{pass_count}P/{fail_count}F/{rate_limited_count}RL, {remaining} still running]"
             )
 
             # ── Early-exit checks ─────────────────────────────────────────────
@@ -303,6 +317,10 @@ async def run_probe(
                 # ACCEPTABLE: at least 1 pass AND at least 1 fail
                 if pass_count >= 1 and fail_count >= 1:
                     early_exit_reason = f"ACCEPTABLE ({pass_count}P/{fail_count}F)"
+                    break
+                # ACCEPTABLE: at least 1 pass AND at least 1 rate_limited (partial data)
+                if pass_count >= 1 and rate_limited_count >= 1:
+                    early_exit_reason = f"ACCEPTABLE ({pass_count}P/{rate_limited_count}RL)"
                     break
                 # TOO_HARD: no passes, no runs left
                 if pass_count == 0 and remaining == 0:
@@ -316,6 +334,10 @@ async def run_probe(
                 # ACCEPTABLE: at least 1 pass AND at least 1 fail
                 if pass_count >= 1 and fail_count >= 1:
                     early_exit_reason = f"ACCEPTABLE ({pass_count}P/{fail_count}F)"
+                    break
+                # ACCEPTABLE: at least 1 pass AND at least 1 rate_limited
+                if pass_count >= 1 and rate_limited_count >= 1:
+                    early_exit_reason = f"ACCEPTABLE ({pass_count}P/{rate_limited_count}RL)"
                     break
                 # TOO_HARD: no passes, no runs left
                 if pass_count == 0 and remaining == 0:
@@ -336,20 +358,25 @@ async def run_probe(
     if early_exit_reason:
         _log(f"early exit: {early_exit_reason}")
 
-    completed_results = [results.get(i, False) for i in range(n)]
+    completed_results = [results.get(i, RUN_FAIL) for i in range(n)]
     _log(
-        f"probe complete: {pass_count}/{n} passed "
+        f"probe complete: {pass_count}/{n} passed, {rate_limited_count} rate-limited "
         f"model={provider}/{model_id}"
     )
 
-    return pass_count, completed_results
+    return pass_count, rate_limited_count, completed_results
 
 
 # ── Per-run detail formatter ───────────────────────────────────────────────────
 
-def per_run_detail(results: list[bool]) -> str:
+def per_run_detail(results: list[str]) -> str:
     lines = []
-    for i, passed in enumerate(results):
-        status = "PASS" if passed else "FAIL"
-        lines.append(f"    Run {i + 1}: {status} reward='{'1' if passed else '0'}'")
+    for i, result in enumerate(results):
+        if result == RUN_PASS:
+            status = "PASS reward='1'"
+        elif result == RUN_RATE_LIMITED:
+            status = "FAIL reward='0' (rate-limited)"
+        else:
+            status = "FAIL reward='0'"
+        lines.append(f"    Run {i + 1}: {status}")
     return "\n".join(lines)

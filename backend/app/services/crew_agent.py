@@ -44,6 +44,7 @@ from crewai import Agent, Task, Crew, Process, LLM
 
 from app.core.config import settings
 from app.services.agent_prompt import build_initial_user_prompt
+from app.services.probe_types import RUN_PASS, RUN_FAIL, RUN_RATE_LIMITED, is_rate_limit_error
 
 
 # ── Configuration ──────────────────────────────────────────────────────────────
@@ -373,10 +374,12 @@ async def run_crew_probe(
     model_id: str,
     provider: str,
     start_delay: float = 0.0,
-) -> bool:
+) -> str:
     """
     Execute one complete crew run.
     model_id / provider are passed through from the DB unchanged.
+
+    Returns one of RUN_PASS, RUN_FAIL, or RUN_RATE_LIMITED.
     """
     tag = f"crew-run {run_index + 1}"
 
@@ -394,7 +397,9 @@ async def run_crew_probe(
         )
     except Exception as exc:
         _log(f"{tag}: crew creation failed: {exc}")
-        return False
+        if is_rate_limit_error(exc):
+            return RUN_RATE_LIMITED
+        return RUN_FAIL
 
     _log(f"{tag}: kicking off crew...")
 
@@ -404,8 +409,10 @@ async def run_crew_probe(
         _log(f"{tag}: crew finished — output type={type(result).__name__}")
     except Exception as exc:
         _log(f"{tag}: crew execution failed: {exc}")
-        return False
+        if is_rate_limit_error(exc):
+            return RUN_RATE_LIMITED
+        return RUN_FAIL
 
     completed = crew_completed_successfully(result)
     _log(f"{tag}: {'PASS ✓' if completed else 'FAIL ✗'}")
-    return completed
+    return RUN_PASS if completed else RUN_FAIL

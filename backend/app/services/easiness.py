@@ -56,7 +56,7 @@ async def run_easiness_prefilter(
     async with lock:
         model_id, provider = await get_model_for_role("easiness_model", db)
 
-        pass_count, results = await run_probe(
+        pass_count, rate_limited_count, results = await run_probe(
             task_id=task_id,
             storage_path=storage_path,
             model_id=model_id,
@@ -69,14 +69,36 @@ async def run_easiness_prefilter(
         runs_done = len(results)
 
         if pass_count == 0:
-            msg = (
-                f"pass@5: 0 / {runs_done} · TOO_HARD (model never solved the task)\n"
-                f"Task appears too hard: no run passed. Simplify or add more context to instruction.md.\n"
-                f"PER-RUN EPISODES ({runs_done})\n{detail}"
-            )
-            return False, msg
+            if rate_limited_count == runs_done:
+                # Every failure was caused by rate limiting
+                msg = (
+                    f"pass@5: 0 / {runs_done} · RATE_LIMITED\n"
+                    f"All {runs_done} runs failed due to OpenRouter rate limiting "
+                    f"(HTTP 429). The model never had a chance to attempt the task.\n"
+                    f"Wait for rate limits to reset, add credits, or use a non-free model.\n"
+                    f"PER-RUN EPISODES ({runs_done})\n{detail}"
+                )
+                return False, msg
+            elif rate_limited_count > 0:
+                # Mixed: some rate-limited, some genuine failures
+                msg = (
+                    f"pass@5: 0 / {runs_done} · TOO_HARD / RATE_LIMITED\n"
+                    f"{rate_limited_count} of {runs_done} runs failed due to OpenRouter rate limiting (HTTP 429).\n"
+                    f"{runs_done - rate_limited_count} run(s) failed for other reasons.\n"
+                    f"Wait for rate limits to reset, add credits, or use a non-free model, "
+                    f"then retry for a clearer signal.\n"
+                    f"PER-RUN EPISODES ({runs_done})\n{detail}"
+                )
+                return False, msg
+            else:
+                msg = (
+                    f"pass@5: 0 / {runs_done} · TOO_HARD (model never solved the task)\n"
+                    f"Task appears too hard: no run passed. Simplify or add more context to instruction.md.\n"
+                    f"PER-RUN EPISODES ({runs_done})\n{detail}"
+                )
+                return False, msg
 
-        if pass_count >= runs_done and runs_done == TOTAL_RUNS:
+        if pass_count >= runs_done and runs_done == TOTAL_RUNS and rate_limited_count == 0:
             frontier_id, _ = await get_model_for_role("frontier_model", db)
             msg = (
                 f"pass@5: {pass_count} / {runs_done} · TOO_EASY "
