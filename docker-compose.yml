@@ -144,8 +144,6 @@ services:
       INNGEST_SIGNING_KEY: ${INNGEST_SIGNING_KEY:-local}
       INNGEST_BASE_URL: http://inngest:8288
       BACKEND_URL: http://backend:8000
-      # AUTH_SECRET & AUTH_URL are set automatically by the auth handler
-      # from the incoming request's Host header — no manual config needed.
       NODE_ENV: production
       NEXT_TELEMETRY_DISABLED: "1"
       PORT: 3000

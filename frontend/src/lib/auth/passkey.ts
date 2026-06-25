@@ -1,24 +1,5 @@
 // src/lib/auth/passkey.ts
-//
 // WebAuthn / Passkey helpers using @simplewebauthn/server.
-//
-// FIX: Replaced the in-memory `challengeStore` Map with DB-backed challenge
-// storage (PasskeyChallenge model). The in-memory store is wiped on every
-// serverless cold start, which broke passkey auth/registration whenever the
-// Node process restarted between the GET (generate options) and POST (verify)
-// calls. Challenges now persist in Postgres with a 5-minute TTL and are
-// cleaned up after use.
-//
-// Required schema addition — add this model to schema.prisma:
-//
-//   model PasskeyChallenge {
-//     id        String   @id @default(cuid())
-//     key       String   @unique   // e.g. "reg:userId" | "first-reg:tempId" | "auth:challenge"
-//     challenge String
-//     expiresAt DateTime
-//   }
-//
-// Then run: npx prisma migrate dev --name add_passkey_challenge
 
 import {
     generateAuthenticationOptions,
@@ -34,9 +15,9 @@ import { prisma } from "@/lib/prisma/client";
 import { createId } from "@paralleldrive/cuid2";
 
 const RP_NAME = "OpenBench";
-const CHALLENGE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+const CHALLENGE_TTL_MS = 5 * 60 * 1000;
 
-// ── WebAuthn config (read from DB, cached in process) ──────────────────────
+// WebAuthn config (read from DB, cached in process)
 
 let _rpId: string | null = null;
 let _origin: string | null = null;
@@ -55,7 +36,7 @@ async function getWebauthnConfig(): Promise<{ rpId: string; origin: string }> {
             return { rpId: _rpId!, origin: _origin! };
         }
     } catch {
-        // ignore — fall back to env
+        // ignore -- fall back to env
     }
 
     return {
@@ -64,7 +45,7 @@ async function getWebauthnConfig(): Promise<{ rpId: string; origin: string }> {
     };
 }
 
-// ── DB-backed challenge store ───────────────────────────────────────────────
+// DB-backed challenge store
 
 async function storeChallenge(key: string, challenge: string): Promise<void> {
     const expiresAt = new Date(Date.now() + CHALLENGE_TTL_MS);
@@ -79,18 +60,17 @@ async function getChallenge(key: string): Promise<string | null> {
     const row = await prisma.passkeyChallenge.findUnique({ where: { key } });
     if (!row) return null;
     if (row.expiresAt < new Date()) {
-        // Expired — clean up and treat as missing
-        await prisma.passkeyChallenge.delete({ where: { key } }).catch(() => { });
+        await prisma.passkeyChallenge.delete({ where: { key } }).catch(() => {});
         return null;
     }
     return row.challenge;
 }
 
 async function deleteChallenge(key: string): Promise<void> {
-    await prisma.passkeyChallenge.delete({ where: { key } }).catch(() => { });
+    await prisma.passkeyChallenge.delete({ where: { key } }).catch(() => {});
 }
 
-// ── Helpers ─────────────────────────────────────────────────────────────────
+// Helpers
 
 function credentialDescriptor(id: string): { id: BufferSource; type: "public-key" } {
     return {
@@ -99,7 +79,7 @@ function credentialDescriptor(id: string): { id: BufferSource; type: "public-key
     };
 }
 
-// ── Registration (existing user adding a passkey) ───────────────────────────
+// Registration (existing user adding a passkey)
 
 export async function generatePasskeyRegistrationOptions(userId: string) {
     const user = await prisma.user.findUnique({
@@ -170,7 +150,7 @@ export async function verifyPasskeyRegistration(
     return { verified: true };
 }
 
-// ── First-time registration (no existing account) ───────────────────────────
+// First-time registration (no existing account)
 
 export async function generateFirstTimePasskeyOptions() {
     const tempId = createId();
@@ -218,18 +198,10 @@ export async function verifyFirstTimePasskeyRegistration(
 
     const info = verification.registrationInfo;
 
-    // FIX: Use a NULL email instead of a fake "@passkey.openbench.local" address.
-    // The User model has `email String @unique` — using a generated fake email
-    // risks collisions and misleads any email-sending logic. Passkey-only users
-    // have no email; the unique constraint is satisfied by leaving it null.
-    // NOTE: This requires changing the schema: email String? @unique
-    // If you cannot change the schema right now, use a truly unique sentinel:
-    //   email: `passkey-${createId()}@noemail.invalid`
-    // but prefer nullable email for correctness.
     const user = await prisma.user.create({
         data: {
             name: "User",
-            email: `passkey-${createId()}@noemail.invalid`, // unique; update schema to nullable when possible
+            email: `passkey-${createId()}@noemail.invalid`,
             role: "user",
         },
     });
@@ -252,14 +224,14 @@ export async function verifyFirstTimePasskeyRegistration(
     return { verified: true, user };
 }
 
-// ── Authentication ──────────────────────────────────────────────────────────
+// Authentication
 
 export async function generatePasskeyAuthOptions() {
     const { rpId } = await getWebauthnConfig();
     const options = await generateAuthenticationOptions({
         rpID: rpId,
         userVerification: "required",
-        allowCredentials: undefined, // Allow discoverable (resident) credentials
+        allowCredentials: undefined,
     });
 
     await storeChallenge(`auth:${options.challenge}`, options.challenge);
@@ -273,7 +245,6 @@ export async function verifyPasskeyAuth(response: AuthenticationResponseJSON) {
     });
     if (!passkey) throw new Error("Passkey not found");
 
-    // Decode clientDataJSON to extract the challenge the browser actually used
     const clientData = JSON.parse(
         Buffer.from(response.response.clientDataJSON, "base64url").toString("utf-8")
     );

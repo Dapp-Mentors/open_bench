@@ -1,6 +1,5 @@
 // src/app/api/setup/providers/route.ts
-// POST — stores Google/GitHub OAuth client IDs/secrets AND WebAuthn config
-// GET  — returns whether providers and WebAuthn have been configured
+// POST stores OAuth and WebAuthn config. GET returns whether providers are configured.
 
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
@@ -44,7 +43,6 @@ export async function POST(request: Request) {
       webauthnOrigin,
     } = body;
 
-    // Validate that at least Google or GitHub is provided
     if (!googleClientId && !googleClientSecret && !githubClientId && !githubClientSecret) {
       return NextResponse.json(
         { error: "At least one provider (Google or GitHub) must be configured" },
@@ -52,7 +50,6 @@ export async function POST(request: Request) {
       );
     }
 
-    // Partial validation — if one field of a provider is given, both are required
     if ((googleClientId && !googleClientSecret) || (!googleClientId && googleClientSecret)) {
       return NextResponse.json(
         { error: "Both Google client ID and secret are required" },

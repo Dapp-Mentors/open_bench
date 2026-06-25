@@ -4,7 +4,7 @@
 
 # OpenBench
 
-OpenBench is an AI dataset curation and evaluation platform for AI model trainings. Each curated task is a realistic command-line challenge — a broken build, a failing service, a bad config — that AI agents solve through the terminal. A 9-stage automated pipeline verifies every submission for syntactic correctness, instructional quality, solvability, and calibrated difficulty before it enters the training data registry. Every approved task is a verified, production-grade training example; every dataset and artifact lives on the Sia Network forever. The same infrastructure also supports running benchmark evaluations.
+OpenBench is an AI dataset curation and evaluation platform. Each curated task is a realistic command-line challenge -- a broken build, a failing service, a bad config -- that AI agents solve through the terminal. A 9-stage automated pipeline verifies every submission for syntactic correctness, instructional quality, solvability, and calibrated difficulty before it enters the training data registry. Every approved task is a verified, production-grade training example; every dataset and artifact lives on the Sia Network forever. The same infrastructure also supports running benchmark evaluations.
 
 ---
 
@@ -16,9 +16,9 @@ Submit a task ZIP and watch it move through 9 automated curation pipeline stages
 Submit -> Similarity -> CI Checks -> Quality -> Preflight -> Oracle/NOP -> Easiness -> Difficulty -> Agent Quality -> Sia Upload -> Registry
 ```
 
-Every stage is a durable Inngest function that survives crashes and restarts. Failed stages report exactly what to fix. The pipeline exists to certify tasks as high-quality training data for AI model trainings; the same validated tasks also serve as reliable benchmarks.
+Every stage is a durable Inngest function that survives crashes and restarts. Failed stages report exactly what to fix.
 
-Stages 6 (Easiness) and 7 (Difficulty) use a **CrewAI multi-agent probe**, four sequential agents (Task Analyst -> Solution Architect -> Code Implementer -> Test Verifier) run in staggered parallel across 5 attempts. The easiness stage uses a fast/cheap model; the difficulty stage uses the frontier model. Early-exit logic cancels remaining runs the moment the outcome is decided, saving cost.
+Stages 6 (Easiness) and 7 (Difficulty) use a CrewAI multi-agent probe: four sequential agents (Task Analyst -> Solution Architect -> Code Implementer -> Test Verifier) run in staggered parallel across 5 attempts. The easiness stage uses a fast/cheap model; the difficulty stage uses the frontier model. Early-exit logic cancels remaining runs the moment the outcome is decided, saving cost.
 
 ---
 
@@ -31,8 +31,8 @@ Stages 6 (Easiness) and 7 (Difficulty) use a **CrewAI multi-agent probe**, four 
 | 3 | Quality | LLM-as-judge across 11 criteria (realism, clarity, verifiability) | Average >= 0.6 |
 | 4 | Preflight | `pytest --collect-only` inside the built image | >= 6 test functions |
 | 5 | Oracle / NOP | Two containers: NOP (tests alone must fail), Oracle (solve.sh + tests must pass) | NOP=0, Oracle=1 |
-| 6 | Easiness | CrewAI multi-agent probe x5 using the **easiness model** (fast/cheap); exactly 1-4/5 must pass | 1-4/5 (0=TOO_HARD, 5=TOO_EASY) |
-| 7 | Difficulty | CrewAI multi-agent probe x5 using the **frontier model** (strong); exactly 1-3/5 must pass | 1-3/5 (0=TOO_HARD, >3=TOO_EASY) |
+| 6 | Easiness | CrewAI multi-agent probe x5 using the easiness model (fast/cheap); exactly 1-4/5 must pass | 1-4/5 (0=TOO_HARD, 5=TOO_EASY) |
+| 7 | Difficulty | CrewAI multi-agent probe x5 using the frontier model (strong); exactly 1-3/5 must pass | 1-3/5 (0=TOO_HARD, >3=TOO_EASY) |
 | 8 | Agent Quality | LLM-as-judge on instruction realism, no leaked assertions, actionability | >= 70% |
 | 9 | Sia Upload | Upload the approved task, its datasets, and all artifacts to Sia Network for immutable, content-addressed, decentralized storage | Upload succeeds |
 
@@ -42,11 +42,11 @@ Stages 6 (Easiness) and 7 (Difficulty) use a **CrewAI multi-agent probe**, four 
 
 | Layer | Tech |
 |-------|------|
-| Frontend | Next.js 16, TypeScript, TailwindCSS, Framer Motion |
+| Frontend | Next.js 16, TypeScript, TailwindCSS |
 | Backend | Python (FastAPI), SQLAlchemy, PostgreSQL |
 | Event Pipeline | Inngest (durable functions) |
 | Embeddings | Ollama (`nomic-embed-text`) |
-| LLM Provider | OpenRouter (sole provider - DeepSeek, Claude, GPT, Gemini, Llama, and hundreds more via a single API key; avoids per-model integration modules and lets you swap frontier models from the UI) |
+| LLM Provider | OpenRouter (sole provider - DeepSeek, Claude, GPT, Gemini, Llama, and hundreds more via a single API key) |
 | Multi-Agent Probes | CrewAI (sequential agents: Analyst -> Architect -> Implementer -> Verifier) |
 | Storage | Sia Network via `@siafoundation/sia-storage` SDK |
 | Metadata | Sia Indexd |
@@ -72,16 +72,14 @@ docker compose up --build
 | PostgreSQL | localhost:5432 | Database |
 | Ollama | localhost:11434 | Local embeddings |
 
-**First boot:** Once all containers are healthy, open http://localhost:3000 — you'll be greeted by the **Setup Wizard** (4 steps):
+**No environment variables needed.** All configuration is handled through the browser-based Setup Wizard on first boot. Open http://localhost:3000 and complete the 4-step wizard:
 
-1. **Sia Storage** — Configure your Sia indexer URL, App ID, and BIP-39 recovery phrase, then approve the connection via the generated approval URL.
-2. **OpenRouter API Key** — Set your API key (get one at https://openrouter.ai/keys). All LLM calls route through OpenRouter.
-3. **Social Login Providers** — Optionally configure Google/GitHub OAuth and WebAuthn passkey settings.
-4. **Sign Up** — Create your account. The first user to sign up becomes the **super admin**.
+1. **Sia Storage** -- Configure your Sia indexer URL, App ID, and BIP-39 recovery phrase, then approve the connection via the generated approval URL.
+2. **OpenRouter API Key** -- Set your API key (get one at https://openrouter.ai/keys). All LLM calls route through OpenRouter.
+3. **Social Login Providers** -- Optionally configure Google/GitHub OAuth and WebAuthn passkey settings.
+4. **Sign Up** -- Create your account. The first user to sign up becomes the **super admin**.
 
-Steps are persisted to the database — you can close and resume later. After completing the wizard you'll be redirected to the dashboard.
-
-All environment variables are pre-configured with sensible defaults in `docker-compose.yml`. No `.env` file is needed — just run `docker compose up --build`.
+Steps are persisted to the database -- you can close and resume later. After completing the wizard you'll be redirected to the dashboard.
 
 When the backend boots it eagerly initialises the Sia client. If Sia is unreachable or unapproved, it gracefully falls into **demo mode**. Uploads and pipeline stages are simulated with realistic delays. The UI is identical either way; the mode badge in the top nav tells you which you're in.
 
@@ -94,7 +92,7 @@ When the backend boots it eagerly initialises the Sia client. If Sia is unreacha
 Create your local env files:
 
 ```bash
-# Frontend — only the database URL is required (everything else has defaults)
+# Frontend -- only the database URL is required (everything else has defaults)
 cat > frontend/.env << 'ENV'
 DATABASE_URL=postgresql://<username>:<password>@localhost:5432/<database_name>
 INNGEST_DEV=1
@@ -105,7 +103,7 @@ NEXT_TELEMETRY_DISABLED=1
 BACKEND_URL=http://localhost:8000
 ENV
 
-# Backend — use the example as-is (or tweak ports)
+# Backend -- use the example as-is (or tweak ports)
 cat > backend/.env << 'ENV'
 DATABASE_URL=postgresql+asyncpg://<username>:<password>@localhost:5432/<database_name>
 CORS_ORIGINS=["http://localhost:3000"]
@@ -115,14 +113,14 @@ PORT=8000
 ENV
 ```
 
-That's it. The frontend `.env` above is the complete set of variables needed for local development. The backend `.env.example` contains defaults for the remaining backend-specific variables (PostgreSQL, CORS, Ollama, port) — adjust as needed.
+That's it. The frontend `.env` above is the complete set of variables needed for local development. The backend `.env.example` contains defaults for the remaining backend-specific variables (PostgreSQL, CORS, Ollama, port) -- adjust as needed.
 
 #### 2. Start services individually
 
-> **⚠️ Prerequisite:** Dev mode requires **PostgreSQL** and **Ollama** already running on your machine. Make sure both are up before starting the application servers. If you don't have them running yet, start them first:
+> **Prerequisite:** Dev mode requires **PostgreSQL** and **Ollama** already running on your machine. Make sure both are up before starting the application servers. If you don't have them running yet, start them first:
 
 ```bash
-# Terminal 1 — PostgreSQL
+# Terminal 1 -- PostgreSQL
 docker run -d --name openbench_pg \
   -e POSTGRES_USER=<username> \
   -e POSTGRES_PASSWORD=<password> \
@@ -130,7 +128,7 @@ docker run -d --name openbench_pg \
   -p 5432:5432 \
   postgres:16-alpine
 
-# Terminal 2 — Ollama
+# Terminal 2 -- Ollama
 docker run -d --name openbench_ollama \
   -p 11434:11434 \
   -v ollama_data:/root/.ollama \
@@ -143,18 +141,18 @@ docker exec openbench_ollama ollama pull nomic-embed-text:latest
 Once PostgreSQL and Ollama are confirmed running, start the remaining services in separate terminals:
 
 ```bash
-# Terminal 3 — Inngest
+# Terminal 3 -- Inngest
 npx inngest-cli@latest dev \
   -u http://localhost:3000/api/inngest \
   --no-discovery --no-poll --persist
 
-# Terminal 4 — Backend
+# Terminal 4 -- Backend
 cd backend
 python -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
 uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
-# Terminal 5 — Frontend
+# Terminal 5 -- Frontend
 cd frontend
 npm install
 npm run dev
@@ -166,7 +164,7 @@ npm run dev
 | Backend | http://localhost:8000 |
 | Inngest | http://localhost:8288 |
 
-**First boot:** Open http://localhost:3000 and complete the **Setup Wizard** (Sia → OpenRouter → Social Providers → Sign Up). See the Docker section above for details on each step.
+**First boot:** Open http://localhost:3000 and complete the **Setup Wizard** (Sia -> OpenRouter -> Social Providers -> Sign Up). See the Docker section above for details on each step.
 
 #### 3. Setup wizard (environment variables it saves)
 
@@ -192,15 +190,15 @@ All values are stored in the `AppSettings` database table and read back on subse
 
 ## Connecting a Real Sia Indexer
 
-The Sia SDK requires a one-time approval flow. This is now handled entirely through the **Setup Wizard** at `http://localhost:3000/setup` on first boot:
+The Sia SDK requires a one-time approval flow. This is handled entirely through the **Setup Wizard** at `http://localhost:3000/setup` on first boot:
 
 1. Enter your Sia indexer URL (default `https://sia.storage`), a 32-byte hex App ID (click **Generate** to create one), and your App Name.
-2. Optionally provide a BIP-39 recovery phrase (your master key — used once to derive the App Key, never stored by the app). Leave blank to have one auto-generated.
+2. Optionally provide a BIP-39 recovery phrase (your master key -- used once to derive the App Key, never stored by the app). Leave blank to have one auto-generated.
 3. Click **Start Sia registration**. The backend saves the configuration and returns an approval URL.
 4. Open that URL in your browser and approve the connection.
 5. Click **"I've approved it"** to confirm. The backend derives and stores an App Key in `appkey.hex`. Subsequent boots reuse it automatically.
 
-If you skip the wizard or Sia is unreachable, the platform runs in **demo mode** with simulated uploads — no action required.
+If you skip the wizard or Sia is unreachable, the platform runs in **demo mode** with simulated uploads -- no action required.
 
 **Recovery phrase:** If you didn't provide one, on first boot the backend auto-generates a BIP-39 recovery phrase and writes it to `phrase.enc` inside the data directory. In a production app you'd ask the user for their own phrase and never store it. For this demo, automatic generation keeps the setup frictionless.
 
@@ -284,8 +282,8 @@ openbench/
 │           ├── model_config.py        # Provider configuration logic + DB role-based model lookup
 │           ├── pipeline.py            # Docker container execution (6 pipeline stages)
 │           ├── probe_base.py          # Shared probe infrastructure: concurrency locks, staggered-parallel execution, early-exit, CrewAI/legacy dispatch
+│           ├── probe_types.py         # Probe type definitions
 │           ├── quality.py             # 11-criteria quality assessment
-│           ├── runner.py              # Agent runner (oracle/NOP execution)
 │           ├── sia_client.py          # Sia SDK singleton + demo fallback
 │           ├── sia.py                 # Sia upload orchestration
 │           ├── similarity.py          # Embedding-based similarity check
@@ -303,8 +301,7 @@ openbench/
 │   ├── public/
 │   │   └── .gitkeep
 │   └── src/
-│       ├── proxy.ts                   # Dev proxy for backend API forwarding
-│       ├── middleware.ts              # Next.js middleware (auth redirects, route protection)
+│       ├── proxy.ts                   # Next.js middleware (auth redirects, route protection)
 │       ├── app/
 │       │   ├── globals.css            # Global styles
 │       │   ├── layout.tsx             # Root layout with NavBar
@@ -316,7 +313,7 @@ openbench/
 │       │   ├── unauthorized/
 │       │   │   └── page.tsx           # Unauthorized access page
 │       │   ├── setup/
-│       │   │   └── page.tsx           # First-run setup wizard (Sia → OpenRouter → Providers → Sign Up)
+│       │   │   └── page.tsx           # First-run setup wizard (Sia -> OpenRouter -> Providers -> Sign Up)
 │       │   ├── projects/
 │       │   │   ├── page.tsx           # Project listing
 │       │   │   ├── new/
@@ -329,6 +326,8 @@ openbench/
 │       │   │   ├── page.tsx           # Admin dashboard (benchmark cards, Sia pipeline accordion)
 │       │   │   ├── benchmark-types/
 │       │   │   │   └── page.tsx       # Admin benchmark type management (activate/deactivate, sort)
+│       │   │   ├── misc/
+│       │   │   │   └── page.tsx       # Admin misc settings
 │       │   │   ├── models/
 │       │   │   │   └── page.tsx       # Model provider configuration page
 │       │   │   └── users/
@@ -344,6 +343,7 @@ openbench/
 │       │       │   ├── projects/
 │       │       │   │   └── members/      # Project member management
 │       │       │   ├── ready-tasks/      # Tasks ready for approval
+│       │       │   ├── settings/         # Admin settings
 │       │       │   ├── stats/            # Dashboard statistics
 │       │       │   └── users/            # User listing (admin)
 │       │       ├── auth/
@@ -372,6 +372,7 @@ openbench/
 │       │       ├── setup/            # Setup wizard API
 │       │       │   ├── status/       # Setup status + complete flag
 │       │       │   ├── sia/          # Sia registration (POST) + approval check
+│       │       │   ├── sia/check/    # Sia approval check
 │       │       │   ├── openrouter/   # OpenRouter API key save
 │       │       │   └── providers/    # OAuth / WebAuthn config save
 │       │       ├── sia/
@@ -379,7 +380,6 @@ openbench/
 │       │       │   └── events/       # Sia SSE event stream
 │       │       └── tasks/            # Task CRUD
 │       │           └── [id]/         # Single task operations
-│       │   └── … (error routes, loading states)
 │       ├── components/
 │       │   ├── NavBar.tsx
 │       │   ├── ProjectCard.tsx
@@ -390,7 +390,7 @@ openbench/
 │       │   ├── StatusBadge.tsx
 │       │   ├── TaskActions.tsx
 │       │   ├── TaskRow.tsx
-│       │   ├── MarkdownEditor.tsx       # Lightweight markdown editor with live preview (edit/preview/split)
+│       │   ├── MarkdownEditor.tsx       # Lightweight markdown editor with live preview
 │       │   ├── SideBar.tsx              # Collapsible sidebar navigation with Sia status indicator
 │       │   ├── ProjectTypeSelector.tsx  # Benchmark type selector grid for project creation
 │       │   ├── TagInput.tsx             # Tag input component with autocomplete suggestions
@@ -400,7 +400,9 @@ openbench/
 │       │       └── SiaProof.tsx         # Sia upload proof visualisation
 │       └── lib/
 │           ├── admin-context.tsx
+│           ├── pipeline-retry-context.tsx
 │           ├── types.ts
+│           ├── uploads.ts
 │           ├── use-sia-sse.ts           # SSE hook for pipeline status
 │           ├── auth/
 │           │   ├── guards.ts            # Auth guards (isAdmin, isAuthenticated)
@@ -422,7 +424,7 @@ openbench/
 
 ### Container Strategy
 
-The backend runs inside Docker. To spin up task containers it uses the host Docker socket mounted at `/var/run/docker.sock`. Containers are launched as **siblings** on the host daemon (not children), with unique names derived from `taskId + stage` so parallel runs never collide. Containers are always removed after the stage completes.
+The backend runs inside Docker. To spin up task containers it uses the host Docker socket mounted at `/var/run/docker.sock`. Containers are launched as siblings on the host daemon (not children), with unique names derived from `taskId + stage` so parallel runs never collide. Containers are always removed after the stage completes.
 
 ### Pipeline Stage Contract
 
@@ -442,7 +444,7 @@ Stages 6 (Easiness) and 7 (Difficulty) share a common probe infrastructure in `p
 - **Staggered parallelism:** 5 runs launch in parallel with a 12-second stagger between each start, preventing rate-limit collisions.
 - **Early-exit:** The moment the outcome is decided (e.g., 1 pass + 1 fail for easiness), remaining runs are cancelled to save cost.
 - **Per-task locks:** An `asyncio.Lock` per task ID prevents concurrent probe executions from double-spending pipeline calls.
-- **Model roles:** Each stage uses a different model from the DB, `easiness_model` (fast/cheap) for Stage 6, `frontier_model` (strong) for Stage 7. These are configured in the admin dashboard. All models are accessed through **OpenRouter**, the sole LLM provider. Using a single provider avoids the technical debt of building and maintaining separate integration modules for each LLM, and lets you swap between frontier models like Claude Opus, GPT, DeepSeek, or Grok from the UI with no backend changes.
+- **Model roles:** Each stage uses a different model from the DB, `easiness_model` (fast/cheap) for Stage 6, `frontier_model` (strong) for Stage 7. These are configured in the admin dashboard. All models are accessed through **OpenRouter**, the sole LLM provider.
 
 ### Sia Integration
 
@@ -464,7 +466,7 @@ Stages 6 (Easiness) and 7 (Difficulty) share a common probe infrastructure in `p
 - **Passkey-first:** Uses WebAuthn for passwordless authentication via passkeys (Touch ID, Face ID, security keys).
 - **NextAuth.js:** Session management with JWT strategies, passkey credentials stored in the database.
 - **Role-based access:** Three tiers: `user` (basic access), `admin` (project management), `super_admin` (model config, benchmark types, user management).
-- **Middleware:** Route protection via `middleware.ts`. Unauthenticated users are redirected to `/login`, non-admin users to `/unauthorized`.
+- **Middleware:** Route protection via `proxy.ts`. Unauthenticated users are redirected to `/login`, non-admin users to `/unauthorized`.
 - **Sidebar navigation:** Collapsible rail that adapts to user role. Admins see Projects and Admin Panel; super admins additionally see Models, Benchmark Types, and Users management.
 - **Setup wizard first:** The first user to complete the Setup Wizard and sign up becomes the **super admin** automatically.
 
