@@ -1,16 +1,5 @@
 // src/lib/auth/index.ts
-//
 // NextAuth.js v5 (next-auth@beta) configuration.
-//
-// FIXES:
-//   1. jwt callback now re-reads role from DB on every new sign-in (user != null).
-//      This ensures the "first user → super_admin" promotion that happens in the
-//      createUser event is reflected in the JWT immediately, without requiring a
-//      sign-out/sign-in cycle.
-//
-//   2. Auth config cache is invalidated when OAuth provider credentials change
-//      (e.g. after the setup wizard saves them). A fingerprint of the client IDs
-//      is stored alongside the cached instance.
 
 import NextAuth from "next-auth";
 import Google from "next-auth/providers/google";
@@ -79,8 +68,6 @@ export async function createAuthConfig() {
     })
   );
 
-  // Hardcoded defaults so no environment variables are required for local/Docker.
-  // Override via AUTH_SECRET / AUTH_TRUST_HOST env vars when deploying elsewhere.
   const DEFAULT_AUTH_SECRET = "lTtDZlfpNjrSIA2EocS7GEAaH3SHLsOr41X4udYY1k4=";
 
   return {
@@ -93,12 +80,7 @@ export async function createAuthConfig() {
     callbacks: {
       async jwt({ token, user }: { token: any; user?: any }) {
         if (user) {
-          // user is only set on the initial sign-in. Re-read from DB to pick up
-          // any role that was assigned during the createUser event (e.g. the
-          // first-user → super_admin promotion), which fires *before* this
-          // callback but after the user object was fetched by the provider.
           token.id = user.id;
-
           const fresh = await prisma.user.findUnique({
             where: { id: user.id },
             select: { role: true },
@@ -138,7 +120,7 @@ export async function createAuthConfig() {
   };
 }
 
-// ── Cache with config-fingerprint invalidation ──────────────────────────────
+// Cache with config-fingerprint invalidation
 
 let _auth: ReturnType<typeof NextAuth> | null = null;
 let _configFingerprint: string | null = null;
@@ -161,7 +143,7 @@ async function getAuth() {
   return _auth;
 }
 
-// ── Exports ─────────────────────────────────────────────────────────────────
+// Exports
 
 export async function auth(...args: any[]) {
   const a = await getAuth();

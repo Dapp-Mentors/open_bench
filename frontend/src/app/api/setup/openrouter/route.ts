@@ -1,6 +1,5 @@
 // src/app/api/setup/openrouter/route.ts
-// POST — stores the OpenRouter API key for LLM calls
-// GET  — returns whether a key has been configured
+// POST stores the OpenRouter API key. GET returns whether a key is configured.
 
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";

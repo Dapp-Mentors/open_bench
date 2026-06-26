@@ -1,13 +1,9 @@
 // src/lib/auth/guards.ts
-//
-// Server-side role helpers. Import these in API routes and Server Components.
-// Client-side use: read session.user.role from useSession().
+// Server-side role helpers. Use session.user.role on the client.
 
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import type { Role } from "@prisma/client";
-
-// ── Role hierarchy ─────────────────────────────────────────────────────────────
 
 const ROLE_RANK: Record<Role, number> = {
     user: 0,
@@ -19,16 +15,14 @@ export function hasRole(userRole: Role, required: Role): boolean {
     return ROLE_RANK[userRole] >= ROLE_RANK[required];
 }
 
-// ── Server Component guards (call at the top of a page/layout) ────────────────
+// Server Component guards
 
-/** Redirect to /login if not authenticated at all. */
 export async function requireAuth() {
     const session = await auth();
     if (!session?.user) redirect("/login");
     return session;
 }
 
-/** Redirect to /unauthorized if the user doesn't have the required role. */
 export async function requireRole(role: Role) {
     const session = await requireAuth();
     const userRole = session.user.role as Role;
@@ -36,13 +30,12 @@ export async function requireRole(role: Role) {
     return session;
 }
 
-// ── API route guards (return 401/403 instead of redirecting) ──────────────────
+// API route guards (return 401/403 instead of redirecting)
 
 export type AuthResult =
     | { ok: true; userId: string; role: Role }
     | { ok: false; status: 401 | 403; message: string };
 
-/** Verify auth and role for API routes. */
 export async function checkApiAuth(required?: Role): Promise<AuthResult> {
     const session = await auth();
 
@@ -63,7 +56,7 @@ export async function checkApiAuth(required?: Role): Promise<AuthResult> {
     return { ok: true, userId: session.user.id, role: userRole };
 }
 
-// ── Convenience wrappers ───────────────────────────────────────────────────────
+// Convenience wrappers
 
 export async function requireAdmin() {
     return requireRole("admin");

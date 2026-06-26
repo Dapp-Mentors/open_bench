@@ -1,14 +1,10 @@
 // src/app/api/setup/sia/route.ts
-// POST — stores Sia configuration and kicks off the SDK registration flow
-//        via the backend Python service (no restart required).
-// GET  — returns current Sia setup status
+// POST saves Sia config and starts SDK registration via the backend.
+// GET returns current Sia setup status.
 
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
-// The backend FastAPI service.
-// In Docker, BACKEND_URL env is set to http://backend:8000.
-// Fallback: derive from NEXT_PUBLIC_APP_URL (Codespaces) or localhost.
 const BACKEND_URL = process.env.BACKEND_URL
   ?? process.env.NEXT_PUBLIC_APP_URL?.replace(":3000", ":8000")
   ?? "http://localhost:8000";
@@ -51,12 +47,11 @@ export async function POST(request: Request) {
 
     if (!recovery_phrase) {
       return NextResponse.json(
-        { error: "recovery_phrase is required — enter your BIP-39 recovery phrase" },
+        { error: "recovery_phrase is required" },
         { status: 400 }
       );
     }
 
-    // Step 1: Save the config to the database so the backend can read it
     await prisma.appSettings.upsert({
       where: { id: "default" },
       update: {
@@ -76,8 +71,6 @@ export async function POST(request: Request) {
       },
     });
 
-    // Step 2: Call the backend's Sia SDK to start the registration flow
-    // using the user's recovery phrase.
     let backendRes: Response;
     try {
       backendRes = await fetch(`${BACKEND_URL}/api/sia/register/init`, {
@@ -86,9 +79,8 @@ export async function POST(request: Request) {
         body: JSON.stringify({ recovery_phrase }),
       });
     } catch {
-      // Backend is not reachable at all — config is saved but registration cannot proceed
       return NextResponse.json(
-        { error: "Backend service is unreachable. Ensure the pipeline service is running." },
+        { error: "Backend service is unreachable." },
         { status: 502 }
       );
     }
@@ -99,12 +91,9 @@ export async function POST(request: Request) {
         const errData = await backendRes.json();
         if (errData?.error) errorMsg = errData.error;
       } catch {
-        // ignore parse errors
+        // ignore
       }
-      return NextResponse.json(
-        { error: errorMsg },
-        { status: 502 }
-      );
+      return NextResponse.json({ error: errorMsg }, { status: 502 });
     }
 
     const data = await backendRes.json();
@@ -116,14 +105,7 @@ export async function POST(request: Request) {
       );
     }
 
-    // If the backend says "already_connected", reset the flow so the user
-    // must re-authorize — the approval URL should always be presented to
-    // the user during first-run setup.
     if (data.already_connected) {
-      // Tell the frontend to still show the approval (actually the backend
-      // should generate a fresh approval URL — but if stored key worked,
-      // the user may need to re-approve. We'll return the stored key status
-      // and let the frontend decide.)
       return NextResponse.json({
         ok: true,
         already_connected: true,
@@ -133,7 +115,6 @@ export async function POST(request: Request) {
       });
     }
 
-    // Return the SDK-generated approval URL to the frontend
     return NextResponse.json({
       ok: true,
       approval_url: data.approval_url,
@@ -144,12 +125,7 @@ export async function POST(request: Request) {
 
   } catch (error) {
     console.error("[SETUP-SIA] Error:", error);
-
-    // Return a proper error response instead of silently faking success
     const message = error instanceof Error ? error.message : "An unexpected error occurred";
-    return NextResponse.json(
-      { error: message },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
