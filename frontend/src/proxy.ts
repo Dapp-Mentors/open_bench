@@ -29,7 +29,7 @@ const PUBLIC_PATHS = [
 ];
 
 const SETUP_PATHS = ["/setup", "/api/setup"];
-const SUPER_ADMIN_PATHS = ["/admin/models", "/api/models"];
+const SUPER_ADMIN_PATHS = ["/admin/models", "/admin/misc", "/admin/environment", "/api/models"];
 const ADMIN_PATHS = ["/admin", "/api/admin"];
 const ADMIN_PAGE_PATHS = ["/projects", "/projects/new"];
 

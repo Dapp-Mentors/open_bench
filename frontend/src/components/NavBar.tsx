@@ -14,6 +14,7 @@ import {
   Wifi,
   WifiOff,
   Menu,
+  Globe,
 } from "lucide-react";
 import { SideBar } from "@/components/SideBar";
 
@@ -356,6 +357,17 @@ export function NavBar() {
                         >
                           <Settings2 className="w-4 h-4" />
                           Misc settings
+                        </Link>
+                        <Link
+                          href="/admin/environment"
+                          onClick={() => setMenuOpen(false)}
+                          className="flex items-center gap-3 px-4 py-3 font-mono text-[12px] transition-colors"
+                          style={{ color: "var(--subtle)" }}
+                          onMouseEnter={(e) => (e.currentTarget.style.color = "var(--text)")}
+                          onMouseLeave={(e) => (e.currentTarget.style.color = "var(--subtle)")}
+                        >
+                          <Globe className="w-4 h-4" />
+                          Environment
                         </Link>
                       </>
                     )}

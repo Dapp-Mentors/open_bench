@@ -326,6 +326,8 @@ openbench/
 │       │   │   ├── page.tsx           # Admin dashboard (benchmark cards, Sia pipeline accordion)
 │       │   │   ├── benchmark-types/
 │       │   │   │   └── page.tsx       # Admin benchmark type management (activate/deactivate, sort)
+│       │   │   ├── environment/
+│       │   │   │   └── page.tsx       # Admin environment configuration page
 │       │   │   ├── misc/
 │       │   │   │   └── page.tsx       # Admin misc settings
 │       │   │   ├── models/
@@ -340,6 +342,7 @@ openbench/
 │       │   └── api/                   # Next.js API routes
 │       │       ├── admin/
 │       │       │   ├── benchmark-types/  # Admin benchmark types CRUD
+│       │       │   ├── environment/      # Admin environment API routes
 │       │       │   ├── projects/
 │       │       │   │   └── members/      # Project member management
 │       │       │   ├── ready-tasks/      # Tasks ready for approval

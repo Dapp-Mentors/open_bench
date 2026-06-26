@@ -16,6 +16,7 @@ import {
     WifiOff,
     X,
     BarChart3,
+    Globe,
 } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -339,6 +340,16 @@ export function SideBar({ isOpen, onClose, sia }: SideBarProps) {
                                 label="Misc Settings"
                                 icon={Settings2}
                                 isActive={isActive("/admin/misc")}
+                                accent="amber"
+                                onClick={() => {
+                                    if (window.innerWidth < 1024) onClose();
+                                }}
+                            />
+                            <SideItem
+                                href="/admin/environment"
+                                label="Environment"
+                                icon={Globe}
+                                isActive={isActive("/admin/environment")}
                                 accent="amber"
                                 onClick={() => {
                                     if (window.innerWidth < 1024) onClose();

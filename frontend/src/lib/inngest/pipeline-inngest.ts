@@ -106,20 +106,20 @@ export const runPipeline = inngest.createFunction(
     // Stage 6: Easiness prefilter (crewAI multi-agent probe, 5 runs)
     const easinessPassed = await step.run('stage-easiness', async () => {
       await new Promise(resolve => setTimeout(resolve, 10000))
-      // const result = await callBackend('easiness', taskId, storagePath)
-      const result = {
-        passed: true,
-        message: [
-          'pass@5: 2 / 5 · ACCEPTABLE',
-          'Task difficulty looks good: 2 of 5 runs solved by easiness_model (openrouter/google/gemini-2.0-flash-001).',
-          'PER-RUN EPISODES (5)',
-          '    Run 1: PASS reward=\'1\'',
-          '    Run 2: FAIL reward=\'0\'',
-          '    Run 3: PASS reward=\'1\'',
-          '    Run 4: FAIL reward=\'0\'',
-          '    Run 5: FAIL reward=\'0\'',
-        ].join('\n'),
-      }
+      const result = await callBackend('easiness', taskId, storagePath)
+      // const result = {
+      //   passed: true,
+      //   message: [
+      //     'pass@5: 2 / 5 · ACCEPTABLE',
+      //     'Task difficulty looks good: 2 of 5 runs solved by easiness_model (openrouter/google/gemini-2.0-flash-001).',
+      //     'PER-RUN EPISODES (5)',
+      //     '    Run 1: PASS reward=\'1\'',
+      //     '    Run 2: FAIL reward=\'0\'',
+      //     '    Run 3: PASS reward=\'1\'',
+      //     '    Run 4: FAIL reward=\'0\'',
+      //     '    Run 5: FAIL reward=\'0\'',
+      //   ].join('\n'),
+      // }
       await logStage(taskId, 'easiness', result.passed, result.message)
       return result.passed
     })
@@ -128,19 +128,19 @@ export const runPipeline = inngest.createFunction(
     // Stage 7: Difficulty probe (crewAI multi-agent probe, 5 runs)
     const difficultyPassed = await step.run('stage-difficulty', async () => {
       await new Promise(resolve => setTimeout(resolve, 15000))
-      // const result = await callBackend('difficulty', taskId, storagePath)
-      const result = {
-        passed: true,
-        message: [
-          'Difficulty probe: 2 / 5 — ACCEPTABLE difficulty for frontier_model (openrouter/anthropic/claude-sonnet-4-20250514).',
-          'PER-RUN EPISODES (5)',
-          '    Run 1: PASS reward=\'1\'',
-          '    Run 2: FAIL reward=\'0\'',
-          '    Run 3: FAIL reward=\'0\'',
-          '    Run 4: PASS reward=\'1\'',
-          '    Run 5: FAIL reward=\'0\'',
-        ].join('\n'),
-      }
+      const result = await callBackend('difficulty', taskId, storagePath)
+      // const result = {
+      //   passed: true,
+      //   message: [
+      //     'Difficulty probe: 2 / 5 — ACCEPTABLE difficulty for frontier_model (openrouter/anthropic/claude-sonnet-4-20250514).',
+      //     'PER-RUN EPISODES (5)',
+      //     '    Run 1: PASS reward=\'1\'',
+      //     '    Run 2: FAIL reward=\'0\'',
+      //     '    Run 3: FAIL reward=\'0\'',
+      //     '    Run 4: PASS reward=\'1\'',
+      //     '    Run 5: FAIL reward=\'0\'',
+      //   ].join('\n'),
+      // }
       await logStage(taskId, 'difficulty', result.passed, result.message)
       return result.passed
     })
@@ -149,19 +149,19 @@ export const runPipeline = inngest.createFunction(
     // Stage 8: Agent quality check
     const agentQualityPassed = await step.run('stage-agent-quality', async () => {
       await new Promise(resolve => setTimeout(resolve, 10000))
-      // const result = await callBackend('agent-quality', taskId, storagePath)
-      const result = {
-        passed: true,
-        message: [
-          'Agent quality score: 83% (threshold: 70%) — PASSED',
-          '  instruction_realism: 0.8 — Reads like a genuine developer task, not a synthetic benchmark',
-          '  natural_language_register: 0.7 — Natural conversational tone with minimal bullet hierarchy',
-          '  no_leaked_test_assertions: 0.9 — No test logic, expected values, or assertion details revealed',
-          '  no_revealed_oracle_path: 0.9 — No hints about the exact fix solve.sh applies',
-          '  no_over_specified_steps: 0.8 — Appropriate level of guidance without spelling out exact commands',
-          '  agent_actionability: 0.8 — Clear and actionable by an agent with only the task environment',
-        ].join('\n'),
-      }
+      const result = await callBackend('agent-quality', taskId, storagePath)
+      // const result = {
+      //   passed: true,
+      //   message: [
+      //     'Agent quality score: 83% (threshold: 70%) — PASSED',
+      //     '  instruction_realism: 0.8 — Reads like a genuine developer task, not a synthetic benchmark',
+      //     '  natural_language_register: 0.7 — Natural conversational tone with minimal bullet hierarchy',
+      //     '  no_leaked_test_assertions: 0.9 — No test logic, expected values, or assertion details revealed',
+      //     '  no_revealed_oracle_path: 0.9 — No hints about the exact fix solve.sh applies',
+      //     '  no_over_specified_steps: 0.8 — Appropriate level of guidance without spelling out exact commands',
+      //     '  agent_actionability: 0.8 — Clear and actionable by an agent with only the task environment',
+      //   ].join('\n'),
+      // }
       const summaryLine = result.message.split('\n')[0]
       await logStage(taskId, 'agent_quality', result.passed, summaryLine)
       return result.passed
