@@ -21,9 +21,9 @@ const STAGES = [
 type StageKey = (typeof STAGES)[number]
 
 const PIPELINE_STUCK_GRACE_MS = 30 * 60 * 1000
-const PIPELINE_DEADLINE_MS    = 2 * 60 * 60 * 1000
-const CLEANUP_AGE_MS          = 24 * 60 * 60 * 1000
-const WATCHDOG_BATCH_SIZE     = 50
+const PIPELINE_DEADLINE_MS = 2 * 60 * 60 * 1000
+const CLEANUP_AGE_MS = 24 * 60 * 60 * 1000
+const WATCHDOG_BATCH_SIZE = 50
 
 function resolveBackendUrl(): string {
   const url = process.env.BACKEND_URL ?? 'http://backend:8000'
@@ -105,8 +105,7 @@ export const runPipeline = inngest.createFunction(
 
     // Stage 6: Easiness prefilter (crewAI multi-agent probe, 5 runs)
     const easinessPassed = await step.run('stage-easiness', async () => {
-      await new Promise(resolve => setTimeout(resolve, 10000))
-      const result = await callBackend('easiness', taskId, storagePath)
+      // await new Promise(resolve => setTimeout(resolve, 10000))
       // const result = {
       //   passed: true,
       //   message: [
@@ -120,6 +119,7 @@ export const runPipeline = inngest.createFunction(
       //     '    Run 5: FAIL reward=\'0\'',
       //   ].join('\n'),
       // }
+      const result = await callBackend('easiness', taskId, storagePath)
       await logStage(taskId, 'easiness', result.passed, result.message)
       return result.passed
     })
@@ -127,8 +127,7 @@ export const runPipeline = inngest.createFunction(
 
     // Stage 7: Difficulty probe (crewAI multi-agent probe, 5 runs)
     const difficultyPassed = await step.run('stage-difficulty', async () => {
-      await new Promise(resolve => setTimeout(resolve, 15000))
-      const result = await callBackend('difficulty', taskId, storagePath)
+      // await new Promise(resolve => setTimeout(resolve, 15000))
       // const result = {
       //   passed: true,
       //   message: [
@@ -141,6 +140,7 @@ export const runPipeline = inngest.createFunction(
       //     '    Run 5: FAIL reward=\'0\'',
       //   ].join('\n'),
       // }
+      const result = await callBackend('difficulty', taskId, storagePath)
       await logStage(taskId, 'difficulty', result.passed, result.message)
       return result.passed
     })
@@ -148,8 +148,7 @@ export const runPipeline = inngest.createFunction(
 
     // Stage 8: Agent quality check
     const agentQualityPassed = await step.run('stage-agent-quality', async () => {
-      await new Promise(resolve => setTimeout(resolve, 10000))
-      const result = await callBackend('agent-quality', taskId, storagePath)
+      // await new Promise(resolve => setTimeout(resolve, 10000))
       // const result = {
       //   passed: true,
       //   message: [
@@ -162,6 +161,7 @@ export const runPipeline = inngest.createFunction(
       //     '  agent_actionability: 0.8 — Clear and actionable by an agent with only the task environment',
       //   ].join('\n'),
       // }
+      const result = await callBackend('agent-quality', taskId, storagePath)
       const summaryLine = result.message.split('\n')[0]
       await logStage(taskId, 'agent_quality', result.passed, summaryLine)
       return result.passed
