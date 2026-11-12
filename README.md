@@ -501,4 +501,9 @@ Each category will require its own task format specification, quality criteria, 
 
 ---
 
+## License
+OpenBench is released under the [MIT License](./LICENSE).
+
+---
+
 *Built in the open. Training examples are reproducible, shareable, and forkable. Anyone can run the same curation pipeline and verify the results for themselves.*
